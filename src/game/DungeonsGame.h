@@ -8,7 +8,7 @@
 #include "DungeonEditor.h"
 #include <memory>
 
-enum class GameState { MainMenu, Playing, Creative, Paused };
+enum class GameState { MainMenu, Playing, Creative, Siege, Paused };
 
 class DungeonsGame : public PixelsEngine::Application {
 public:
@@ -23,10 +23,12 @@ protected:
 private:
   // Modular systems
   void InitGame();
+  void InitSiege();
   void InitMainMenu();
 
   void UpdateMainMenu(float dt);
   void UpdateGameplay(float dt);
+  void UpdateSiege(float dt);
 
   void RenderMainMenu();
   void RenderGameplay();

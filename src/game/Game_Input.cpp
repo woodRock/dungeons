@@ -340,10 +340,14 @@ void DungeonsGame::HandleInputMenu() {
         m_State = GameState::Creative;
         m_Editor.ToggleEditorMode(); // Active
         SDL_SetRelativeMouseMode(SDL_TRUE);
-      } else if (m_MenuSelection == 2) { // Options
+      } else if (m_MenuSelection == 2) { // Siege
+        InitSiege();
+        m_State = GameState::Siege;
+        SDL_SetRelativeMouseMode(SDL_TRUE);
+      } else if (m_MenuSelection == 3) { // Options
         m_InOptions = true;
         m_MenuSelection = 0;
-      } else if (m_MenuSelection == 3) { // Quit
+      } else if (m_MenuSelection == 4) { // Quit
         m_IsRunning = false;
       }
     } else {

@@ -51,6 +51,46 @@ void DungeonsGame::OnStart() {
   SDL_SetRelativeMouseMode(SDL_FALSE);
 }
 
+void DungeonsGame::InitSiege() {
+  m_Registry = Registry();
+  m_IsGrappling = false;
+  m_GameFinished = false;
+  m_RunTimer = 0.0f;
+  m_TargetsDestroyed = 0;
+
+  // 1. Load User Map
+  m_Editor.Init(&m_Registry, &m_GLRenderer);
+  m_Editor.LoadDungeon("assets/dungeons/my_dungeon.map");
+
+  // 2. Load Character Assets (GLB fallback to dummy for now)
+  m_GLRenderer.LoadMesh("knight", "assets/adventurers/Characters/gltf/Knight.glb");
+  m_GLRenderer.LoadMesh("skeleton", "assets/skeletons/characters/gltf/Skeleton_Warrior.glb");
+  m_GLRenderer.LoadTexture("knight_tex", "assets/adventurers/Textures/knight_texture.png");
+  m_GLRenderer.LoadTexture("skeleton_tex", "assets/skeletons/texture/skeleton_texture.png");
+
+  // 3. Setup Player (Knight)
+  m_PlayerEntity = m_Registry.CreateEntity();
+  m_Registry.AddComponent<Transform3DComponent>(m_PlayerEntity, {0.0f, 0.0f, 1.5f, 0.0f, 0.0f});
+  m_Registry.AddComponent<PlayerControlComponent>(m_PlayerEntity, {8.0f, 0.003f, 6.0f});
+  m_Registry.AddComponent<PhysicsComponent>(m_PlayerEntity, {0, 0, 0, 15.0f, true, false, 0.0f, 5.0f});
+  m_Registry.AddComponent<ColliderComponent>(m_PlayerEntity, {0.5f, 2.0f, true});
+  m_Registry.AddComponent<WeaponComponent>(m_PlayerEntity, {0.0f, 0.0f, false});
+  m_Registry.AddComponent<CharacterComponent>(m_PlayerEntity, {CharacterComponent::Knight});
+
+  // 4. Spawn Skeletons at random positions (within a range for demo)
+  for (int i = 0; i < 5; i++) {
+      Entity skel = m_Registry.CreateEntity();
+      float rx = (rand() % 40) - 20.0f;
+      float ry = (rand() % 40) - 20.0f;
+      m_Registry.AddComponent<Transform3DComponent>(skel, {rx, ry, 0.0f, 0.0f, 0.0f});
+      m_Registry.AddComponent<MeshComponent>(skel, {"skeleton", "skeleton_tex", 1.0f, 1.0f, 1.0f, 0, 0, 0});
+      m_Registry.AddComponent<EnemyComponent>(skel, EnemyComponent{100.0f, 2.0f, (int)m_PlayerEntity});
+      m_Registry.AddComponent<CharacterComponent>(skel, {CharacterComponent::SkeletonWarrior});
+  }
+
+  m_Camera->z = 1.5f;
+}
+
 void DungeonsGame::InitGame() {
   m_Registry = Registry();
 

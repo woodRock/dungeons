@@ -112,16 +112,148 @@ struct MeshComponent {
 
 struct InteractableComponent {
 
+
+
+
+
     enum Type { Door, Chest };
+
+
+
+
 
     Type type;
 
+
+
+
+
     bool isOpen = false;
+
+
+
+
 
 };
 
 
 
+
+
+
+
+
+
+
+
+struct CharacterComponent {
+
+
+
+
+
+    enum Type { Knight, Ranger, Mage, Barbarian, SkeletonMinion, SkeletonWarrior, SkeletonMage };
+
+
+
+
+
+    Type type;
+
+
+
+
+
+};
+
+
+
+
+
+
+
+
+
+
+
+struct EnemyComponent {
+
+
+
+
+
+
+
+
+
+
+
+    float health = 100.0f;
+
+
+
+
+
+
+
+
+
+
+
+    float speed = 2.0f;
+
+
+
+
+
+
+
+
+
+
+
+    int target = -1; // Use int to avoid circular or early parse dependency on Entity
+
+
+
+
+
+
+
+
+
+
+
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 } // namespace PixelsEngine
+
+
+
+
+
+
 
 
