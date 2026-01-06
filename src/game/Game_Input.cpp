@@ -291,7 +291,7 @@ void DungeonsGame::HandleInputMenu() {
 
   bool action = false;
 
-  int numButtons = m_InOptions ? 2 : 5;
+  int numButtons = m_InOptions ? 2 : 6;
 
   // Mouse Interaction
   for (int i = 0; i < numButtons; i++) {
@@ -344,10 +344,14 @@ void DungeonsGame::HandleInputMenu() {
         InitSiege();
         m_State = GameState::Siege;
         SDL_SetRelativeMouseMode(SDL_TRUE);
-      } else if (m_MenuSelection == 3) { // Options
+      } else if (m_MenuSelection == 3) { // Battle
+        InitBattle();
+        m_State = GameState::Battle;
+        SDL_SetRelativeMouseMode(SDL_FALSE);
+      } else if (m_MenuSelection == 4) { // Options
         m_InOptions = true;
         m_MenuSelection = 0;
-      } else if (m_MenuSelection == 4) { // Quit
+      } else if (m_MenuSelection == 5) { // Quit
         m_IsRunning = false;
       }
     } else {
@@ -355,7 +359,7 @@ void DungeonsGame::HandleInputMenu() {
         ToggleFullScreen();
       } else if (m_MenuSelection == 1) { // Back
         m_InOptions = false;
-        m_MenuSelection = 1;
+        m_MenuSelection = 4; // Back to Options button (Index 4)
       }
     }
   }

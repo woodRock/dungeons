@@ -8,9 +8,10 @@
 #include "DungeonEditor.h"
 #include "SiegeMode.h"
 #include "ExplorationMode.h"
+#include "BattleMode.h"
 #include <memory>
 
-enum class GameState { MainMenu, Playing, Creative, Siege, Paused };
+enum class GameState { MainMenu, Playing, Creative, Siege, Battle, Paused };
 
 class DungeonsGame : public PixelsEngine::Application {
 public:
@@ -26,11 +27,13 @@ private:
   // Modular systems
   void InitGame();
   void InitSiege();
+  void InitBattle();
   void InitMainMenu();
 
   void UpdateMainMenu(float dt);
   void UpdateGameplay(float dt);
   void UpdateSiege(float dt);
+  void UpdateBattle(float dt);
 
   void RenderMainMenu();
   void RenderGameplay();
@@ -58,6 +61,7 @@ private:
   PixelsEngine::DungeonEditor m_Editor;
   std::unique_ptr<SiegeMode> m_SiegeMode;
   std::unique_ptr<ExplorationMode> m_ExplorationMode;
+  std::unique_ptr<BattleMode> m_BattleMode;
 
   std::shared_ptr<PixelsEngine::Texture> m_BowIdle;
   std::shared_ptr<PixelsEngine::Texture> m_BowDraw;

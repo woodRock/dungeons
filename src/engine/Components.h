@@ -192,76 +192,29 @@ struct SkeletalAnimationComponent {
 };
 
 struct EnemyComponent {
-
-
-
-
-
-
-
-
-
-
-
     float health = 100.0f;
-
-
-
-
-
-
-
-
-
-
-
     float speed = 2.0f;
-
-
-
-
-
-
-
-
-
-
-
     int target = -1; // Use int to avoid circular or early parse dependency on Entity
-
-
-
-
-
-
-
-
-
-
-
 };
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+struct BattleUnitComponent {
+    enum Team { Player, Enemy };
+    Team team;
+    int maxHp = 20;
+    int hp = 20;
+    int ac = 12; // Armor Class
+    int initiative = 0;
+    
+    // Actions
+    float movement = 6.0f; // Meters
+    float currentMovement = 6.0f;
+    bool hasAction = true;
+    bool hasBonusAction = true;
+    
+    // UI State
+    bool isSelected = false;
+    bool isTurn = false;
+};
 
 } // namespace PixelsEngine
 

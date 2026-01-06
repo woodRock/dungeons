@@ -65,3 +65,16 @@ void DungeonsGame::InitSiege() {
     }
     m_SiegeMode->Init(m_Camera.get(), m_PlayerEntity);
 }
+
+void DungeonsGame::InitBattle() {
+    m_Registry = Registry();
+    m_IsGrappling = false;
+    m_GameFinished = false;
+    m_State = GameState::Battle;
+    SDL_SetRelativeMouseMode(SDL_FALSE);
+    
+    if (!m_BattleMode) {
+        m_BattleMode = std::make_unique<BattleMode>(&m_Registry, &m_GLRenderer);
+    }
+    m_BattleMode->Init(m_Camera.get(), m_PlayerEntity);
+}
