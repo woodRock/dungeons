@@ -1,658 +1,321 @@
 #include "GLRenderer.h"
 #include "Components.h"
 #include "OBJLoader.h"
+#include "GLTFLoader.h"
 #include <SDL2/SDL_image.h>
 #include <iostream>
+#include <algorithm>
 
 namespace PixelsEngine {
 
 GLRenderer::GLRenderer() : m_Width(800), m_Height(600), m_DefaultTexture(0) {}
-
-GLRenderer::~GLRenderer() {
-  // Cleanup GL resources...
-}
+GLRenderer::~GLRenderer() {}
 
 void GLRenderer::Init(int width, int height) {
-  std::cout << "GLRenderer::Init calling..." << std::endl;
-  m_Width = width;
-  m_Height = height;
-
+  m_Width = width; m_Height = height;
   glEnable(GL_DEPTH_TEST);
-  glEnable(GL_CULL_FACE);
-  glCullFace(GL_BACK);
-
-  // Fix for textures with odd widths (like some fonts)
+  glEnable(GL_CULL_FACE); glCullFace(GL_BACK);
   glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
-  // Simple Shaders
   const char *vShader = R"(
-        #version 330 core
-        layout (location = 0) in vec3 aPos;
-        layout (location = 1) in vec2 aTexCoord;
-        layout (location = 2) in vec3 aNormal;
+    #version 330 core
+    layout (location = 0) in vec3 aPos;
+    layout (location = 1) in vec2 aTexCoord;
+    layout (location = 2) in vec3 aNormal;
+    layout (location = 3) in ivec4 aJoints;
+    layout (location = 4) in vec4 aWeights;
 
-        out vec2 TexCoord;
-        out vec3 Normal;
-        out vec3 FragPos;
+    out vec2 TexCoord;
+    out vec3 Normal;
+    out vec3 FragPos;
 
-        uniform mat4 model;
-        uniform mat4 view;
-        uniform mat4 projection;
+    uniform mat4 model;
+    uniform mat4 view;
+    uniform mat4 projection;
+    uniform mat4 jointMatrices[64];
+    uniform bool useSkinning;
 
-        void main()
-        {
-            gl_Position = projection * view * model * vec4(aPos, 1.0);
-            TexCoord = aTexCoord;
-            Normal = mat3(transpose(inverse(model))) * aNormal;
-            FragPos = vec3(model * vec4(aPos, 1.0));
+    void main() {
+        mat4 skinMatrix = mat4(1.0);
+        if (useSkinning) {
+            skinMatrix = 
+                aWeights.x * jointMatrices[aJoints.x] +
+                aWeights.y * jointMatrices[aJoints.y] +
+                aWeights.z * jointMatrices[aJoints.z] +
+                aWeights.w * jointMatrices[aJoints.w];
         }
-    )";
+        vec4 worldPos = model * skinMatrix * vec4(aPos, 1.0);
+        gl_Position = projection * view * worldPos;
+        TexCoord = aTexCoord;
+        Normal = mat3(model) * mat3(skinMatrix) * aNormal;
+        FragPos = vec3(worldPos);
+    }
+  )";
 
   const char *fShader = R"(
-        #version 330 core
-        out vec4 FragColor;
-
-        in vec2 TexCoord;
-        in vec3 Normal;
-        in vec3 FragPos;
-
-        uniform sampler2D ourTexture;
-        uniform vec3 lightPos;
-        uniform vec3 viewPos;
-        uniform float alpha;
-        uniform bool useAlpha;
-
-        void main()
-        {
-            // Ambient
-            float ambientStrength = 0.3;
-            vec3 lightColor = vec3(1.0, 1.0, 1.0);
-            vec3 ambient = ambientStrength * lightColor;
-            
-            // Diffuse
-            vec3 norm = normalize(Normal);
-            vec3 lightDir = normalize(lightPos - FragPos);
-            float diff = max(dot(norm, lightDir), 0.0);
-            vec3 diffuse = diff * lightColor;
-            
-            vec4 texColor = texture(ourTexture, TexCoord);
-            vec3 result = (ambient + diffuse) * texColor.rgb;
-            
-            float outAlpha = texColor.a;
-            if (useAlpha) outAlpha *= alpha;
-            
-            FragColor = vec4(result, outAlpha);
-            
-            if(FragColor.a < 0.1) discard;
-        }
-    )";
+    #version 330 core
+    out vec4 FragColor;
+    in vec2 TexCoord;
+    in vec3 Normal;
+    in vec3 FragPos;
+    uniform sampler2D ourTexture;
+    uniform vec3 lightPos;
+    void main() {
+        vec3 ambient = 0.3 * vec3(1.0);
+        vec3 norm = normalize(Normal);
+        vec3 lightDir = normalize(lightPos - FragPos);
+        vec3 diffuse = max(dot(norm, lightDir), 0.0) * vec3(1.0);
+        vec4 texColor = texture(ourTexture, TexCoord);
+        
+        vec3 finalColor = (ambient + diffuse) * texColor.rgb;
+        // If texture is black/invalid, use magenta
+        if (length(texColor.rgb) < 0.01) finalColor = vec3(1.0, 0.0, 1.0);
+        
+        FragColor = vec4(finalColor, 1.0);
+    }
+  )";
 
   m_Shader = std::make_unique<Shader>(vShader, fShader);
-
-  // Create 1x1 white default texture
+  
   glGenTextures(1, &m_DefaultTexture);
   glBindTexture(GL_TEXTURE_2D, m_DefaultTexture);
   unsigned char white[] = {255, 255, 255, 255};
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-               white);
-
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, white);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  
   InitUI();
 }
 
 void GLRenderer::InitUI() {
-  // 2D Shader
-  const char *vShaderUI = R"(
-        #version 330 core
-        layout (location = 0) in vec2 aPos;
-        layout (location = 1) in vec2 aTexCoord;
-        
-        out vec2 TexCoord;
-        
-        uniform mat4 projection;
-        uniform mat4 model;
-        
-        void main() {
-            gl_Position = projection * model * vec4(aPos, 0.0, 1.0);
-            TexCoord = aTexCoord;
-        }
-    )";
-
-  const char *fShaderUI = R"(
-        #version 330 core
-        out vec4 FragColor;
-        in vec2 TexCoord;
-        
-        uniform sampler2D uiTexture;
-        uniform vec4 color;
-        uniform bool useTexture;
-        
-        void main() {
-            if (useTexture) {
-                vec4 texColor = texture(uiTexture, TexCoord);
-                FragColor = texColor * color;
-            } else {
-                FragColor = color;
-            }
-        }
-    )";
-
-  m_UIShader = std::make_unique<Shader>(vShaderUI, fShaderUI);
-
-  // 1x1 Quad
-  float quadVertices[] = {
-      // pos      // tex
-      0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-
-      0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f};
-
-  glGenVertexArrays(1, &m_QuadVAO);
-  glGenBuffers(1, &m_QuadVBO);
-  glBindVertexArray(m_QuadVAO);
-  glBindBuffer(GL_ARRAY_BUFFER, m_QuadVBO);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices,
-               GL_STATIC_DRAW);
-
-  glEnableVertexAttribArray(0);
-  glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
-    glBindVertexArray(0);
-
-    // Line Shader
-    const char* vLine = R"(
-        #version 330 core
-        layout (location = 0) in vec3 aPos;
-        uniform mat4 view;
-        uniform mat4 projection;
-        uniform mat4 model;
-        void main() {
-            gl_Position = projection * view * model * vec4(aPos, 1.0);
-        }
-    )";
-    const char* fLine = R"(
-        #version 330 core
-        out vec4 FragColor;
-        uniform vec4 color;
-        void main() {
-            FragColor = color;
-        }
-    )";
-    m_LineShader = std::make_unique<Shader>(vLine, fLine);
-
-    float cubeLines[] = {
-        0,0,0, 1,0,0,  1,0,0, 1,1,0,  1,1,0, 0,1,0,  0,1,0, 0,0,0,
-        0,0,1, 1,0,1,  1,0,1, 1,1,1,  1,1,1, 0,1,1,  0,1,1, 0,0,1,
-        0,0,0, 0,0,1,  1,0,0, 1,0,1,  1,1,0, 1,1,1,  0,1,0, 0,1,1
-    };
-    glGenVertexArrays(1, &m_LineVAO);
-    glGenBuffers(1, &m_LineVBO);
-    glBindVertexArray(m_LineVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, m_LineVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(cubeLines), cubeLines, GL_STATIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    const char *vUI = R"(#version 330 core
+        layout (location = 0) in vec2 aPos; layout (location = 1) in vec2 aTexCoord;
+        out vec2 TexCoord; uniform mat4 projection; uniform mat4 model;
+        void main() { gl_Position = projection * model * vec4(aPos, 0.0, 1.0); TexCoord = aTexCoord; })";
+    const char *fUI = R"(#version 330 core
+        out vec4 FragColor; in vec2 TexCoord; uniform sampler2D uiTexture; uniform vec4 color; uniform bool useTexture;
+        void main() { FragColor = useTexture ? texture(uiTexture, TexCoord) * color : color; })";
+    m_UIShader = std::make_unique<Shader>(vUI, fUI);
+    float qV[] = { 0,1,0,1, 1,0,1,0, 0,0,0,0, 0,1,0,1, 1,1,1,1, 1,0,1,0 };
+    glGenVertexArrays(1, &m_QuadVAO); glGenBuffers(1, &m_QuadVBO);
+    glBindVertexArray(m_QuadVAO); glBindBuffer(GL_ARRAY_BUFFER, m_QuadVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(qV), qV, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0); glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4*4, (void*)0);
+    glEnableVertexAttribArray(1); glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4*4, (void*)(2*4));
     glBindVertexArray(0);
 }
-
-void GLRenderer::DrawWireCube(float x, float y, float z, float size, SDL_Color color) {
-    m_LineShader->Use();
-    m_LineShader->SetMat4("view", m_LastView.m);
-    m_LineShader->SetMat4("projection", m_LastProjection.m);
-    
-    // Grid alignment: size is usually 4.0. We want to draw from -size/2 to +size/2 relative to center.
-    // My line cube is 0 to 1.
-    Mat4 model = Mat4::Translate({x - size*0.5f, z - size*0.5f, -y - size*0.5f});
-    model = model * Mat4::Scale({size, size, size});
-    m_LineShader->SetMat4("model", model.m);
-    
-    float c[4] = {color.r/255.0f, color.g/255.0f, color.b/255.0f, color.a/255.0f};
-    glUniform4fv(glGetUniformLocation(m_LineShader->ID, "color"), 1, c);
-    
-    glBindVertexArray(m_LineVAO);
-    glDrawArrays(GL_LINES, 0, 24);
-    glBindVertexArray(0);
-}
-
-
 
 void GLRenderer::DrawRect2D(int x, int y, int w, int h, SDL_Color color) {
-  glDisable(GL_DEPTH_TEST);
-  glEnable(GL_BLEND);
-  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-  m_UIShader->Use();
-
-  // Ortho Projection (Top-Left Origin) using logic window size
-  // But we need to account for HighDPI in the projection or the viewport.
-  // If glViewport is (0,0,dw,dh) and we want to draw in (0,0,1280,720)
-  // We should use the logical size for Ortho.
-  float L = 0, R = (float)m_Width, B = (float)m_Height, T = 0;
-  float ortho[16] = {2.0f / (R - L),
-                     0,
-                     0,
-                     0,
-                     0,
-                     2.0f / (T - B),
-                     0,
-                     0,
-                     0,
-                     0,
-                     -1,
-                     0,
-                     -(R + L) / (R - L),
-                     -(T + B) / (T - B),
-                     0,
-                     1};
-  m_UIShader->SetMat4("projection", ortho);
-
-  // Model Matrix
-  Mat4 model = Mat4::Translate({(float)x, (float)y, 0});
-  model = model * Mat4::Scale({(float)w, (float)h, 1.0f});
-  m_UIShader->SetMat4("model", model.m);
-
-  float c[4] = {color.r / 255.0f, color.g / 255.0f, color.b / 255.0f,
-                color.a / 255.0f};
-  glUniform4fv(glGetUniformLocation(m_UIShader->ID, "color"), 1, c);
-  m_UIShader->SetInt("useTexture", 0);
-
-  glBindVertexArray(m_QuadVAO);
-  glDrawArrays(GL_TRIANGLES, 0, 6);
-  glBindVertexArray(0);
-
-  glDisable(GL_BLEND);
-  glEnable(GL_DEPTH_TEST);
+    glDisable(GL_DEPTH_TEST); glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    m_UIShader->Use();
+    float L = 0, R = (float)m_Width, B = (float)m_Height, T = 0;
+    float ortho[16] = {2.0f/(R-L),0,0,0, 0,2.0f/(T-B),0,0, 0,0,-1,0, -(R+L)/(R-L),-(T+B)/(T-B),0,1};
+    m_UIShader->SetMat4("projection", ortho);
+    Mat4 model = Mat4::Translate({(float)x, (float)y, 0}) * Mat4::Scale({(float)w, (float)h, 1});
+    m_UIShader->SetMat4("model", model.m);
+    float c[4] = {color.r/255.0f, color.g/255.0f, color.b/255.0f, color.a/255.0f};
+    glUniform4fv(glGetUniformLocation(m_UIShader->ID, "color"), 1, c);
+    m_UIShader->SetInt("useTexture", 0);
+    glBindVertexArray(m_QuadVAO); glDrawArrays(GL_TRIANGLES, 0, 6);
+    glEnable(GL_DEPTH_TEST); glDisable(GL_BLEND);
 }
 
-void GLRenderer::DrawTexture2D(unsigned int textureID, int x, int y, int w,
-                               int h, SDL_Color color) {
-  glDisable(GL_DEPTH_TEST);
-  glEnable(GL_BLEND);
-  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-  m_UIShader->Use();
-
-  float L = 0, R = (float)m_Width, B = (float)m_Height, T = 0;
-  float ortho[16] = {2.0f / (R - L),
-                     0,
-                     0,
-                     0,
-                     0,
-                     2.0f / (T - B),
-                     0,
-                     0,
-                     0,
-                     0,
-                     -1,
-                     0,
-                     -(R + L) / (R - L),
-                     -(T + B) / (T - B),
-                     0,
-                     1};
-  m_UIShader->SetMat4("projection", ortho);
-
-  Mat4 model = Mat4::Translate({(float)x, (float)y, 0});
-  model = model * Mat4::Scale({(float)w, (float)h, 1.0f});
-  m_UIShader->SetMat4("model", model.m);
-
-  float c[4] = {color.r / 255.0f, color.g / 255.0f, color.b / 255.0f,
-                color.a / 255.0f};
-  glUniform4fv(glGetUniformLocation(m_UIShader->ID, "color"), 1, c);
-
-  m_UIShader->SetInt("useTexture", 1);
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, textureID);
-  m_UIShader->SetInt("uiTexture", 0);
-
-  glBindVertexArray(m_QuadVAO);
-  glDrawArrays(GL_TRIANGLES, 0, 6);
-  glBindVertexArray(0);
-
-  glDisable(GL_BLEND);
-  glEnable(GL_DEPTH_TEST);
+void GLRenderer::DrawTexture2D(unsigned int texID, int x, int y, int w, int h, SDL_Color color) {
+    glDisable(GL_DEPTH_TEST); glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    m_UIShader->Use();
+    float L = 0, R = (float)m_Width, B = (float)m_Height, T = 0;
+    float ortho[16] = {2.0f/(R-L),0,0,0, 0,2.0f/(T-B),0,0, 0,0,-1,0, -(R+L)/(R-L),-(T+B)/(T-B),0,1};
+    m_UIShader->SetMat4("projection", ortho);
+    Mat4 model = Mat4::Translate({(float)x, (float)y, 0}) * Mat4::Scale({(float)w, (float)h, 1});
+    m_UIShader->SetMat4("model", model.m);
+    float c[4] = {color.r/255.0f, color.g/255.0f, color.b/255.0f, color.a/255.0f};
+    glUniform4fv(glGetUniformLocation(m_UIShader->ID, "color"), 1, c);
+    m_UIShader->SetInt("useTexture", 1); glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, texID);
+    glBindVertexArray(m_QuadVAO); glDrawArrays(GL_TRIANGLES, 0, 6);
+    glEnable(GL_DEPTH_TEST); glDisable(GL_BLEND);
 }
 
-void GLRenderer::Resize(int width, int height) {
-  m_Width = width;
-  m_Height = height;
-  glViewport(0, 0, width, height);
+void GLRenderer::UpdateSkinnedMesh(RenderMesh& rm, int animIdx, float time) {
+    if (!rm.isSkinned) return;
+    
+    // 1. Start with Local Matrices from Bind Pose
+    std::vector<Mat4> locals(rm.skeleton.bones.size());
+    for(size_t i=0; i<locals.size(); i++) {
+        memcpy(locals[i].m, rm.skeleton.bones[i].localMatrix, 64);
+    }
+
+    // 2. Override Locals with Animation Data
+    if (animIdx >= 0 && animIdx < (int)rm.animations.size()) {
+        auto& anim = rm.animations[animIdx];
+        float animTime = (anim.duration > 0) ? fmod(time, anim.duration) : 0;
+
+        // Group channels by bone to compose T/R/S correctly
+        struct BoneTransform {
+            Vec3 pos = {0,0,0}; bool hasPos = false;
+            Vec4 rot = {0,0,0,1}; bool hasRot = false;
+            Vec3 scl = {1,1,1}; bool hasScl = false;
+        };
+        std::vector<BoneTransform> transforms(rm.skeleton.bones.size());
+
+        for(auto& chan : anim.channels) {
+            int bIdx = -1;
+            for(size_t i=0; i<rm.skeleton.bones.size(); i++) {
+                if(rm.skeleton.bones[i].name == chan.boneName) { bIdx=(int)i; break; }
+            }
+            if(bIdx == -1 || chan.keyframes.empty()) continue;
+
+            int k1=0, k2=0;
+            if(chan.keyframes.size() > 1) {
+                for(size_t i=0; i<chan.keyframes.size()-1; i++) {
+                    if(animTime >= chan.keyframes[i].time && animTime <= chan.keyframes[i+1].time) {
+                        k1=(int)i; k2=(int)i+1; break;
+                    }
+                }
+            }
+            float t = (k1==k2) ? 0 : (animTime - chan.keyframes[k1].time) / (chan.keyframes[k2].time - chan.keyframes[k1].time);
+
+            if(chan.path == AnimationChannel::Translation) {
+                Vec3 v1={chan.keyframes[k1].value[0], chan.keyframes[k1].value[1], chan.keyframes[k1].value[2]};
+                Vec3 v2={chan.keyframes[k2].value[0], chan.keyframes[k2].value[1], chan.keyframes[k2].value[2]};
+                transforms[bIdx].pos = v1*(1-t)+v2*t; transforms[bIdx].hasPos = true;
+            } else if(chan.path == AnimationChannel::Rotation) {
+                Vec4 q1={chan.keyframes[k1].value[0],chan.keyframes[k1].value[1],chan.keyframes[k1].value[2],chan.keyframes[k1].value[3]};
+                Vec4 q2={chan.keyframes[k2].value[0],chan.keyframes[k2].value[1],chan.keyframes[k2].value[2],chan.keyframes[k2].value[3]};
+                Vec4 q={q1.x*(1-t)+q2.x*t,q1.y*(1-t)+q2.y*t,q1.z*(1-t)+q2.z*t,q1.w*(1-t)+q2.w*t};
+                float len = sqrt(q.x*q.x+q.y*q.y+q.z*q.z+q.w*q.w);
+                if(len > 0.0001f) { q.x/=len; q.y/=len; q.z/=len; q.w/=len; } else q={0,0,0,1};
+                transforms[bIdx].rot = q; transforms[bIdx].hasRot = true;
+            }
+        }
+
+        // Apply composed transforms to locals
+        for(size_t i=0; i<locals.size(); i++) {
+            if (transforms[i].hasRot) {
+                // Replace rotation but keep existing translation
+                float tx = locals[i].m[12];
+                float ty = locals[i].m[13];
+                float tz = locals[i].m[14];
+                locals[i] = Mat4::FromQuaternion(transforms[i].rot);
+                locals[i].m[12] = tx;
+                locals[i].m[13] = ty;
+                locals[i].m[14] = tz;
+            }
+            if (transforms[i].hasPos) {
+                // Replace translation
+                locals[i].m[12] = transforms[i].pos.x;
+                locals[i].m[13] = transforms[i].pos.y;
+                locals[i].m[14] = transforms[i].pos.z;
+            }
+        }
+    }
+
+    // 3. Compute Global Hierarchy Recursively
+    std::vector<Mat4> globals(rm.skeleton.bones.size());
+    std::vector<bool> computed(rm.skeleton.bones.size(), false);
+    
+    auto computeGlobal = [&](auto self, int i) -> void {
+        if (computed[i]) return;
+        int p = rm.skeleton.bones[i].parentIndex;
+        if (p == -1) {
+            globals[i] = locals[i];
+        } else {
+            self(self, p);
+            globals[i] = globals[p] * locals[i];
+        }
+        computed[i] = true;
+    };
+
+    for (size_t i = 0; i < globals.size(); i++) {
+        computeGlobal(computeGlobal, (int)i);
+    }
+
+    // 4. Final Skin Matrices = GlobalTransform * InverseBindMatrix
+    for(size_t i=0; i<globals.size(); i++) {
+        Mat4 ibm; memcpy(ibm.m, rm.skeleton.bones[i].inverseBindMatrix, 64);
+        Mat4 finalMatrix = globals[i] * ibm;
+        memcpy(&rm.skeleton.jointMatrices[i*16], finalMatrix.m, 64);
+    }
+}
+
+RenderMesh* GLRenderer::GetRenderMesh(const std::string& name) { return m_Meshes.count(name) ? &m_Meshes[name] : nullptr; }
+
+void GLRenderer::Render(SDL_Window *win, const Camera &cam, Registry &reg, bool swap) {
+    int dw, dh; SDL_GL_GetDrawableSize(win, &dw, &dh); glViewport(0, 0, dw, dh);
+    glClearColor(0.53f, 0.81f, 0.92f, 1.0f); glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    m_Shader->Use();
+    Vec3 glEye = {cam.x, cam.z, -cam.y};
+    float dx=cos(cam.yaw)*cos(cam.pitch), dy=sin(cam.yaw)*cos(cam.pitch), dz=sin(cam.pitch);
+    Mat4 view = Mat4::LookAt(glEye, {glEye.x+dx, glEye.y+dz, glEye.z-dy}, {0,1,0});
+    Mat4 proj = Mat4::Perspective(1.04f, (float)m_Width/m_Height, 0.1f, 100.0f);
+    m_Shader->SetMat4("view", view.m); m_Shader->SetMat4("projection", proj.m);
+    m_Shader->SetVec3("lightPos", glEye.x, glEye.y, glEye.z);
+    m_Shader->SetInt("ourTexture", 0); m_Shader->SetInt("useAlpha", 0);
+    auto &viewGroup = reg.View<MeshComponent>();
+    for (auto &pair : viewGroup) {
+        auto &mc = pair.second; auto *t = reg.GetComponent<Transform3DComponent>(pair.first);
+        if (m_Meshes.count(mc.meshName)) {
+            RenderMesh &rm = m_Meshes[mc.meshName];
+            Mat4 model = Mat4::Translate({t?t->x:0, t?t->z:0, t?-t->y:0});
+            if (t) model = model * Mat4::RotateY(-t->rot);
+            model = model * Mat4::Scale({mc.scaleX, mc.scaleZ, mc.scaleY});
+            m_Shader->SetMat4("model", model.m);
+            if (rm.isSkinned) {
+                m_Shader->SetInt("useSkinning", 1);
+                std::vector<float> jm(64*16, 0.0f); for(int i=0;i<64;i++) jm[i*16]=jm[i*16+5]=jm[i*16+10]=jm[i*16+15]=1.0f;
+                if(!rm.skeleton.jointMatrices.empty()) memcpy(jm.data(), rm.skeleton.jointMatrices.data(), std::min(jm.size()*sizeof(float), rm.skeleton.jointMatrices.size()*sizeof(float)));
+                GLint loc = glGetUniformLocation(m_Shader->ID, "jointMatrices");
+                if(loc != -1) glUniformMatrix4fv(loc, 64, GL_FALSE, jm.data());
+            } else m_Shader->SetInt("useSkinning", 0);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, (m_Textures.count(mc.textureName)) ? m_Textures[mc.textureName] : m_DefaultTexture);
+            glBindVertexArray(rm.VAO); glDrawElements(GL_TRIANGLES, rm.indexCount, GL_UNSIGNED_INT, 0);
+        }
+    }
+    if (swap) SDL_GL_SwapWindow(win);
 }
 
 bool GLRenderer::LoadMesh(const std::string &name, const std::string &path) {
-  if (m_Meshes.find(name) != m_Meshes.end())
-    return true;
-
-  Mesh mesh;
-  if (!OBJLoader::Load(path, mesh))
-    return false;
-
-  RenderMesh rm;
-  rm.indexCount = (unsigned int)mesh.indices.size();
-
-  glGenVertexArrays(1, &rm.VAO);
-  glGenBuffers(1, &rm.VBO);
-  glGenBuffers(1, &rm.EBO);
-
-  glBindVertexArray(rm.VAO);
-
-  glBindBuffer(GL_ARRAY_BUFFER, rm.VBO);
-  glBufferData(GL_ARRAY_BUFFER, mesh.vertices.size() * sizeof(Vertex),
-               mesh.vertices.data(), GL_STATIC_DRAW);
-
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, rm.EBO);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-               mesh.indices.size() * sizeof(unsigned int), mesh.indices.data(),
-               GL_STATIC_DRAW);
-
-  // Vertex Positions
-  glEnableVertexAttribArray(0);
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)0);
-  // Texture Coords
-  glEnableVertexAttribArray(1);
-  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-                        (void *)offsetof(Vertex, u));
-  // Normals
-  glEnableVertexAttribArray(2);
-  glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-                        (void *)offsetof(Vertex, nx));
-
-  glBindVertexArray(0);
-
-  m_Meshes[name] = rm;
-  return true;
+    Mesh m; if (!(path.find(".glb") != std::string::npos ? GLTFLoader::Load(path, m) : OBJLoader::Load(path, m))) return false;
+    RenderMesh rm; rm.indexCount = (unsigned int)m.indices.size(); rm.isSkinned = m.isSkinned; rm.skeleton = m.skeleton; rm.animations = m.animations;
+    glGenVertexArrays(1, &rm.VAO); glGenBuffers(1, &rm.VBO); glGenBuffers(1, &rm.EBO);
+    glBindVertexArray(rm.VAO); glBindBuffer(GL_ARRAY_BUFFER, rm.VBO);
+    glBufferData(GL_ARRAY_BUFFER, m.vertices.size()*sizeof(Vertex), m.vertices.data(), GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, rm.EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, m.indices.size()*4, m.indices.data(), GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0); glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, x));
+    glEnableVertexAttribArray(1); glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, u));
+    glEnableVertexAttribArray(2); glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, nx));
+    glEnableVertexAttribArray(3); glVertexAttribIPointer(3, 4, GL_INT, sizeof(Vertex), (void*)offsetof(Vertex, joints));
+    glEnableVertexAttribArray(4); glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, weights));
+    glBindVertexArray(0); m_Meshes[name] = rm; return true;
 }
 
 bool GLRenderer::LoadTexture(const std::string &name, const std::string &path) {
-  SDL_Surface *surf = IMG_Load(path.c_str());
-  if (!surf) {
-    std::cerr << "Failed to load texture: " << path
-              << " Error: " << IMG_GetError() << std::endl;
-    return false;
-  }
-
-  GLuint texID;
-  glGenTextures(1, &texID);
-  glBindTexture(GL_TEXTURE_2D, texID);
-
-  int mode = GL_RGB;
-  if (surf->format->BytesPerPixel == 4)
-    mode = GL_RGBA;
-
-  glTexImage2D(GL_TEXTURE_2D, 0, mode, surf->w, surf->h, 0, mode,
-               GL_UNSIGNED_BYTE, surf->pixels);
-  glGenerateMipmap(GL_TEXTURE_2D);
-
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
-                  GL_LINEAR_MIPMAP_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-  SDL_FreeSurface(surf);
-  m_Textures[name] = texID;
-  return true;
-}
-
-unsigned int GLRenderer::CreateTextureFromSurface(SDL_Surface *surf) {
-  if (!surf)
-    return 0;
-
-  // Ensure surface is in a format GL likes (RGBA 32-bit in memory)
-  // On Little Endian (Mac/PC), SDL_PIXELFORMAT_ABGR8888 maps to [R, G, B, A]
-  // bytes.
-  SDL_Surface *optimized =
-      SDL_ConvertSurfaceFormat(surf, SDL_PIXELFORMAT_ABGR8888, 0);
-  if (!optimized)
-    return 0;
-
-  GLuint texID;
-  glGenTextures(1, &texID);
-  glBindTexture(GL_TEXTURE_2D, texID);
-
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, optimized->w, optimized->h, 0,
-               GL_RGBA, GL_UNSIGNED_BYTE, optimized->pixels);
-
+  SDL_Surface *s = IMG_Load(path.c_str()); if (!s) return false;
+  SDL_Surface *opt = SDL_ConvertSurfaceFormat(s, SDL_PIXELFORMAT_ABGR8888, 0);
+  if (!opt) { SDL_FreeSurface(s); return false; }
+  GLuint t; glGenTextures(1, &t); glBindTexture(GL_TEXTURE_2D, t);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, opt->w, opt->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, opt->pixels);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-  SDL_FreeSurface(optimized);
-  return texID;
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  SDL_FreeSurface(s); SDL_FreeSurface(opt); m_Textures[name] = t; return true;
 }
 
-void GLRenderer::RenderThumbnail(const std::string &meshName,
-                                 const std::string &textureName, int x, int y,
-                                 int size) {
-  if (m_Meshes.find(meshName) == m_Meshes.end())
-    return;
-
-  // Save current viewport
-  GLint viewport[4];
-  glGetIntegerv(GL_VIEWPORT, viewport);
-
-  // Account for HighDPI scale
-  int dw, dh;
-  SDL_GL_GetDrawableSize(SDL_GL_GetCurrentWindow(), &dw, &dh);
-  float scaleX = (float)dw / m_Width;
-  float scaleY = (float)dh / m_Height;
-
-  // GL viewport is bottom-up
-  glViewport((int)(x * scaleX), (int)((m_Height - y - size) * scaleY),
-             (int)(size * scaleX), (int)(size * scaleY));
-
-  glEnable(GL_DEPTH_TEST);
-  glClear(GL_DEPTH_BUFFER_BIT);
-
-  m_Shader->Use();
-
-  // Fixed Thumbnail Camera
-  Vec3 eye = {4, 4, 4};
-  Vec3 center = {0, 0, 0};
-  Mat4 view = Mat4::LookAt(eye, center, {0, 1, 0});
-  Mat4 proj = Mat4::Perspective(0.8f, 1.0f, 0.1f, 20.0f);
-
-  m_Shader->SetMat4("view", view.m);
-  m_Shader->SetMat4("projection", proj.m);
-
-  Mat4 model = Mat4::Identity();
-  model = model * Mat4::RotateY(0.7f);
-
-  m_Shader->SetMat4("model", model.m);
-  m_Shader->SetInt("ourTexture", 0);
-
-  float lightPos[] = {eye.x, eye.y, eye.z};
-  glUniform3fv(glGetUniformLocation(m_Shader->ID, "lightPos"), 1, lightPos);
-
-  glActiveTexture(GL_TEXTURE0);
-  if (!textureName.empty() &&
-      m_Textures.find(textureName) != m_Textures.end()) {
-    glBindTexture(GL_TEXTURE_2D, m_Textures[textureName]);
-  } else {
-    glBindTexture(GL_TEXTURE_2D, m_DefaultTexture);
-  }
-
-  RenderMesh &rm = m_Meshes[meshName];
-  glBindVertexArray(rm.VAO);
-  glDrawElements(GL_TRIANGLES, rm.indexCount, GL_UNSIGNED_INT, 0);
-  glBindVertexArray(0);
-
-  // Restore viewport
-  glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+unsigned int GLRenderer::CreateTextureFromSurface(SDL_Surface *s) {
+  if (!s) return 0; SDL_Surface *opt = SDL_ConvertSurfaceFormat(s, SDL_PIXELFORMAT_ABGR8888, 0);
+  if (!opt) return 0;
+  GLuint t; glGenTextures(1, &t); glBindTexture(GL_TEXTURE_2D, t);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, opt->w, opt->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, opt->pixels);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  SDL_FreeSurface(opt); return t;
 }
 
-void GLRenderer::RenderMeshPreview(const std::string& meshName, const std::string& textureName, float x, float y, float z, float rot, float alpha, float offsetX, float offsetY, float offsetZ) {
-    if (m_Meshes.find(meshName) == m_Meshes.end()) return;
+void GLRenderer::Resize(int w, int h) { m_Width = w; m_Height = h; }
+void GLRenderer::DrawWireCube(float x, float y, float z, float s, SDL_Color c) {}
+void GLRenderer::RenderThumbnail(const std::string &m, const std::string &t, int x, int y, int s) {}
+void GLRenderer::RenderMeshPreview(const std::string& m, const std::string& t, float x, float y, float z, float r, float a, float ox, float oy, float oz) {}
 
-    m_Shader->Use();
-    
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glUniform1i(glGetUniformLocation(m_Shader->ID, "useAlpha"), 1);
-    glUniform1f(glGetUniformLocation(m_Shader->ID, "alpha"), alpha);
-
-    Mat4 model = Mat4::Identity();
-    model = model * Mat4::Translate({x, z, -y}); // World Position
-    
-    // Pivot Rotation
-    float px = offsetX;
-    float py = offsetZ;
-    float pz = -offsetY;
-
-    // Apply pivot: Translate back * Rotate * Translate to pivot origin
-    model = model * Mat4::Translate({px, py, pz});
-    model = model * Mat4::RotateY(-rot);
-    model = model * Mat4::Translate({-px, -py, -pz});
-    
-    m_Shader->SetMat4("model", model.m);
-
-  glActiveTexture(GL_TEXTURE0);
-  if (!textureName.empty() &&
-      m_Textures.find(textureName) != m_Textures.end()) {
-    glBindTexture(GL_TEXTURE_2D, m_Textures[textureName]);
-  } else {
-    glBindTexture(GL_TEXTURE_2D, m_DefaultTexture);
-  }
-
-  RenderMesh &rm = m_Meshes[meshName];
-  glBindVertexArray(rm.VAO);
-  glDrawElements(GL_TRIANGLES, rm.indexCount, GL_UNSIGNED_INT, 0);
-  glBindVertexArray(0);
-
-  glUniform1i(glGetUniformLocation(m_Shader->ID, "useAlpha"), 0);
-  glDisable(GL_BLEND);
 }
-
-void GLRenderer::Render(SDL_Window *window, const Camera &cam,
-                        Registry &registry, bool swap) {
-  int dw, dh;
-  SDL_GL_GetDrawableSize(window, &dw, &dh);
-  glViewport(0, 0, dw, dh);
-
-  glClearColor(0.53f, 0.81f, 0.92f, 1.0f); // Sky Blue
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-  m_Shader->Use();
-
-  // View Matrix (LookAt)
-  // Cam: x,y,z is position. yaw/pitch are angles.
-  // Convert yaw/pitch to direction vector
-  Vec3 eye = {
-      cam.x, cam.z,
-      cam.y}; // Note: Original engine had z as UP (Wolf3D style: x,y is floor,
-              // z is height). But wait, the Raycaster code said: floorX =
-              // cam.x, floorY = cam.y. "z" was height (e.g. 0.5). OpenGL
-              // usually Y is up. Let's adopt Y-up for OpenGL to match standard.
-              // Current engine: X,Y is ground plane. Z is height.
-              // So Eye = (cam.x, cam.z, cam.y) if we map: Engine Z -> GL Y.
-              // Engine Y -> GL Z.
-
-  // Engine Coordinates:
-  // X = Right/Left
-  // Y = Forward/Backward (North/South)
-  // Z = Up/Down
-
-  // Standard GL:
-  // X = Right
-  // Y = Up
-  // Z = Backward (Out of screen)
-
-  // Mapping:
-  // Engine X -> GL X
-  // Engine Z -> GL Y
-  // Engine Y -> GL -Z (Forward is -Z)
-
-  Vec3 glEye = {cam.x, cam.z, -cam.y};
-
-  float yawRad = cam.yaw; // Engine yaw: 0 is East (X+). Pi/2 is North (Y+).
-  // In GL: 0 should be -Z?
-  // Let's just calculate direction vector in Engine space and map it.
-
-  float dirX = cos(cam.yaw) * cos(cam.pitch);
-  float dirY = sin(cam.yaw) * cos(cam.pitch); // Engine Y
-  float dirZ = sin(cam.pitch);                // Engine Z
-
-      Vec3 glTarget = {glEye.x + dirX, glEye.y + dirZ, glEye.z - dirY}; // Note -dirY because Engine Y is GL -Z
-
-      
-
-      Mat4 view = Mat4::LookAt(glEye, glTarget, {0, 1, 0});
-
-      Mat4 proj = Mat4::Perspective(1.04f, (float)m_Width / (float)m_Height, 0.1f, 100.0f); // ~60 deg
-
-  
-
-      m_LastView = view;
-
-      m_LastProjection = proj;
-
-  
-
-      m_Shader->SetMat4("view", view.m);
-
-  
-  m_Shader->SetMat4("projection", proj.m);
-  m_Shader->SetInt("ourTexture", 0);
-
-  glUniform1i(glGetUniformLocation(m_Shader->ID, "useAlpha"), 0);
-  glUniform1f(glGetUniformLocation(m_Shader->ID, "alpha"), 1.0f);
-
-  // Light at camera position
-  float lightPos[] = {glEye.x, glEye.y, glEye.z};
-  glUniform3fv(glGetUniformLocation(m_Shader->ID, "lightPos"), 1, lightPos);
-
-  auto &viewGroup = registry.View<MeshComponent>();
-  for (auto &pair : viewGroup) {
-    Entity e = pair.first;
-    auto &meshComp = pair.second;
-    auto *trans = registry.GetComponent<Transform3DComponent>(e);
-
-    if (m_Meshes.find(meshComp.meshName) != m_Meshes.end()) {
-      RenderMesh &rm = m_Meshes[meshComp.meshName];
-
-      Mat4 model = Mat4::Identity();
-
-      // Translate
-      float tx = 0, ty = 0, tz = 0;
-      if (trans) {
-        tx = trans->x;
-        ty = trans->z;
-        tz = -trans->y;
-      } // Map Engine Coords to GL
-      model = model * Mat4::Translate({tx, ty, tz});
-
-      // Pivot Rotation
-      float px = meshComp.offsetX;
-      float py = meshComp.offsetZ;
-      float pz = -meshComp.offsetY;
-
-      model = model * Mat4::Translate({px, py, pz});
-      if (trans) {
-        model = model * Mat4::RotateY(-trans->rot);
-      }
-      model = model * Mat4::Translate({-px, -py, -pz});
-
-      // Scale
-      model =
-          model *
-          Mat4::Scale({meshComp.scaleX, meshComp.scaleZ, meshComp.scaleY});
-
-      m_Shader->SetMat4("model", model.m);
-
-      // Bind Texture
-      glActiveTexture(GL_TEXTURE0);
-      if (!meshComp.textureName.empty() &&
-          m_Textures.find(meshComp.textureName) != m_Textures.end()) {
-        glBindTexture(GL_TEXTURE_2D, m_Textures[meshComp.textureName]);
-      } else {
-        glBindTexture(GL_TEXTURE_2D, m_DefaultTexture);
-      }
-
-      glBindVertexArray(rm.VAO);
-      glDrawElements(GL_TRIANGLES, rm.indexCount, GL_UNSIGNED_INT, 0);
-      glBindVertexArray(0);
-    }
-  }
-
-  if (swap)
-    SDL_GL_SwapWindow(window);
-}
-
-} // namespace PixelsEngine

@@ -175,17 +175,101 @@ void DungeonsGame::PlaySpatialSfx(Mix_Chunk *chunk, float x, float y, float z) {
 }
 
 void DungeonsGame::UpdateAnimations(float dt) {
-  auto &view = m_Registry.View<ProceduralAnimationComponent>();
-  for (auto &pair : view) {
+
+  // 1. Procedural Animations (Bobbing)
+
+  auto &proceduralView = m_Registry.View<ProceduralAnimationComponent>();
+
+  for (auto &pair : proceduralView) {
+
     Entity e = pair.first;
+
     auto &anim = pair.second;
+
     auto *t = m_Registry.GetComponent<Transform3DComponent>(e);
+
     if (t) {
+
       anim.timeOffset += dt;
+
       // Bobbing (Z axis)
+
       t->z = anim.baseZ + sin(anim.timeOffset * anim.bobSpeed) * anim.bobAmount;
+
       // Subtle sway (Pitch)
+
       t->pitch = sin(anim.timeOffset * anim.swaySpeed) * anim.swayAmount;
+
     }
+
   }
+
+
+
+      // 2. Skeletal Animations
+
+
+
+      auto &skeletalView = m_Registry.View<SkeletalAnimationComponent>();
+
+
+
+      for (auto &pair : skeletalView) {
+
+
+
+          Entity e = pair.first;
+
+
+
+          auto &anim = pair.second;
+
+
+
+          auto *mesh = m_Registry.GetComponent<MeshComponent>(e);
+
+
+
+          if (mesh) {
+
+
+
+              RenderMesh* rm = m_GLRenderer.GetRenderMesh(mesh->meshName);
+
+
+
+                        if (rm && rm->isSkinned) {
+
+
+
+                            anim.currentTime += dt * anim.speed;
+
+
+
+                            m_GLRenderer.UpdateSkinnedMesh(*rm, anim.animationIndex, anim.currentTime);
+
+
+
+                        }
+
+
+
+              
+
+
+
+          }
+
+
+
+      }
+
+
+
+    
+
+
+
+  
+
 }

@@ -185,6 +185,12 @@ struct ProceduralAnimationComponent {
     float baseZ = 0.0f;
 };
 
+struct SkeletalAnimationComponent {
+    int animationIndex = 0;
+    float currentTime = 0.0f;
+    float speed = 1.0f;
+};
+
 struct EnemyComponent {
 
 

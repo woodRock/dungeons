@@ -15,6 +15,9 @@ namespace PixelsEngine {
 struct RenderMesh {
   unsigned int VAO, VBO, EBO;
   unsigned int indexCount;
+  bool isSkinned = false;
+  Skeleton skeleton;
+  std::vector<SkeletalAnimation> animations;
 };
 
 class GLRenderer {
@@ -25,6 +28,9 @@ public:
   void Init(int width, int height);
   void Render(SDL_Window *window, const Camera &cam, Registry &registry,
               bool swap = true);
+  
+  void UpdateSkinnedMesh(RenderMesh& rm, int animIndex, float time);
+  RenderMesh* GetRenderMesh(const std::string& name);
 
   // UI Rendering
   void InitUI();
