@@ -361,6 +361,42 @@ void GLRenderer::DrawWireCube(float x, float y, float z, float s, SDL_Color c) {
     m_Shader->SetInt("useFlatColor", 0);
 }
 
+void GLRenderer::DrawWireCircle(float x, float y, float z, float radius, SDL_Color c) {
+    static unsigned int circleVAO = 0;
+    static unsigned int circleVBO = 0;
+    static int segments = 32;
+    if (circleVAO == 0) {
+        std::vector<float> v;
+        for (int i=0; i<=segments; i++) {
+            float theta = 2.0f * M_PI * float(i) / float(segments);
+            v.push_back(cos(theta));
+            v.push_back(sin(theta));
+            v.push_back(0.0f);
+        }
+        glGenVertexArrays(1, &circleVAO);
+        glGenBuffers(1, &circleVBO);
+        glBindVertexArray(circleVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, circleVBO);
+        glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STATIC_DRAW);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
+        glEnableVertexAttribArray(0);
+    }
+
+    m_Shader->Use();
+    Mat4 model = Mat4::Translate({x, y, z}) * Mat4::Scale({radius, radius, 1.0f});
+    m_Shader->SetMat4("model", model.m);
+    m_Shader->SetInt("useSkinning", 0);
+    m_Shader->SetInt("useFlatColor", 1);
+    m_Shader->SetVec4("flatColor", c.r/255.0f, c.g/255.0f, c.b/255.0f, c.a/255.0f);
+    
+    glBindVertexArray(circleVAO);
+    glLineWidth(2.0f);
+    glDrawArrays(GL_LINE_STRIP, 0, segments + 1);
+    glLineWidth(1.0f);
+    
+    m_Shader->SetInt("useFlatColor", 0);
+}
+
 void GLRenderer::RenderThumbnail(const std::string &meshName, const std::string &textureName, int x, int y, int size) {
     if (m_Meshes.find(meshName) == m_Meshes.end()) {
         static int errCount = 0;

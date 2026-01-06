@@ -37,6 +37,7 @@ public:
     void DrawRect2D(int x, int y, int w, int h, SDL_Color color);
     void DrawTexture2D(unsigned int textureID, int x, int y, int w, int h, SDL_Color color = {255,255,255,255});
     void DrawWireCube(float x, float y, float z, float size, SDL_Color color);
+    void DrawWireCircle(float x, float y, float z, float radius, SDL_Color color);
     void RenderThumbnail(const std::string& meshName, const std::string& textureName, int x, int y, int size);
     void RenderMeshPreview(const std::string& meshName, const std::string& textureName, float x, float y, float z, float rot, float alpha, float offsetX = 0, float offsetY = 0, float offsetZ = 0);
     

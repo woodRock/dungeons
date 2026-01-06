@@ -37,6 +37,8 @@ void DungeonsGame::OnRender() {
     m_Editor.RenderUI(&m_GLRenderer, m_TextRenderer.get(), m_Width, m_Height);
   } else if (m_State == GameState::Paused) {
     RenderPauseMenu();
+  } else if (m_State == GameState::Playing || m_State == GameState::Battle) {
+    RenderUI();
   }
 
   // 3. Swap OpenGL buffers

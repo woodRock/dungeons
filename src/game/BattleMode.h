@@ -2,15 +2,18 @@
 #include "../engine/ECS.h"
 #include "../engine/GLRenderer.h"
 #include "../engine/Camera.h"
-#include "../engine/Components.h" // For BattleUnitComponent
+#include "../engine/Components.h" 
 #include <string>
 #include <vector>
+
+namespace PixelsEngine { class TextRenderer; }
 
 class BattleMode {
 public:
     BattleMode(PixelsEngine::Registry* registry, PixelsEngine::GLRenderer* renderer);
     void Init(PixelsEngine::Camera* camera, PixelsEngine::Entity& playerEntity);
     void Update(float dt, PixelsEngine::Entity playerEntity);
+    void RenderUI(PixelsEngine::GLRenderer* renderer, PixelsEngine::TextRenderer* textRenderer, int w, int h);
 
 private:
     PixelsEngine::Registry* m_Registry;
@@ -19,6 +22,9 @@ private:
     
     enum State { Setup, PlayerTurn, EnemyTurn, Moving, Attacking, Victory, Defeat };
     State m_State = Setup;
+    
+    enum ActionType { None, Move, Melee, Ranged, Dash, Jump, Sneak, Shove };
+    ActionType m_SelectedAction = None;
     
     std::vector<PixelsEngine::Entity> m_TurnOrder;
     int m_CurrentTurnIndex = 0;
@@ -43,10 +49,11 @@ private:
     void StartBattle();
     void NextTurn();
     void HandlePlayerInput();
+    void ExecuteAction(PixelsEngine::Entity actor, ActionType action, PixelsEngine::Entity target, float x, float y);
     void UpdateAI(float dt);
     
-    // Helpers
+    void DrawActionBar(PixelsEngine::GLRenderer* ren, PixelsEngine::TextRenderer* tr, int w, int h);
+    void DrawTurnOrder(PixelsEngine::GLRenderer* ren, PixelsEngine::TextRenderer* tr, int w, int h);
+    
     void RaycastCursor();
-    bool IsWalkable(float x, float y);
-    float Distance(float x1, float y1, float x2, float y2);
 };

@@ -97,6 +97,12 @@ void DungeonsGame::RenderPauseMenu() {
 void DungeonsGame::RenderUI() {
   int w = m_Width;
   int h = m_Height;
+  
+  if (m_State == GameState::Battle && m_BattleMode) {
+      m_BattleMode->RenderUI(&m_GLRenderer, m_TextRenderer.get(), w, h);
+      return;
+  }
+
   auto *t = m_Registry.GetComponent<Transform3DComponent>(m_PlayerEntity);
   if (t) {
     std::string tutorial = "";
