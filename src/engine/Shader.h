@@ -61,6 +61,16 @@ public:
     if (loc != -1) glUniform3f(loc, x, y, z);
   }
 
+  void SetFloat(const std::string &name, float value) const {
+    GLint loc = glGetUniformLocation(ID, name.c_str());
+    if (loc != -1) glUniform1f(loc, value);
+  }
+
+  void SetVec4(const std::string &name, float x, float y, float z, float w) const {
+    GLint loc = glGetUniformLocation(ID, name.c_str());
+    if (loc != -1) glUniform4f(loc, x, y, z, w);
+  }
+
 private:
   void CheckCompileErrors(GLuint shader, std::string type) {
     GLint success;

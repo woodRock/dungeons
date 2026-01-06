@@ -60,22 +60,32 @@ void GLRenderer::Init(int width, int height) {
     in vec3 FragPos;
     uniform sampler2D ourTexture;
     uniform vec3 lightPos;
+    uniform float alpha;
+    uniform bool useFlatColor;
+    uniform vec4 flatColor;
+
     void main() {
-        vec3 ambient = 0.3 * vec3(1.0);
-        vec3 norm = normalize(Normal);
-        vec3 lightDir = normalize(lightPos - FragPos);
-        vec3 diffuse = max(dot(norm, lightDir), 0.0) * vec3(1.0);
-        vec4 texColor = texture(ourTexture, TexCoord);
-        
-        vec3 finalColor = (ambient + diffuse) * texColor.rgb;
-        // If texture is black/invalid, use magenta
-        if (length(texColor.rgb) < 0.01) finalColor = vec3(1.0, 0.0, 1.0);
-        
-        FragColor = vec4(finalColor, 1.0);
+        if (useFlatColor) {
+            FragColor = flatColor;
+        } else {
+            vec3 ambient = 0.3 * vec3(1.0);
+            vec3 norm = normalize(Normal);
+            vec3 lightDir = normalize(lightPos - FragPos);
+            vec3 diffuse = max(dot(norm, lightDir), 0.0) * vec3(1.0);
+            vec4 texColor = texture(ourTexture, TexCoord);
+            
+            vec3 finalColor = (ambient + diffuse) * texColor.rgb;
+            if (length(texColor.rgb) < 0.01) finalColor = vec3(1.0, 0.0, 1.0);
+            
+            FragColor = vec4(finalColor, alpha);
+        }
     }
   )";
 
   m_Shader = std::make_unique<Shader>(vShader, fShader);
+  m_Shader->Use();
+  m_Shader->SetFloat("alpha", 1.0f);
+  m_Shader->SetInt("useFlatColor", 0);
   
   glGenTextures(1, &m_DefaultTexture);
   glBindTexture(GL_TEXTURE_2D, m_DefaultTexture);
@@ -314,8 +324,115 @@ unsigned int GLRenderer::CreateTextureFromSurface(SDL_Surface *s) {
 }
 
 void GLRenderer::Resize(int w, int h) { m_Width = w; m_Height = h; }
-void GLRenderer::DrawWireCube(float x, float y, float z, float s, SDL_Color c) {}
-void GLRenderer::RenderThumbnail(const std::string &m, const std::string &t, int x, int y, int s) {}
-void GLRenderer::RenderMeshPreview(const std::string& m, const std::string& t, float x, float y, float z, float r, float a, float ox, float oy, float oz) {}
+
+void GLRenderer::DrawWireCube(float x, float y, float z, float s, SDL_Color c) {
+    static unsigned int cubeVAO = 0;
+    static unsigned int cubeVBO = 0;
+    if (cubeVAO == 0) {
+        float v[] = {
+            -0.5f,-0.5f,-0.5f, 0.5f,-0.5f,-0.5f,  0.5f,-0.5f,-0.5f, 0.5f,0.5f,-0.5f,
+            0.5f,0.5f,-0.5f, -0.5f,0.5f,-0.5f,   -0.5f,0.5f,-0.5f, -0.5f,-0.5f,-0.5f,
+            -0.5f,-0.5f,0.5f, 0.5f,-0.5f,0.5f,    0.5f,-0.5f,0.5f, 0.5f,0.5f,0.5f,
+            0.5f,0.5f,0.5f, -0.5f,0.5f,0.5f,     -0.5f,0.5f,0.5f, -0.5f,-0.5f,0.5f,
+            -0.5f,-0.5f,-0.5f, -0.5f,-0.5f,0.5f,  0.5f,-0.5f,-0.5f, 0.5f,-0.5f,0.5f,
+            0.5f,0.5f,-0.5f, 0.5f,0.5f,0.5f,     -0.5f,0.5f,-0.5f, -0.5f,0.5f,0.5f
+        };
+        glGenVertexArrays(1, &cubeVAO);
+        glGenBuffers(1, &cubeVBO);
+        glBindVertexArray(cubeVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, cubeVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(v), v, GL_STATIC_DRAW);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
+        glEnableVertexAttribArray(0);
+    }
+
+    m_Shader->Use();
+    Mat4 model = Mat4::Translate({x, y, z}) * Mat4::Scale({s, s, s});
+    m_Shader->SetMat4("model", model.m);
+    m_Shader->SetInt("useSkinning", 0);
+    m_Shader->SetInt("useFlatColor", 1);
+    m_Shader->SetVec4("flatColor", c.r/255.0f, c.g/255.0f, c.b/255.0f, c.a/255.0f);
+    
+    glBindVertexArray(cubeVAO);
+    glLineWidth(2.0f);
+    glDrawArrays(GL_LINES, 0, 24);
+    glLineWidth(1.0f);
+    
+    m_Shader->SetInt("useFlatColor", 0);
+}
+
+void GLRenderer::RenderThumbnail(const std::string &meshName, const std::string &textureName, int x, int y, int size) {
+    if (m_Meshes.find(meshName) == m_Meshes.end()) return;
+
+    GLint viewport[4];
+    glGetIntegerv(GL_VIEWPORT, viewport);
+
+    float scale = (float)viewport[2] / (float)m_Width;
+    int scaledX = (int)(x * scale);
+    int scaledY = (int)(y * scale);
+    int scaledSize = (int)(size * scale);
+    int scaledHeight = viewport[3];
+
+    glViewport(scaledX, scaledHeight - (scaledY + scaledSize), scaledSize, scaledSize);
+    
+    glClear(GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST);
+
+    m_Shader->Use();
+    m_Shader->SetFloat("alpha", 1.0f);
+    m_Shader->SetInt("useFlatColor", 0);
+    
+    Vec3 eye = {0.0f, 1.5f, 2.5f};
+    Mat4 view = Mat4::LookAt(eye, {0, 0.5f, 0}, {0, 1, 0});
+    Mat4 proj = Mat4::Perspective(0.8f, 1.0f, 0.1f, 100.0f);
+
+    m_Shader->SetMat4("view", view.m);
+    m_Shader->SetMat4("projection", proj.m);
+    m_Shader->SetVec3("lightPos", eye.x, eye.y, eye.z);
+    
+    Mat4 model = Mat4::RotateY(0.78f); 
+    m_Shader->SetMat4("model", model.m);
+    m_Shader->SetInt("useSkinning", 0);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_Textures.count(textureName) ? m_Textures[textureName] : m_DefaultTexture);
+    
+    RenderMesh& rm = m_Meshes[meshName];
+    glBindVertexArray(rm.VAO);
+    glDrawElements(GL_TRIANGLES, rm.indexCount, GL_UNSIGNED_INT, 0);
+
+    glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+}
+
+void GLRenderer::RenderMeshPreview(const std::string& meshName, const std::string& textureName, float x, float y, float z, float rot, float alpha, float ox, float oy, float oz) {
+    if (m_Meshes.find(meshName) == m_Meshes.end()) return;
+    
+    m_Shader->Use();
+    
+    Mat4 model = Mat4::Translate({x + ox, y + oy, z + oz}) * Mat4::RotateY(-rot);
+    m_Shader->SetMat4("model", model.m);
+    m_Shader->SetInt("useSkinning", 0);
+    m_Shader->SetInt("useFlatColor", 0);
+    m_Shader->SetFloat("alpha", alpha);
+    
+    if (alpha < 0.99f) {
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDepthMask(GL_FALSE); // Don't write depth for transparent ghost
+    }
+    
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_Textures.count(textureName) ? m_Textures[textureName] : m_DefaultTexture);
+    
+    RenderMesh& rm = m_Meshes[meshName];
+    glBindVertexArray(rm.VAO);
+    glDrawElements(GL_TRIANGLES, rm.indexCount, GL_UNSIGNED_INT, 0);
+    
+    if (alpha < 0.99f) {
+        glDisable(GL_BLEND);
+        glDepthMask(GL_TRUE);
+    }
+    m_Shader->SetFloat("alpha", 1.0f);
+}
 
 }
