@@ -3,6 +3,7 @@
 #include "../engine/Input.h"
 #include "../engine/Math3D.h"
 #include "../engine/TextRenderer.h"
+#include "../engine/GLTFLoader.h"
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
@@ -47,26 +48,77 @@ void DungeonEditor::Init(Registry *registry, GLRenderer *renderer) {
     findAndSet("wall_corner", 1);
     findAndSet("floor_tile_large", 2);
     findAndSet("stairs", 3);
+    findAndSet("wall_doorway", 4);
+    findAndSet("wall_doorway_door", 5);
+    findAndSet("chest", 6);
+    findAndSet("Knight", 7);
+    findAndSet("Skeleton_Warrior", 8);
   }
 }
 
 void DungeonEditor::ScanAssets() {
-  if (!m_Assets.empty())
-    return;
+  m_Assets.clear();
 
+  // 1. Basic Dungeon Assets (OBJ)
   std::string objPath = "assets/dungeons/Assets/obj/";
   if (fs::exists(objPath)) {
     for (const auto &entry : fs::directory_iterator(objPath)) {
       if (entry.path().extension() == ".obj") {
-        std::string filename = entry.path().filename().string();
         std::string meshName = entry.path().stem().string();
-
-        // Load mesh into renderer if not already loaded
         if (m_Renderer) {
           m_Renderer->LoadMesh(meshName, entry.path().string());
         }
-
         m_Assets.push_back({meshName, meshName, "dungeon"});
+      }
+    }
+  }
+
+  // Common Animations for skinned meshes
+  std::vector<SkeletalAnimation> advAnims = GLTFLoader::LoadAnimations("assets/adventurers/Animations/gltf/Rig_Medium/Rig_Medium_General.glb");
+  std::vector<SkeletalAnimation> skelAnims = GLTFLoader::LoadAnimations("assets/skeletons/Animations/gltf/Rig_Medium/Rig_Medium_General.glb");
+
+  // 2. Adventurers (GLB)
+  std::string advPath = "assets/adventurers/Characters/gltf/";
+  if (fs::exists(advPath)) {
+    for (const auto &entry : fs::directory_iterator(advPath)) {
+      if (entry.path().extension() == ".glb") {
+        std::string name = entry.path().stem().string();
+        std::string texName = name + "_tex";
+        std::string low = name; std::transform(low.begin(), low.end(), low.begin(), ::tolower);
+        std::string texFile = "";
+        if (low.find("barbarian") != std::string::npos) texFile = "barbarian_texture.png";
+        else if (low.find("knight") != std::string::npos) texFile = "knight_texture.png";
+        else if (low.find("mage") != std::string::npos) texFile = "mage_texture.png";
+        else if (low.find("ranger") != std::string::npos) texFile = "ranger_texture.png";
+        else if (low.find("rogue") != std::string::npos) texFile = "rogue_texture.png";
+
+        if (!texFile.empty()) {
+          if (m_Renderer) {
+            m_Renderer->LoadTexture(texName, "assets/adventurers/Textures/" + texFile);
+            m_Renderer->LoadMesh(name, entry.path().string());
+            RenderMesh* rm = m_Renderer->GetRenderMesh(name);
+            if (rm) { rm->animations = advAnims; rm->isSkinned = true; }
+          }
+          m_Assets.push_back({name, name, texName});
+        }
+      }
+    }
+  }
+
+  // 3. Skeletons (GLB)
+  std::string skelPath = "assets/skeletons/characters/gltf/";
+  if (fs::exists(skelPath)) {
+    for (const auto &entry : fs::directory_iterator(skelPath)) {
+      if (entry.path().extension() == ".glb") {
+        std::string name = entry.path().stem().string();
+        std::string texName = "skeleton_tex";
+        if (m_Renderer) {
+          m_Renderer->LoadTexture(texName, "assets/skeletons/texture/skeleton_texture.png");
+          m_Renderer->LoadMesh(name, entry.path().string());
+          RenderMesh* rm = m_Renderer->GetRenderMesh(name);
+          if (rm) { rm->animations = skelAnims; rm->isSkinned = true; }
+        }
+        m_Assets.push_back({name, name, texName});
       }
     }
   }
@@ -320,7 +372,10 @@ void DungeonEditor::UpdateCursor(const Camera &cam) {
 
     m_Highlight.x = round(prevX / snapSize) * snapSize;
     m_Highlight.y = round(prevY / snapSize) * snapSize;
+    
+    // Fix sinking: Ensure Z is snapped to grid but at least 0
     m_Highlight.z = round(prevZ / snapSize) * snapSize;
+    if (m_Highlight.z < 0) m_Highlight.z = 0;
 
     // Calculate Rotation: Map to 4 cardinal directions (Face Player)
     float yaw = cam.yaw;
@@ -466,6 +521,19 @@ ActionResult DungeonEditor::ExecuteAction(bool place) {
           mc->offsetX = -(m_GridSize / 6.0f);
       } else if (lowName.find("chest") != std::string::npos) {
           m_Registry->AddComponent<InteractableComponent>(e, {InteractableComponent::Chest, false});
+      }
+
+      // Add Animation for skinned meshes (Characters)
+      RenderMesh* rm = m_Renderer->GetRenderMesh(asset.meshName);
+      if (rm && rm->isSkinned && !rm->animations.empty()) {
+          int idleIdx = 0;
+          for (size_t i = 0; i < rm->animations.size(); ++i) {
+              if (rm->animations[i].name.find("Idle") != std::string::npos) {
+                  idleIdx = (int)i;
+                  break;
+              }
+          }
+          m_Registry->AddComponent<SkeletalAnimationComponent>(e, {idleIdx, (float)(rand()%100)*0.01f, 1.0f});
       }
 
       return ActionResult::Placed;
@@ -709,6 +777,19 @@ void DungeonEditor::LoadDungeon(const std::string &filename) {
         mc->offsetX = -(m_GridSize / 6.0f);
     } else if (lowName.find("chest") != std::string::npos) {
         m_Registry->AddComponent<InteractableComponent>(e, {InteractableComponent::Chest, false});
+    }
+
+    // Restore animations for skinned meshes
+    RenderMesh* rm = m_Renderer->GetRenderMesh(meshName);
+    if (rm && rm->isSkinned && !rm->animations.empty()) {
+        int idleIdx = 0;
+        for (size_t i = 0; i < rm->animations.size(); ++i) {
+            if (rm->animations[i].name.find("Idle") != std::string::npos) {
+                idleIdx = (int)i;
+                break;
+            }
+        }
+        m_Registry->AddComponent<SkeletalAnimationComponent>(e, {idleIdx, (float)(rand()%100)*0.01f, 1.0f});
     }
   }
   std::cout << "Loaded dungeon from " << filename << std::endl;

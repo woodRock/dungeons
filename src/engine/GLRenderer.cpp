@@ -362,20 +362,31 @@ void GLRenderer::DrawWireCube(float x, float y, float z, float s, SDL_Color c) {
 }
 
 void GLRenderer::RenderThumbnail(const std::string &meshName, const std::string &textureName, int x, int y, int size) {
-    if (m_Meshes.find(meshName) == m_Meshes.end()) return;
+    if (m_Meshes.find(meshName) == m_Meshes.end()) {
+        static int errCount = 0;
+        if (errCount < 10) {
+            std::cerr << "Thumbnail Error: Mesh not found: " << meshName << std::endl;
+            errCount++;
+        }
+        return;
+    }
 
     GLint viewport[4];
     glGetIntegerv(GL_VIEWPORT, viewport);
 
     float scale = (float)viewport[2] / (float)m_Width;
-    int scaledX = (int)(x * scale);
+    int scaledX = viewport[0] + (int)(x * scale);
     int scaledY = (int)(y * scale);
     int scaledSize = (int)(size * scale);
     int scaledHeight = viewport[3];
 
     glViewport(scaledX, scaledHeight - (scaledY + scaledSize), scaledSize, scaledSize);
     
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(scaledX, scaledHeight - (scaledY + scaledSize), scaledSize, scaledSize);
     glClear(GL_DEPTH_BUFFER_BIT);
+    glDisable(GL_SCISSOR_TEST);
+
     glEnable(GL_DEPTH_TEST);
 
     m_Shader->Use();
