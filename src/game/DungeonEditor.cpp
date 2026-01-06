@@ -313,8 +313,8 @@ void DungeonEditor::UpdateCursor(const Camera &cam) {
         std::transform(name.begin(), name.end(), name.begin(), ::tolower);
         isDoor = (name == "wall_doorway_door");
         isScaffoldDoor = (name == "wall_doorway_scaffold_door");
-        if (name.find("small") != std::string::npos || isDoor || isScaffoldDoor) {
-            snapSize = m_GridSize / 6.0f;
+        if (name.find("small") != std::string::npos) {
+            snapSize = m_GridSize / 3.0f;
         }
     }
 
@@ -372,23 +372,22 @@ void DungeonEditor::UpdateCursor(const Camera &cam) {
                         if (isXAligned) {
                             m_Highlight.rot = 0.0f;
                         } else {
-                            m_Highlight.rot = M_PI * 0.5f;
+                            m_Highlight.rot = rot;
+                            float yOffset = m_GridSize / 6.0f;
+                            float xOffset = 0.7f;
+
+                            if (rot < M_PI) {
+                                m_Highlight.y += yOffset;
+                                m_Highlight.x += xOffset;
+                            } else {
+                                m_Highlight.y -= yOffset;
+                                m_Highlight.x += xOffset;
+                            }
                         }
 
                         snapped = true;
                     }
                 }
-            }
-        }
-
-        if (!snapped) {
-            // Auto-center horizontally on the tile relative to view
-            float tileX = floor(prevX / m_GridSize) * m_GridSize;
-            float tileY = floor(prevY / m_GridSize) * m_GridSize;
-            if (m_Highlight.rot == 0.0f || m_Highlight.rot == (float)M_PI) { // North/South aligned door
-                m_Highlight.x = tileX + m_GridSize / 2.0f;
-            } else { // East/West aligned door
-                m_Highlight.y = tileY + m_GridSize / 2.0f;
             }
         }
     }
@@ -418,6 +417,40 @@ ActionResult DungeonEditor::ExecuteAction(bool place) {
             
             if (inter->type == InteractableComponent::Door) return ActionResult::InteractedDoor;
             return ActionResult::InteractedChest;
+        } else {
+            // Check if we hit a frame, and forward interaction to the door
+            auto* mesh = m_Registry->GetComponent<MeshComponent>(m_Highlight.hitEntity);
+            if (mesh) {
+                std::string name = mesh->meshName;
+                std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+                if (name == "wall_doorway" || name == "wall_doorway_scaffold") {
+                    auto* t = m_Registry->GetComponent<Transform3DComponent>(m_Highlight.hitEntity);
+                    if (t) {
+                        // Search for nearby door
+                        auto& view = m_Registry->View<InteractableComponent>();
+                        for (auto& pair : view) {
+                            auto* doorTrans = m_Registry->GetComponent<Transform3DComponent>(pair.first);
+                            if (doorTrans) {
+                                float dx = doorTrans->x - t->x;
+                                float dy = doorTrans->y - t->y;
+                                float dz = doorTrans->z - t->z;
+                                if (sqrt(dx*dx + dy*dy + dz*dz) < 1.5f) {
+                                    // Found linked door!
+                                    auto* inter = &pair.second;
+                                    
+                                    inter->isOpen = !inter->isOpen;
+                                    if (inter->isOpen) {
+                                        doorTrans->rot += M_PI * 0.5f;
+                                    } else {
+                                        doorTrans->rot -= M_PI * 0.5f;
+                                    }
+                                    return ActionResult::InteractedDoor;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
