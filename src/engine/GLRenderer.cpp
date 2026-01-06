@@ -489,9 +489,17 @@ void GLRenderer::RenderMeshPreview(const std::string& meshName, const std::strin
     glUniform1f(glGetUniformLocation(m_Shader->ID, "alpha"), alpha);
 
     Mat4 model = Mat4::Identity();
-    model = model * Mat4::Translate({x, z, -y}); // Map Engine to GL
+    model = model * Mat4::Translate({x, z, -y}); // World Position
+    
+    // Pivot Rotation
+    float px = offsetX;
+    float py = offsetZ;
+    float pz = -offsetY;
+
+    // Apply pivot: Translate back * Rotate * Translate to pivot origin
+    model = model * Mat4::Translate({px, py, pz});
     model = model * Mat4::RotateY(-rot);
-    model = model * Mat4::Translate({offsetX, offsetZ, -offsetY});
+    model = model * Mat4::Translate({-px, -py, -pz});
     
     m_Shader->SetMat4("model", model.m);
 
@@ -610,27 +618,21 @@ void GLRenderer::Render(SDL_Window *window, const Camera &cam,
       } // Map Engine Coords to GL
       model = model * Mat4::Translate({tx, ty, tz});
 
-                  // Rotate (Yaw)
+      // Pivot Rotation
+      float px = meshComp.offsetX;
+      float py = meshComp.offsetZ;
+      float pz = -meshComp.offsetY;
 
-                  if (trans) {
+      model = model * Mat4::Translate({px, py, pz});
+      if (trans) {
+        model = model * Mat4::RotateY(-trans->rot);
+      }
+      model = model * Mat4::Translate({-px, -py, -pz});
 
-                      model = model * Mat4::RotateY(-trans->rot);
-
-                  }
-
-                  
-
-                  // Apply Local Offsets (Pivot)
-
-                  model = model * Mat4::Translate({meshComp.offsetX, meshComp.offsetZ, -meshComp.offsetY});
-
-      
-
-                  // Scale
-
-                  model = model * Mat4::Scale({meshComp.scaleX, meshComp.scaleZ, meshComp.scaleY}); 
-
-      
+      // Scale
+      model =
+          model *
+          Mat4::Scale({meshComp.scaleX, meshComp.scaleZ, meshComp.scaleY});
 
       m_Shader->SetMat4("model", model.m);
 

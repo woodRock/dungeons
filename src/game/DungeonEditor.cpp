@@ -277,8 +277,8 @@ void DungeonEditor::UpdateCursor(const Camera &cam) {
         float dx = t->x - x;
         float dy = t->y - y;
         float dz = t->z - z;
-        // Accurate targeting: use a smaller radius for selection
-        if (sqrt(dx * dx + dy * dy + dz * dz) < 1.2f) {
+        // Accurate targeting: use a larger radius to cover the 4x4 block
+        if (sqrt(dx * dx + dy * dy + dz * dz) < 2.2f) {
           hit = true;
           hitEntity = pair.first;
           meshHit = true;
@@ -299,24 +299,38 @@ void DungeonEditor::UpdateCursor(const Camera &cam) {
   }
 
   if (hit) {
-    // Found placement position (prev step)
-    float prevX = x - dirX * step * 2.0f;
-    float prevY = y - dirY * step * 2.0f;
-    float prevZ = z - dirZ * step * 2.0f;
+    // Found placement position (small step back from hit point)
+    float prevX = x - dirX * 0.05f;
+    float prevY = y - dirY * 0.05f;
+    float prevZ = z - dirZ * 0.05f;
 
-    m_Highlight.x = round(prevX / m_GridSize) * m_GridSize;
-    m_Highlight.y = round(prevY / m_GridSize) * m_GridSize;
-    m_Highlight.z = round(prevZ / m_GridSize) * m_GridSize;
+    float snapSize = m_GridSize;
+    bool isDoor = false;
+    bool isScaffoldDoor = false;
 
-    // Calculate Rotation
+    if (m_SelectedSlot >= 0 && m_SelectedSlot < m_Hotbar.size()) {
+        std::string name = m_Hotbar[m_SelectedSlot].meshName;
+        std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+        isDoor = (name == "wall_doorway_door");
+        isScaffoldDoor = (name == "wall_doorway_scaffold_door");
+        if (name.find("small") != std::string::npos || isDoor || isScaffoldDoor) {
+            snapSize = m_GridSize / 6.0f;
+        }
+    }
+
+    m_Highlight.x = round(prevX / snapSize) * snapSize;
+    m_Highlight.y = round(prevY / snapSize) * snapSize;
+    m_Highlight.z = round(prevZ / snapSize) * snapSize;
+
+    // Calculate Rotation: Map to 4 cardinal directions (Face Player)
     float yaw = cam.yaw;
     while (yaw < 0) yaw += M_PI * 2.0f;
     while (yaw >= M_PI * 2.0f) yaw -= M_PI * 2.0f;
 
-    if (yaw >= M_PI * 0.25f && yaw < M_PI * 0.75f) m_Highlight.rot = M_PI; 
-    else if (yaw >= M_PI * 0.75f && yaw < M_PI * 1.25f) m_Highlight.rot = M_PI * 1.5f; 
-    else if (yaw >= M_PI * 1.25f && yaw < M_PI * 1.75f) m_Highlight.rot = 0.0f; 
-    else m_Highlight.rot = M_PI * 0.5f; 
+    if (yaw >= M_PI * 0.25f && yaw < M_PI * 0.75f) m_Highlight.rot = 0.0f; // Looking North
+    else if (yaw >= M_PI * 0.75f && yaw < M_PI * 1.25f) m_Highlight.rot = M_PI * 1.5f; // Looking West
+    else if (yaw >= M_PI * 1.25f && yaw < M_PI * 1.75f) m_Highlight.rot = M_PI; // Looking South
+    else m_Highlight.rot = M_PI * 0.5f; // Looking East
 
     m_Highlight.hitEntity = hitEntity; 
     m_Highlight.active = true;
@@ -326,6 +340,58 @@ void DungeonEditor::UpdateCursor(const Camera &cam) {
     m_Highlight.targetX = hitX;
     m_Highlight.targetY = hitY;
     m_Highlight.targetZ = hitZ;
+
+    // Snapping Logic for Doors
+    if (isDoor || isScaffoldDoor) {
+        bool snapped = false;
+        if (hitEntity != -1) {
+            auto* hitMesh = m_Registry->GetComponent<MeshComponent>(hitEntity);
+            if (hitMesh) {
+                std::string hitName = hitMesh->meshName;
+                std::transform(hitName.begin(), hitName.end(), hitName.begin(), ::tolower);
+
+                bool match = (isDoor && hitName == "wall_doorway") || 
+                             (isScaffoldDoor && hitName == "wall_doorway_scaffold");
+                
+                if (match) {
+                    auto* t = m_Registry->GetComponent<Transform3DComponent>(hitEntity);
+                    if (t) {
+                        m_Highlight.x = t->x;
+                        m_Highlight.y = t->y;
+                        m_Highlight.z = t->z;
+                        
+                        // Normalize rotation logic to match my_dungeon.map style
+                        // (Door always 0 for X-aligned walls, presumably 90 for Y-aligned)
+                        float rot = t->rot;
+                        while(rot < 0) rot += M_PI * 2.0f;
+                        while(rot >= M_PI * 2.0f) rot -= M_PI * 2.0f;
+
+                        // Check alignment (allow some epsilon)
+                        bool isXAligned = (rot < 0.1f || rot > M_PI * 2.0f - 0.1f || (rot > M_PI - 0.1f && rot < M_PI + 0.1f));
+
+                        if (isXAligned) {
+                            m_Highlight.rot = 0.0f;
+                        } else {
+                            m_Highlight.rot = M_PI * 0.5f;
+                        }
+
+                        snapped = true;
+                    }
+                }
+            }
+        }
+
+        if (!snapped) {
+            // Auto-center horizontally on the tile relative to view
+            float tileX = floor(prevX / m_GridSize) * m_GridSize;
+            float tileY = floor(prevY / m_GridSize) * m_GridSize;
+            if (m_Highlight.rot == 0.0f || m_Highlight.rot == (float)M_PI) { // North/South aligned door
+                m_Highlight.x = tileX + m_GridSize / 2.0f;
+            } else { // East/West aligned door
+                m_Highlight.y = tileY + m_GridSize / 2.0f;
+            }
+        }
+    }
 
   } else {
     m_Highlight.active = false;
@@ -368,10 +434,12 @@ ActionResult DungeonEditor::ExecuteAction(bool place) {
       
       std::string lowName = asset.meshName;
       std::transform(lowName.begin(), lowName.end(), lowName.begin(), ::tolower);
-      if (lowName.find("door") != std::string::npos) {
+      bool isActualDoor = (lowName == "wall_doorway_door" || lowName == "wall_doorway_scaffold_door");
+
+      if (isActualDoor) {
           m_Registry->AddComponent<InteractableComponent>(e, {InteractableComponent::Door, false});
           auto* mc = m_Registry->GetComponent<MeshComponent>(e);
-          mc->offsetX = 2.0f;
+          mc->offsetX = -(m_GridSize / 6.0f);
       } else if (lowName.find("chest") != std::string::npos) {
           m_Registry->AddComponent<InteractableComponent>(e, {InteractableComponent::Chest, false});
       }
@@ -418,7 +486,7 @@ void DungeonEditor::Render3D(GLRenderer *ren) {
       float ox = 0;
       std::string ln = asset.meshName;
       std::transform(ln.begin(), ln.end(), ln.begin(), ::tolower);
-      if (ln.find("door") != std::string::npos) ox = 2.0f;
+      if (ln == "wall_doorway_door" || ln == "wall_doorway_scaffold_door") ox = -(m_GridSize / 6.0f);
 
       ren->RenderMeshPreview(asset.meshName, asset.textureName, m_Highlight.x,
                              m_Highlight.y, m_Highlight.z, m_Highlight.rot,
@@ -433,9 +501,11 @@ void DungeonEditor::RenderUI(GLRenderer *ren, TextRenderer *tr, int w, int h) {
 
   if (m_ShowInventory) {
     DrawInventory(ren, tr, w, h);
-  } else {
-    DrawHotbar(ren, tr, w, h);
+  }
 
+  DrawHotbar(ren, tr, w, h);
+
+  if (!m_ShowInventory) {
     // Instruction
     tr->RenderText(ren, "E: Inventory | 1-9: Select Slot | Click: Place/Break",
                    20, 20, {255, 255, 255, 255});
@@ -523,6 +593,16 @@ void DungeonEditor::DrawInventory(GLRenderer *ren, TextRenderer *tr, int w,
     if (hover) {
       c = {150, 150, 150, 255};
       tooltip = m_Assets[assetIdx].name;
+
+      if (Input::IsKeyPressed(SDL_SCANCODE_1)) m_Hotbar[0] = m_Assets[assetIdx];
+      if (Input::IsKeyPressed(SDL_SCANCODE_2)) m_Hotbar[1] = m_Assets[assetIdx];
+      if (Input::IsKeyPressed(SDL_SCANCODE_3)) m_Hotbar[2] = m_Assets[assetIdx];
+      if (Input::IsKeyPressed(SDL_SCANCODE_4)) m_Hotbar[3] = m_Assets[assetIdx];
+      if (Input::IsKeyPressed(SDL_SCANCODE_5)) m_Hotbar[4] = m_Assets[assetIdx];
+      if (Input::IsKeyPressed(SDL_SCANCODE_6)) m_Hotbar[5] = m_Assets[assetIdx];
+      if (Input::IsKeyPressed(SDL_SCANCODE_7)) m_Hotbar[6] = m_Assets[assetIdx];
+      if (Input::IsKeyPressed(SDL_SCANCODE_8)) m_Hotbar[7] = m_Assets[assetIdx];
+      if (Input::IsKeyPressed(SDL_SCANCODE_9)) m_Hotbar[8] = m_Assets[assetIdx];
     }
 
     ren->DrawRect2D(x, y, btnW, btnH, c);
@@ -592,6 +672,18 @@ void DungeonEditor::LoadDungeon(const std::string &filename) {
     m_Registry->AddComponent<Transform3DComponent>(e, {x, y, z, rot, 0.0f});
     m_Registry->AddComponent<MeshComponent>(
         e, {meshName, texName, 1.0f, 1.0f, 1.0f});
+
+    std::string lowName = meshName;
+    std::transform(lowName.begin(), lowName.end(), lowName.begin(), ::tolower);
+    bool isActualDoor = (lowName == "wall_doorway_door" || lowName == "wall_doorway_scaffold_door");
+
+    if (isActualDoor) {
+        m_Registry->AddComponent<InteractableComponent>(e, {InteractableComponent::Door, false});
+        auto* mc = m_Registry->GetComponent<MeshComponent>(e);
+        mc->offsetX = -(m_GridSize / 6.0f);
+    } else if (lowName.find("chest") != std::string::npos) {
+        m_Registry->AddComponent<InteractableComponent>(e, {InteractableComponent::Chest, false});
+    }
   }
   std::cout << "Loaded dungeon from " << filename << std::endl;
 }

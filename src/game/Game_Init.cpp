@@ -77,14 +77,18 @@ void DungeonsGame::InitSiege() {
   m_Registry.AddComponent<WeaponComponent>(m_PlayerEntity, {0.0f, 0.0f, false});
   m_Registry.AddComponent<CharacterComponent>(m_PlayerEntity, {CharacterComponent::Knight});
 
-  // 4. Spawn Skeletons at random positions (within a range for demo)
-  for (int i = 0; i < 5; i++) {
+  // 4. Spawn Skeletons at random positions further away
+  for (int i = 0; i < 8; i++) {
       Entity skel = m_Registry.CreateEntity();
-      float rx = (rand() % 40) - 20.0f;
-      float ry = (rand() % 40) - 20.0f;
+      // Spawn at least 20 units away
+      float angle = (rand() % 360) * (M_PI / 180.0f);
+      float dist = 20.0f + (rand() % 20);
+      float rx = cos(angle) * dist;
+      float ry = sin(angle) * dist;
+      
       m_Registry.AddComponent<Transform3DComponent>(skel, {rx, ry, 0.0f, 0.0f, 0.0f});
-      m_Registry.AddComponent<MeshComponent>(skel, {"skeleton", "skeleton_tex", 1.0f, 1.0f, 1.0f, 0, 0, 0});
-      m_Registry.AddComponent<EnemyComponent>(skel, EnemyComponent{100.0f, 2.0f, (int)m_PlayerEntity});
+      m_Registry.AddComponent<MeshComponent>(skel, {"skeleton", "skeleton_tex", 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f});
+      m_Registry.AddComponent<EnemyComponent>(skel, EnemyComponent{100.0f, 1.5f, (int)m_PlayerEntity}); // Slightly slower
       m_Registry.AddComponent<CharacterComponent>(skel, {CharacterComponent::SkeletonWarrior});
   }
 

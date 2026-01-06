@@ -7,7 +7,7 @@ using namespace PixelsEngine;
 
 void DungeonsGame::UpdatePhysics(float dt) {
 
-  if (m_State != GameState::Playing && m_State != GameState::Creative)
+  if (m_State != GameState::Playing && m_State != GameState::Creative && m_State != GameState::Siege)
     return;
 
   auto *phys = m_Registry.GetComponent<PhysicsComponent>(m_PlayerEntity);
@@ -215,7 +215,7 @@ void DungeonsGame::UpdatePhysics(float dt) {
 
 void DungeonsGame::UpdateProjectiles(float dt) {
 
-  if (m_State != GameState::Playing)
+  if (m_State != GameState::Playing && m_State != GameState::Siege)
     return;
 
   auto &projectiles = m_Registry.View<ProjectileComponent>();
@@ -249,8 +249,51 @@ void DungeonsGame::UpdateProjectiles(float dt) {
     bool hitWall = m_Map.Get(int(t->x), int(t->y)) > 0;
     bool hitFloor = t->z < 0;
 
-    // Target Collision (Check BEFORE wall collision so we can hit targets on
-    // walls/pillars)
+    // Enemy Collision (Siege Mode)
+    auto& enemies = m_Registry.View<EnemyComponent>();
+    bool hitEnemy = false;
+    for (auto& ePair : enemies) {
+        Entity enemyEnt = ePair.first;
+        auto& enemyComp = ePair.second;
+        auto* et = m_Registry.GetComponent<Transform3DComponent>(enemyEnt);
+        
+        if (et) {
+            float dx = t->x - et->x;
+            float dy = t->y - et->y;
+            float dz = t->z - (et->z + 1.0f); // Skeletons are tall
+            float dist = sqrt(dx*dx + dy*dy + dz*dz);
+            
+            if (dist < 1.0f) {
+                enemyComp.health -= p->damage;
+                hitEnemy = true;
+                m_HitmarkerTimer = 0.15f;
+                if (m_SfxHit) Mix_PlayChannel(-1, m_SfxHit, 0);
+                
+                if (enemyComp.health <= 0) {
+                    // Death particles
+                    for (int i = 0; i < 10; i++) {
+                        auto frag = m_Registry.CreateEntity();
+                        m_Registry.AddComponent<Transform3DComponent>(frag, {et->x, et->y, et->z + 1.0f, 0, 0});
+                        m_Registry.AddComponent<ParticleComponent>(frag, {
+                            ((rand()%100)/50.0f - 1.0f)*3.0f,
+                            ((rand()%100)/50.0f - 1.0f)*3.0f,
+                            ((rand()%100)/50.0f)*3.0f,
+                            1.0f, 1.0f, {255, 0, 0, 255}, 2.0f
+                        });
+                    }
+                    m_Registry.DestroyEntity(enemyEnt);
+                }
+                break;
+            }
+        }
+    }
+
+    if (hitEnemy) {
+        toDestroy.push_back(entity);
+        continue;
+    }
+
+    // Target Collision (Check BEFORE wall collision so we can hit targets on walls/pillars)
     auto &targets = m_Registry.View<TargetComponent>();
     bool hitTarget = false;
     for (auto &tPair : targets) {
