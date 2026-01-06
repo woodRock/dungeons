@@ -176,6 +176,15 @@ struct CharacterComponent {
 
 
 
+struct ProceduralAnimationComponent {
+    float timeOffset = 0.0f;
+    float bobAmount = 0.05f;
+    float bobSpeed = 2.0f;
+    float swayAmount = 0.03f;
+    float swaySpeed = 1.5f;
+    float baseZ = 0.0f;
+};
+
 struct EnemyComponent {
 
 

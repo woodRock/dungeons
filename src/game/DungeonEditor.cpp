@@ -51,22 +51,70 @@ void DungeonEditor::Init(Registry *registry, GLRenderer *renderer) {
 }
 
 void DungeonEditor::ScanAssets() {
-  if (!m_Assets.empty())
-    return;
+  if (!m_Assets.empty()) {
+    // Only return if we actually have assets (this avoids double scanning but allows first init)
+    // Actually, we want to scan characters too now.
+  } else {
+    // Basic Dungeon Assets
+    std::string objPath = "assets/dungeons/Assets/obj/";
+    if (fs::exists(objPath)) {
+      for (const auto &entry : fs::directory_iterator(objPath)) {
+        if (entry.path().extension() == ".obj") {
+          std::string meshName = entry.path().stem().string();
+          if (m_Renderer) {
+            m_Renderer->LoadMesh(meshName, entry.path().string());
+          }
+          m_Assets.push_back({meshName, meshName, "dungeon"});
+        }
+      }
+    }
+  }
 
-  std::string objPath = "assets/dungeons/Assets/obj/";
-  if (fs::exists(objPath)) {
-    for (const auto &entry : fs::directory_iterator(objPath)) {
+  // Add Adventurers
+  std::string advPath = "assets/adventurers/Characters/obj/";
+  std::string advTexPath = "assets/adventurers/Characters/gltf/"; // Textures still there
+  if (fs::exists(advPath)) {
+    for (const auto &entry : fs::directory_iterator(advPath)) {
       if (entry.path().extension() == ".obj") {
-        std::string filename = entry.path().filename().string();
         std::string meshName = entry.path().stem().string();
+        std::string textureName = meshName + "_tex";
+        std::string textureFile = "";
 
-        // Load mesh into renderer if not already loaded
+        // Determine texture file
+        std::string lowName = meshName;
+        std::transform(lowName.begin(), lowName.end(), lowName.begin(), ::tolower);
+        
+        if (lowName.find("barbarian") != std::string::npos) textureFile = "barbarian_texture.png";
+        else if (lowName.find("knight") != std::string::npos) textureFile = "knight_texture.png";
+        else if (lowName.find("mage") != std::string::npos) textureFile = "mage_texture.png";
+        else if (lowName.find("ranger") != std::string::npos) textureFile = "ranger_texture.png";
+        else if (lowName.find("rogue") != std::string::npos) textureFile = "rogue_texture.png";
+
+        if (!textureFile.empty()) {
+          if (m_Renderer) {
+            m_Renderer->LoadTexture(textureName, advTexPath + textureFile);
+            m_Renderer->LoadMesh(meshName, entry.path().string());
+          }
+          m_Assets.push_back({meshName, meshName, textureName});
+        }
+      }
+    }
+  }
+
+  // Add Skeletons
+  std::string skelPath = "assets/skeletons/characters/obj/";
+  std::string skelTexPath = "assets/skeletons/characters/gltf/";
+  if (fs::exists(skelPath)) {
+    for (const auto &entry : fs::directory_iterator(skelPath)) {
+      if (entry.path().extension() == ".obj") {
+        std::string meshName = entry.path().stem().string();
+        std::string textureName = "skeleton_tex";
+        
         if (m_Renderer) {
+          m_Renderer->LoadTexture(textureName, skelTexPath + "skeleton_texture.png");
           m_Renderer->LoadMesh(meshName, entry.path().string());
         }
-
-        m_Assets.push_back({meshName, meshName, "dungeon"});
+        m_Assets.push_back({meshName, meshName, textureName});
       }
     }
   }
@@ -468,6 +516,19 @@ ActionResult DungeonEditor::ExecuteAction(bool place) {
           m_Registry->AddComponent<InteractableComponent>(e, {InteractableComponent::Chest, false});
       }
 
+      // Check if it's a character
+      bool isAdventurer = (lowName.find("barbarian") != std::string::npos ||
+                           lowName.find("knight") != std::string::npos ||
+                           lowName.find("mage") != std::string::npos ||
+                           lowName.find("ranger") != std::string::npos ||
+                           lowName.find("rogue") != std::string::npos);
+      bool isSkeleton = (lowName.find("skeleton") != std::string::npos);
+
+      if (isAdventurer || isSkeleton) {
+          m_Registry->AddComponent<CharacterComponent>(e, {isAdventurer ? CharacterComponent::Knight : CharacterComponent::SkeletonWarrior});
+          m_Registry->AddComponent<ProceduralAnimationComponent>(e, {(float)(rand() % 100), 0.05f, 2.0f, 0.03f, 1.5f, m_Highlight.z});
+      }
+
       return ActionResult::Placed;
     }
   } else {
@@ -707,6 +768,18 @@ void DungeonEditor::LoadDungeon(const std::string &filename) {
         mc->offsetX = -(m_GridSize / 6.0f);
     } else if (lowName.find("chest") != std::string::npos) {
         m_Registry->AddComponent<InteractableComponent>(e, {InteractableComponent::Chest, false});
+    }
+
+    bool isAdventurer = (lowName.find("barbarian") != std::string::npos ||
+                         lowName.find("knight") != std::string::npos ||
+                         lowName.find("mage") != std::string::npos ||
+                         lowName.find("ranger") != std::string::npos ||
+                         lowName.find("rogue") != std::string::npos);
+    bool isSkeleton = (lowName.find("skeleton") != std::string::npos);
+
+    if (isAdventurer || isSkeleton) {
+        m_Registry->AddComponent<CharacterComponent>(e, {isAdventurer ? CharacterComponent::Knight : CharacterComponent::SkeletonWarrior});
+        m_Registry->AddComponent<ProceduralAnimationComponent>(e, {(float)(rand() % 100), 0.05f, 2.0f, 0.03f, 1.5f, z});
     }
   }
   std::cout << "Loaded dungeon from " << filename << std::endl;

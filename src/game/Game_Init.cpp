@@ -62,11 +62,11 @@ void DungeonsGame::InitSiege() {
   m_Editor.Init(&m_Registry, &m_GLRenderer);
   m_Editor.LoadDungeon("assets/dungeons/my_dungeon.map");
 
-  // 2. Load Character Assets (GLB fallback to dummy for now)
-  m_GLRenderer.LoadMesh("knight", "assets/adventurers/Characters/gltf/Knight.glb");
-  m_GLRenderer.LoadMesh("skeleton", "assets/skeletons/characters/gltf/Skeleton_Warrior.glb");
-  m_GLRenderer.LoadTexture("knight_tex", "assets/adventurers/Textures/knight_texture.png");
-  m_GLRenderer.LoadTexture("skeleton_tex", "assets/skeletons/texture/skeleton_texture.png");
+  // 2. Load Character Assets (OBJ converted from GLB)
+  m_GLRenderer.LoadMesh("knight", "assets/adventurers/Characters/obj/Knight.obj");
+  m_GLRenderer.LoadMesh("skeleton", "assets/skeletons/characters/obj/Skeleton_Warrior.obj");
+  m_GLRenderer.LoadTexture("knight_tex", "assets/adventurers/Characters/gltf/knight_texture.png");
+  m_GLRenderer.LoadTexture("skeleton_tex", "assets/skeletons/characters/gltf/skeleton_texture.png");
 
   // 3. Setup Player (Knight)
   m_PlayerEntity = m_Registry.CreateEntity();

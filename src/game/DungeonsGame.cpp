@@ -25,6 +25,7 @@ void DungeonsGame::OnUpdate(float deltaTime) {
     HandleInputGameplay(dt);
     UpdatePhysics(dt);
     UpdateProjectiles(dt);
+    UpdateAnimations(dt);
 
     if (m_HitmarkerTimer > 0)
       m_HitmarkerTimer -= deltaTime;
@@ -89,6 +90,7 @@ void DungeonsGame::OnUpdate(float deltaTime) {
       }
     }
     
+    UpdateAnimations(dt);
     ActionResult res = m_Editor.Update(dt, *m_Camera);
     if (res != ActionResult::None) {
         if (res == ActionResult::Placed || res == ActionResult::Broken) {
@@ -111,6 +113,7 @@ void DungeonsGame::OnUpdate(float deltaTime) {
     HandleInputGameplay(dt);
     UpdatePhysics(dt);
     UpdateSiege(dt);
+    UpdateAnimations(dt);
 
     auto *t = m_Registry.GetComponent<Transform3DComponent>(m_PlayerEntity);
     if (t) {
@@ -169,4 +172,20 @@ void DungeonsGame::PlaySpatialSfx(Mix_Chunk *chunk, float x, float y, float z) {
   Uint8 left = (Uint8)(127 * (1.0f - pan));
   Uint8 right = (Uint8)(127 * (1.0f + pan));
   Mix_SetPanning(channel, left, right);
+}
+
+void DungeonsGame::UpdateAnimations(float dt) {
+  auto &view = m_Registry.View<ProceduralAnimationComponent>();
+  for (auto &pair : view) {
+    Entity e = pair.first;
+    auto &anim = pair.second;
+    auto *t = m_Registry.GetComponent<Transform3DComponent>(e);
+    if (t) {
+      anim.timeOffset += dt;
+      // Bobbing (Z axis)
+      t->z = anim.baseZ + sin(anim.timeOffset * anim.bobSpeed) * anim.bobAmount;
+      // Subtle sway (Pitch)
+      t->pitch = sin(anim.timeOffset * anim.swaySpeed) * anim.swayAmount;
+    }
+  }
 }

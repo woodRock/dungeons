@@ -42,6 +42,7 @@ private:
 
   void UpdatePhysics(float dt);
   void UpdateProjectiles(float dt);
+  void UpdateAnimations(float dt);
 
   // UI Helpers
   void DrawButton(int x, int y, int w, int h, const std::string &text,
