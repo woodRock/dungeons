@@ -133,27 +133,9 @@ void DungeonsGame::OnUpdate(float deltaTime) {
 }
 
 void DungeonsGame::UpdateSiege(float dt) {
-  auto &enemies = m_Registry.View<EnemyComponent>();
-  auto *playerTrans = m_Registry.GetComponent<Transform3DComponent>(m_PlayerEntity);
-  if (!playerTrans) return;
-
-  for (auto &pair : enemies) {
-    auto &enemy = pair.second;
-    auto *t = m_Registry.GetComponent<Transform3DComponent>(pair.first);
-    if (t) {
-      float dx = playerTrans->x - t->x;
-      float dy = playerTrans->y - t->y;
-      float dist = sqrt(dx * dx + dy * dy);
-      if (dist > 1.5f) {
-        t->rot = atan2(dy, dx);
-        t->x += cos(t->rot) * enemy.speed * dt;
-        t->y += sin(t->rot) * enemy.speed * dt;
-      } else {
-        m_ShakeTimer = 0.1f;
-        m_ShakeIntensity = 0.02f;
-      }
+    if (m_SiegeMode) {
+        m_SiegeMode->Update(dt, m_PlayerEntity);
     }
-  }
 }
 
 void DungeonsGame::PlaySpatialSfx(Mix_Chunk *chunk, float x, float y, float z) {

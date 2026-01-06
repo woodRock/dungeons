@@ -6,6 +6,8 @@
 #include "../engine/Raycaster.h"
 #include "../engine/TextRenderer.h"
 #include "DungeonEditor.h"
+#include "SiegeMode.h"
+#include "ExplorationMode.h"
 #include <memory>
 
 enum class GameState { MainMenu, Playing, Creative, Siege, Paused };
@@ -54,6 +56,8 @@ private:
   std::unique_ptr<PixelsEngine::TextRenderer> m_TextRenderer;
 
   PixelsEngine::DungeonEditor m_Editor;
+  std::unique_ptr<SiegeMode> m_SiegeMode;
+  std::unique_ptr<ExplorationMode> m_ExplorationMode;
 
   std::shared_ptr<PixelsEngine::Texture> m_BowIdle;
   std::shared_ptr<PixelsEngine::Texture> m_BowDraw;
