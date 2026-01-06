@@ -210,6 +210,7 @@ struct BattleUnitComponent {
     float currentMovement = 6.0f;
     bool hasAction = true;
     bool hasBonusAction = true;
+    bool isSneaking = false;
     
     // UI State
     bool isSelected = false;
