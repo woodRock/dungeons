@@ -270,19 +270,23 @@ void BattleMode::Update(float dt, Entity playerEntity) {
 }
 
 void BattleMode::HandlePlayerInput() {
+    // std::cout << "HandlePlayerInput" << std::endl;
     RaycastCursor();
     
     int mx, my; Input::GetMousePosition(mx, my);
-    if (my > 600) return; // Ignore click on UI
+    // if (my > 600) return; // Disable UI block for debugging
 
     if (Input::IsMouseButtonPressed(SDL_BUTTON_LEFT)) {
+        std::cout << "Click! Action: " << m_SelectedAction << " Hovered: " << m_Cursor.hoveredEntity << std::endl;
         Entity current = m_TurnOrder[m_CurrentTurnIndex];
         auto* unit = m_Registry->GetComponent<BattleUnitComponent>(current);
         auto* t = m_Registry->GetComponent<Transform3DComponent>(current);
-        if (!unit) return;
+        if (!unit) { std::cout << "No unit component!" << std::endl; return; }
 
         if (m_SelectedAction == Move || m_SelectedAction == None || m_SelectedAction == Jump) {
+            std::cout << "Move Action. Cursor: " << m_Cursor.x << "," << m_Cursor.y << " Active: " << m_Cursor.active << std::endl;
             if (m_Cursor.hoveredEntity == -1) {
+                // ...
                 float dist = sqrt(pow(m_Cursor.x - t->x, 2) + pow(m_Cursor.y - t->y, 2));
                 if (dist <= unit->currentMovement) {
                     unit->currentMovement -= dist;
@@ -338,6 +342,7 @@ void BattleMode::HandlePlayerInput() {
 }
 
 void BattleMode::ExecuteAction(Entity actor, ActionType action, Entity target, float x, float y) {
+    std::cout << "ExecuteAction: " << action << " on Target: " << target << std::endl;
     auto* uActor = m_Registry->GetComponent<BattleUnitComponent>(actor);
     auto* uTarget = target != -1 ? m_Registry->GetComponent<BattleUnitComponent>(target) : nullptr;
     
@@ -601,11 +606,21 @@ void BattleMode::RaycastCursor() {
     Vec3 R_gl = Vec3::Normalize(Vec3::Cross(F_gl, {0,1,0}));
     Vec3 U_gl = Vec3::Normalize(Vec3::Cross(R_gl, F_gl));
     
-    Vec3 RayDir_gl = Vec3::Normalize(R_gl * vx + U_gl * vy + F_gl * vz);
+    // View direction is (vx, vy, -1). 
+    // Camera Basis: Right, Up, Back (-F).
+    // World Ray = Right * vx + Up * vy + Back * (-1) = R * vx + U * vy + F
+    Vec3 RayDir_gl = Vec3::Normalize(R_gl * vx + U_gl * vy + F_gl);
     Vec3 RayOrigin_gl = {m_Camera->x, m_Camera->z, -m_Camera->y};
+    
+    // Debug Ray
+    static int logTimer = 0;
+    if (logTimer++ % 60 == 0) {
+         // std::cout << "RayDir Y: " << RayDir_gl.y << " Origin Y: " << RayOrigin_gl.y << std::endl;
+    }
     
     if (abs(RayDir_gl.y) > 0.001f) {
         float t = -RayOrigin_gl.y / RayDir_gl.y;
+        
         if (t > 0) {
             Vec3 Hit_gl = RayOrigin_gl + RayDir_gl * t;
             m_Cursor.x = Hit_gl.x;
@@ -613,6 +628,7 @@ void BattleMode::RaycastCursor() {
             m_Cursor.z = 0;
             m_Cursor.active = true;
             
+            // Check entities
             m_Cursor.hoveredEntity = -1;
             auto view = m_Registry->View<ColliderComponent>();
             for (auto& pair : view) {
