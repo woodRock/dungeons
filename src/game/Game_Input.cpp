@@ -291,7 +291,7 @@ void DungeonsGame::HandleInputMenu() {
 
   bool action = false;
 
-  int numButtons = m_InOptions ? 2 : 4;
+  int numButtons = m_InOptions ? 2 : 5;
 
   // Mouse Interaction
   for (int i = 0; i < numButtons; i++) {
