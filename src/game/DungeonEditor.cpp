@@ -313,8 +313,8 @@ void DungeonEditor::UpdateCursor(const Camera &cam) {
         std::transform(name.begin(), name.end(), name.begin(), ::tolower);
         isDoor = (name == "wall_doorway_door");
         isScaffoldDoor = (name == "wall_doorway_scaffold_door");
-        if (name.find("small") != std::string::npos) {
-            snapSize = m_GridSize / 3.0f;
+        if (name.find("small") != std::string::npos || name.find("corner") != std::string::npos) {
+            snapSize = m_GridSize / 4.0f;
         }
     }
 
@@ -418,35 +418,26 @@ ActionResult DungeonEditor::ExecuteAction(bool place) {
             if (inter->type == InteractableComponent::Door) return ActionResult::InteractedDoor;
             return ActionResult::InteractedChest;
         } else {
-            // Check if we hit a frame, and forward interaction to the door
-            auto* mesh = m_Registry->GetComponent<MeshComponent>(m_Highlight.hitEntity);
-            if (mesh) {
-                std::string name = mesh->meshName;
-                std::transform(name.begin(), name.end(), name.begin(), ::tolower);
-                if (name == "wall_doorway" || name == "wall_doorway_scaffold") {
-                    auto* t = m_Registry->GetComponent<Transform3DComponent>(m_Highlight.hitEntity);
-                    if (t) {
-                        // Search for nearby door
-                        auto& view = m_Registry->View<InteractableComponent>();
-                        for (auto& pair : view) {
-                            auto* doorTrans = m_Registry->GetComponent<Transform3DComponent>(pair.first);
-                            if (doorTrans) {
-                                float dx = doorTrans->x - t->x;
-                                float dy = doorTrans->y - t->y;
-                                float dz = doorTrans->z - t->z;
-                                if (sqrt(dx*dx + dy*dy + dz*dz) < 1.5f) {
-                                    // Found linked door!
-                                    auto* inter = &pair.second;
-                                    
-                                    inter->isOpen = !inter->isOpen;
-                                    if (inter->isOpen) {
-                                        doorTrans->rot += M_PI * 0.5f;
-                                    } else {
-                                        doorTrans->rot -= M_PI * 0.5f;
-                                    }
-                                    return ActionResult::InteractedDoor;
-                                }
+            // Search nearby for an interactable entity (e.g. door inside a frame)
+            auto* t = m_Registry->GetComponent<Transform3DComponent>(m_Highlight.hitEntity);
+            if (t) {
+                auto& view = m_Registry->View<InteractableComponent>();
+                for (auto& pair : view) {
+                    auto* doorTrans = m_Registry->GetComponent<Transform3DComponent>(pair.first);
+                    if (doorTrans) {
+                        float dx = doorTrans->x - t->x;
+                        float dy = doorTrans->y - t->y;
+                        float dz = doorTrans->z - t->z;
+                        if (sqrt(dx*dx + dy*dy + dz*dz) < 2.5f) {
+                            auto* inter = &pair.second;
+                            inter->isOpen = !inter->isOpen;
+                            if (inter->isOpen) {
+                                doorTrans->rot += M_PI * 0.5f;
+                            } else {
+                                doorTrans->rot -= M_PI * 0.5f;
                             }
+                            if (inter->type == InteractableComponent::Door) return ActionResult::InteractedDoor;
+                            return ActionResult::InteractedChest;
                         }
                     }
                 }
