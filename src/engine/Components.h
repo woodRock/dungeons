@@ -215,6 +215,16 @@ struct BattleUnitComponent {
     // UI State
     bool isSelected = false;
     bool isTurn = false;
+    float flashAmount = 0.0f;
+};
+
+struct AttachmentComponent {
+    std::string meshName;
+    std::string textureName;
+    std::string boneName = "hand.R";
+    float scale = 1.0f;
+    float rotX = 0, rotY = 0, rotZ = 0;
+    float offX = 0, offY = 0, offZ = 0;
 };
 
 } // namespace PixelsEngine

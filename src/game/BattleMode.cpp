@@ -16,6 +16,16 @@ BattleMode::BattleMode(Registry* registry, GLRenderer* renderer)
 void BattleMode::Init(Camera* camera, Entity& playerEntity) {
     m_Camera = camera;
     
+    // Load Audio
+    m_Music = Mix_LoadMUS("assets/ambience_flute.mp3");
+    if (m_Music) Mix_PlayMusic(m_Music, -1);
+    
+    m_SfxJump = Mix_LoadWAV("assets/jump.wav");
+    m_SfxShoot = Mix_LoadWAV("assets/bow_shoot.wav");
+    m_SfxBowHit = Mix_LoadWAV("assets/bow_hit.wav");
+    m_SfxSwordHit = Mix_LoadWAV("assets/sword_hit.wav");
+    m_SfxSwordMiss = Mix_LoadWAV("assets/sword_miss.wav");
+    
     // 1. Load Assets (Ensure common assets are loaded)
     // Characters
     std::vector<std::string> adventurers = {"Knight", "Ranger", "Mage", "Rogue"};
@@ -42,8 +52,12 @@ void BattleMode::Init(Camera* camera, Entity& playerEntity) {
             std::vector<SkeletalAnimation> allAnims;
             for (const auto& file : animFiles) {
                 std::string fullPath = rigPath + file;
-                // If specific doesn't exist, try adventurers (shared)
-                if (file != "Rig_Medium_General.glb") fullPath = "assets/adventurers/Animations/gltf/Rig_Medium/" + file;
+                // Check if specific file exists, if not use the general animations folder
+                std::ifstream f(fullPath);
+                if (!f.good()) {
+                    fullPath = "assets/animations/Animations/gltf/Rig_Medium/" + file;
+                }
+                f.close();
                 
                 auto anims = GLTFLoader::LoadAnimations(fullPath);
                 allAnims.insert(allAnims.end(), anims.begin(), anims.end());
@@ -62,6 +76,12 @@ void BattleMode::Init(Camera* camera, Entity& playerEntity) {
     LoadIfMissing("Skeleton_Warrior", "assets/skeletons/characters/gltf/Skeleton_Warrior.glb", "skeleton_tex", "assets/skeletons/texture/skeleton_texture.png");
     LoadIfMissing("Skeleton_Mage", "assets/skeletons/characters/gltf/Skeleton_Mage.glb", "skeleton_tex", "assets/skeletons/texture/skeleton_texture.png");
     LoadIfMissing("Skeleton_Minion", "assets/skeletons/characters/gltf/Skeleton_Minion.glb", "skeleton_tex", "assets/skeletons/texture/skeleton_texture.png");
+
+    // Load Weapons
+    m_Renderer->LoadMesh("Sword", "assets/adventurers/Assets/gltf/sword_1handed.gltf");
+    m_Renderer->LoadMesh("Arrow_Bow", "assets/adventurers/Assets/gltf/arrow_bow_bundle.gltf");
+    m_Renderer->LoadMesh("Staff", "assets/adventurers/Assets/gltf/staff.gltf");
+    m_Renderer->LoadMesh("Dagger", "assets/adventurers/Assets/gltf/dagger.gltf");
 
     // 2. Load Map
     LoadMap("assets/dungeons/my_dungeon.map");
@@ -87,6 +107,25 @@ void BattleMode::Init(Camera* camera, Entity& playerEntity) {
     if (!m_TurnOrder.empty()) playerEntity = m_TurnOrder[0];
 }
 
+bool BattleMode::isMouseOverUI(int mx, int my, int w, int h) {
+    // Action bar is centered at bottom
+    int btnW = 80;
+    int btnH = 80;
+    int gap = 10;
+    int count = 7;
+    int barW = count * (btnW + gap);
+    int startX = (w - barW) / 2;
+    int startY = h - btnH - 20;
+    
+    if (mx >= startX && mx <= startX + barW && my >= startY && my <= h) return true;
+    
+    // Turn order is at top
+    int turnOrderH = 80;
+    if (my <= turnOrderH) return true;
+
+    return false;
+}
+
 void BattleMode::LoadMap(const std::string& path) {
     std::ifstream in(path);
     if (!in.is_open()) return;
@@ -109,27 +148,51 @@ void BattleMode::SpawnCharacter(const std::string& mesh, float x, float y, Battl
     if (mesh == "Rogue") tex = "rogue_tex";
     if (mesh.find("Skeleton") != std::string::npos) tex = "skeleton_tex";
     
-    m_Registry->AddComponent<Transform3DComponent>(e, {x, y, 0.0f, team == BattleUnitComponent::Player ? 0.0f : 3.14f, 0.0f});
+    // Players at -Y face +Y (1.57), Enemies at +Y face -Y (-1.57)
+    float initialRot = (team == BattleUnitComponent::Player) ? 1.57f : -1.57f;
+    m_Registry->AddComponent<Transform3DComponent>(e, {x, y, 0.0f, initialRot, 0.0f});
     m_Registry->AddComponent<MeshComponent>(e, {mesh, tex, 1.0f, 1.0f, 1.0f});
     
     RenderMesh* rm = m_Renderer->GetRenderMesh(mesh);
     if (rm && rm->isSkinned) {
         int idleIdx = 0;
         for (size_t i = 0; i < rm->animations.size(); ++i) {
-            if (rm->animations[i].name.find("Idle_A") != std::string::npos) { idleIdx = (int)i; break; }
+            if (rm->animations[i].name.find("Idle") != std::string::npos) { idleIdx = (int)i; break; }
         }
         m_Registry->AddComponent<SkeletalAnimationComponent>(e, {idleIdx, (float)(rand()%100)*0.01f, 1.0f});
     }
     
     BattleUnitComponent unit;
     unit.team = team;
-    unit.hp = 20;
-    unit.maxHp = 20;
+    unit.hp = (team == BattleUnitComponent::Enemy) ? 10 : 20;
+    unit.maxHp = unit.hp;
+    unit.ac = (team == BattleUnitComponent::Enemy) ? 10 : 12;
     unit.movement = 6.0f;
     unit.currentMovement = 6.0f;
     unit.initiative = rand() % 20 + 1;
     m_Registry->AddComponent<BattleUnitComponent>(e, unit);
     m_Registry->AddComponent<ColliderComponent>(e, {0.5f, 2.0f, true});
+
+    // Attach Weapons
+    AttachmentComponent attach;
+    attach.textureName = tex;
+    attach.scale = 1.0f;
+    attach.boneName = "hand.r";
+    
+    if (mesh == "Knight" || mesh == "Skeleton_Warrior") {
+        attach.meshName = "Sword";
+        attach.rotY = 3.14f; // Rotate 180 degrees
+        m_Registry->AddComponent<AttachmentComponent>(e, attach);
+    } else if (mesh == "Ranger") {
+        attach.meshName = "Arrow_Bow";
+        m_Registry->AddComponent<AttachmentComponent>(e, attach);
+    } else if (mesh == "Mage" || mesh == "Skeleton_Mage") {
+        attach.meshName = "Staff";
+        m_Registry->AddComponent<AttachmentComponent>(e, attach);
+    } else if (mesh == "Rogue" || mesh == "Skeleton_Minion") {
+        attach.meshName = "Dagger";
+        m_Registry->AddComponent<AttachmentComponent>(e, attach);
+    }
 }
 
 void BattleMode::StartBattle() {
@@ -179,6 +242,8 @@ void BattleMode::NextTurn() {
 }
 
 void BattleMode::Update(float dt, Entity playerEntity) {
+    if (m_State == Victory) return;
+
     if (m_Camera) {
         float speed = 10.0f * dt;
         if (Input::IsKeyDown(SDL_SCANCODE_W)) m_Camera->y += speed;
@@ -187,6 +252,8 @@ void BattleMode::Update(float dt, Entity playerEntity) {
         if (Input::IsKeyDown(SDL_SCANCODE_D)) m_Camera->x += speed;
     }
 
+    CheckVictory();
+    
     if (m_State == Moving) {
         auto* t = m_Registry->GetComponent<Transform3DComponent>(m_AnimState.actor);
         if (t) {
@@ -224,8 +291,38 @@ void BattleMode::Update(float dt, Entity playerEntity) {
                 m_SelectedAction = None;
             }
         }
+    } else if (m_State == Attacking) {
+        m_AnimState.timer += dt;
+        if (m_AnimState.timer >= m_AnimState.duration) {
+            // Revert to Idle
+            auto* animComp = m_Registry->GetComponent<SkeletalAnimationComponent>(m_AnimState.actor);
+            auto* mesh = m_Registry->GetComponent<MeshComponent>(m_AnimState.actor);
+            if (animComp && mesh) {
+                RenderMesh* rm = m_Renderer->GetRenderMesh(mesh->meshName);
+                if (rm) {
+                    for(size_t i=0; i<rm->animations.size(); i++) {
+                        if (rm->animations[i].name.find("Idle") != std::string::npos) {
+                            animComp->animationIndex = (int)i;
+                            animComp->currentTime = 0.0f;
+                            break;
+                        }
+                    }
+                }
+            }
+            auto* unit = m_Registry->GetComponent<BattleUnitComponent>(m_AnimState.actor);
+            if (unit && unit->team == BattleUnitComponent::Player) m_State = PlayerTurn;
+            else m_State = EnemyTurn;
+        }
     } else if (m_State == PlayerTurn) {
         HandlePlayerInput();
+        
+        // Update weapon mesh based on action
+        Entity current = m_TurnOrder[m_CurrentTurnIndex];
+        auto* attach = m_Registry->GetComponent<AttachmentComponent>(current);
+        if (attach) {
+            if (m_SelectedAction == Ranged) attach->meshName = "Arrow_Bow";
+            else if (m_SelectedAction == Melee) attach->meshName = "Sword";
+        }
     } else if (m_State == EnemyTurn) {
         UpdateAI(dt);
     }
@@ -243,27 +340,75 @@ void BattleMode::Update(float dt, Entity playerEntity) {
             }
         }
     }
-    
+
+    // Decay flash amount
+    auto &unitView = m_Registry->View<BattleUnitComponent>();
+    for (auto &pair : unitView) {
+        if (pair.second.flashAmount > 0) {
+            pair.second.flashAmount -= dt * 5.0f;
+            if (pair.second.flashAmount < 0) pair.second.flashAmount = 0;
+        }
+    }
+}
+
+void BattleMode::RenderWorld(GLRenderer* renderer) {
+    // 1. Draw turn indicator circle at base of current unit
+    if (m_CurrentTurnIndex >= 0 && m_CurrentTurnIndex < (int)m_TurnOrder.size()) {
+        Entity currentTurnEntity = m_TurnOrder[m_CurrentTurnIndex];
+        auto* currentTrans = m_Registry->GetComponent<Transform3DComponent>(currentTurnEntity);
+        auto* currentUnit = m_Registry->GetComponent<BattleUnitComponent>(currentTurnEntity);
+        if (currentTrans && currentUnit) {
+            SDL_Color circleColor = (currentUnit->team == BattleUnitComponent::Player) ? SDL_Color{255, 255, 255, 255} : SDL_Color{255, 50, 50, 255};
+            // Firmer circle for turn unit
+            renderer->DrawWireCircle(currentTrans->x, currentTrans->y, 0.02f, 0.85f, circleColor, 5.0f);
+        }
+    }
+
     if (m_State == PlayerTurn && m_Cursor.active) {
+        Entity current = m_TurnOrder[m_CurrentTurnIndex];
+        auto* t = m_Registry->GetComponent<Transform3DComponent>(current);
+        auto* unit = m_Registry->GetComponent<BattleUnitComponent>(current);
+
+        // 2. Hover indicator
         if (m_Cursor.hoveredEntity != -1) {
-            auto* t = m_Registry->GetComponent<Transform3DComponent>(m_Cursor.hoveredEntity);
+            auto* ht = m_Registry->GetComponent<Transform3DComponent>(m_Cursor.hoveredEntity);
             auto* targetUnit = m_Registry->GetComponent<BattleUnitComponent>(m_Cursor.hoveredEntity);
             
-            if (t) {
-                // Targeting Circle for enemies if attack selected
-                if (targetUnit && targetUnit->team == BattleUnitComponent::Enemy && 
-                   (m_SelectedAction == Melee || m_SelectedAction == Ranged || m_SelectedAction == Shove)) {
-                    m_Renderer->DrawWireCircle(t->x, t->y, 0.1f, 1.0f, {255, 50, 50, 255});
-                } else {
-                    m_Renderer->DrawWireCube(t->x, t->y, 1.0f, 1.5f, {255, 255, 255, 255});
-                }
+            if (ht && targetUnit) {
+                SDL_Color hoverColor = (targetUnit->team == BattleUnitComponent::Player) ? SDL_Color{255, 255, 255, 255} : SDL_Color{255, 50, 50, 255};
+                // Thicker hover circle
+                renderer->DrawWireCircle(ht->x, ht->y, 0.05f, 0.95f, hoverColor, 3.0f);
             }
-        } else {
-            // Movement marker
-            if (m_SelectedAction == Move || m_SelectedAction == None || m_SelectedAction == Jump) {
-                 m_Renderer->DrawWireCircle(m_Cursor.x, m_Cursor.y, 0.1f, 0.5f, {50, 255, 50, 255});
-            } else {
-                 m_Renderer->DrawWireCube(m_Cursor.x, m_Cursor.y, 0.1f, 0.5f, {200, 200, 200, 255});
+        }
+
+        // 3. Movement range indicators
+        if (t && unit) {
+            float dist = sqrt(pow(m_Cursor.x - t->x, 2) + pow(m_Cursor.y - t->y, 2));
+            float maxRange = unit->currentMovement;
+            bool isJump = (m_SelectedAction == Jump);
+            bool isDash = (m_SelectedAction == Dash); 
+            if (isJump) maxRange = 5.0f; 
+
+            // Draw Jump Circle
+            if (isJump) {
+                renderer->DrawWireCircle(t->x, t->y, 0.01f, maxRange, {100, 100, 255, 150}, 2.0f);
+            }
+
+            // Draw line to cursor
+            if (m_SelectedAction == Move || m_SelectedAction == Jump || m_SelectedAction == Dash || 
+                m_SelectedAction == Melee || m_SelectedAction == Ranged || m_SelectedAction == Shove) {
+                
+                float attackRange = 0.0f;
+                if (m_SelectedAction == Melee || m_SelectedAction == Shove) attackRange = 2.0f;
+                else if (m_SelectedAction == Ranged) attackRange = 15.0f;
+                
+                float effectiveRange = (attackRange > 0.0f) ? attackRange : maxRange;
+                
+                SDL_Color lineColor = (dist <= effectiveRange) ? SDL_Color{255, 255, 255, 255} : SDL_Color{255, 50, 50, 255};
+                renderer->DrawLine(t->x, t->y, 0.1f, m_Cursor.x, m_Cursor.y, 0.1f, lineColor, 2.0f);
+                
+                // Cursor marker
+                renderer->DrawWireCircle(m_Cursor.x, m_Cursor.y, 0.05f, 0.3f, lineColor, 2.0f);
             }
         }
     }
@@ -274,22 +419,52 @@ void BattleMode::HandlePlayerInput() {
     RaycastCursor();
     
     int mx, my; Input::GetMousePosition(mx, my);
-    // if (my > 600) return; // Disable UI block for debugging
+    if (isMouseOverUI(mx, my, 1280, 720)) return; 
+
+    Entity current = m_TurnOrder[m_CurrentTurnIndex];
+    auto* unit = m_Registry->GetComponent<BattleUnitComponent>(current);
+    auto* t = m_Registry->GetComponent<Transform3DComponent>(current);
+    if (!unit) return;
+
+    // Baldur's Gate 3 style keybinds
+    if (Input::IsKeyPressed(SDL_SCANCODE_Z)) m_SelectedAction = Jump;
+    if (Input::IsKeyPressed(SDL_SCANCODE_C)) unit->isSneaking = !unit->isSneaking;
+    if (Input::IsKeyPressed(SDL_SCANCODE_V)) m_SelectedAction = Shove;
+    
+    // F to toggle attack modes
+    if (Input::IsKeyPressed(SDL_SCANCODE_F)) {
+        if (m_SelectedAction == Melee) m_SelectedAction = Ranged;
+        else if (m_SelectedAction == Ranged) m_SelectedAction = Melee;
+        else m_SelectedAction = Melee;
+    }
 
     if (Input::IsMouseButtonPressed(SDL_BUTTON_LEFT)) {
-        std::cout << "Click! Action: " << m_SelectedAction << " Hovered: " << m_Cursor.hoveredEntity << std::endl;
-        Entity current = m_TurnOrder[m_CurrentTurnIndex];
-        auto* unit = m_Registry->GetComponent<BattleUnitComponent>(current);
-        auto* t = m_Registry->GetComponent<Transform3DComponent>(current);
-        if (!unit) { std::cout << "No unit component!" << std::endl; return; }
+        bool ctrl = Input::IsKeyDown(SDL_SCANCODE_LCTRL) || Input::IsKeyDown(SDL_SCANCODE_RCTRL);
+        
+        // Ctrl + Click to attack hovered target
+        if (ctrl && m_Cursor.hoveredEntity != -1) {
+            auto* target = m_Registry->GetComponent<BattleUnitComponent>(m_Cursor.hoveredEntity);
+            if (target && target->team == BattleUnitComponent::Enemy && unit->hasAction) {
+                float dist = sqrt(pow(t->x - m_Registry->GetComponent<Transform3DComponent>(m_Cursor.hoveredEntity)->x, 2) + 
+                                  pow(t->y - m_Registry->GetComponent<Transform3DComponent>(m_Cursor.hoveredEntity)->y, 2));
+                
+                // Default to ranged if far, melee if close
+                ActionType quickAction = (dist > 3.0f) ? Ranged : Melee;
+                float range = (quickAction == Melee) ? 2.0f : 15.0f;
+                if (dist <= range) ExecuteAction(current, quickAction, m_Cursor.hoveredEntity, 0, 0);
+                return;
+            }
+        }
 
-        if (m_SelectedAction == Move || m_SelectedAction == None || m_SelectedAction == Jump) {
-            std::cout << "Move Action. Cursor: " << m_Cursor.x << "," << m_Cursor.y << " Active: " << m_Cursor.active << std::endl;
+        // ONLY allow movement if Move or Jump is selected
+        if (m_SelectedAction == Move || m_SelectedAction == Jump) {
             if (m_Cursor.hoveredEntity == -1) {
-                // ...
                 float dist = sqrt(pow(m_Cursor.x - t->x, 2) + pow(m_Cursor.y - t->y, 2));
-                if (dist <= unit->currentMovement) {
-                    unit->currentMovement -= dist;
+                float maxRange = (m_SelectedAction == Jump) ? 5.0f : unit->currentMovement;
+
+                if (dist <= maxRange) {
+                    if (m_SelectedAction == Jump && m_SfxJump) Mix_PlayChannel(-1, m_SfxJump, 0);
+                    if (m_SelectedAction != Jump) unit->currentMovement -= dist;
                     m_AnimState.actor = current;
                     m_AnimState.startX = t->x; m_AnimState.startY = t->y;
                     m_AnimState.targetX = m_Cursor.x; m_AnimState.targetY = m_Cursor.y;
@@ -305,7 +480,6 @@ void BattleMode::HandlePlayerInput() {
                         RenderMesh* rm = m_Renderer->GetRenderMesh(mesh->meshName);
                         if (rm) {
                             for(size_t i=0; i<rm->animations.size(); i++) {
-                                // "Run" or "Walk" or "Running_A"
                                 if (rm->animations[i].name.find("Run") != std::string::npos || 
                                     rm->animations[i].name.find("Walk") != std::string::npos) {
                                     animComp->animationIndex = (int)i;
@@ -325,7 +499,7 @@ void BattleMode::HandlePlayerInput() {
                 float dist = sqrt(pow(t->x - m_Registry->GetComponent<Transform3DComponent>(m_Cursor.hoveredEntity)->x, 2) + 
                                   pow(t->y - m_Registry->GetComponent<Transform3DComponent>(m_Cursor.hoveredEntity)->y, 2));
                 
-                if (m_SelectedAction == Melee || m_SelectedAction == None) {
+                if (m_SelectedAction == Melee) {
                     if (dist < 2.0f) ExecuteAction(current, Melee, m_Cursor.hoveredEntity, 0, 0);
                 } else if (m_SelectedAction == Ranged) {
                     if (dist < 15.0f) ExecuteAction(current, Ranged, m_Cursor.hoveredEntity, 0, 0);
@@ -345,27 +519,58 @@ void BattleMode::ExecuteAction(Entity actor, ActionType action, Entity target, f
     std::cout << "ExecuteAction: " << action << " on Target: " << target << std::endl;
     auto* uActor = m_Registry->GetComponent<BattleUnitComponent>(actor);
     auto* uTarget = target != -1 ? m_Registry->GetComponent<BattleUnitComponent>(target) : nullptr;
+    auto* tActor = m_Registry->GetComponent<Transform3DComponent>(actor);
+    auto* tTarget = target != -1 ? m_Registry->GetComponent<Transform3DComponent>(target) : nullptr;
     
+    // Rotate actor to face target
+    if (tActor && tTarget) {
+        tActor->rot = atan2(tTarget->y - tActor->y, tTarget->x - tActor->x);
+    }
+
+    if (action == Ranged) {
+        if (m_SfxShoot) Mix_PlayChannel(-1, m_SfxShoot, 0);
+    }
+
     // Animation Trigger
     auto* mesh = m_Registry->GetComponent<MeshComponent>(actor);
     if (mesh) {
         RenderMesh* rm = m_Renderer->GetRenderMesh(mesh->meshName);
         if (rm) {
             std::string animName = "Idle";
-            if (action == Melee) animName = "Melee_1H_Attack_Chop";
-            else if (action == Ranged) animName = "Ranged_Bow_Shoot"; // Or Ranged_Bow_Release
-            else if (action == Shove) animName = "Melee_Unarmed_Attack_Kick"; // or similar
+            if (action == Melee) animName = "Melee_1H_Attack_Chop"; 
+            else if (action == Ranged) animName = "Ranged_Bow_Shoot";
+            else if (action == Shove) animName = "Melee_Unarmed_Attack_Kick";
             
-            // Find index
+            // Search for best match
+            int bestIdx = -1;
             for(size_t i=0; i<rm->animations.size(); i++) {
                 if (rm->animations[i].name.find(animName) != std::string::npos) {
-                    auto* animComp = m_Registry->GetComponent<SkeletalAnimationComponent>(actor);
-                    if (animComp) {
-                        animComp->animationIndex = (int)i;
-                        animComp->currentTime = 0.0f;
-                        // Note: We don't wait for animation to deal damage currently.
-                    }
+                    bestIdx = (int)i;
                     break;
+                }
+            }
+            
+            // Fallback
+            if (bestIdx == -1) {
+                 for(size_t i=0; i<rm->animations.size(); i++) {
+                    if (rm->animations[i].name.find("Attack") != std::string::npos) {
+                        bestIdx = (int)i; break;
+                    }
+                }
+            }
+
+            if (bestIdx != -1) {
+                auto* animComp = m_Registry->GetComponent<SkeletalAnimationComponent>(actor);
+                if (animComp) {
+                    animComp->animationIndex = bestIdx;
+                    animComp->currentTime = 0.0f;
+                    
+                    // Set up Attacking state to wait for animation
+                    m_State = Attacking;
+                    m_AnimState.actor = actor;
+                    m_AnimState.timer = 0.0f;
+                    m_AnimState.duration = rm->animations[bestIdx].duration;
+                    if (m_AnimState.duration <= 0) m_AnimState.duration = 1.0f;
                 }
             }
         }
@@ -378,26 +583,57 @@ void BattleMode::ExecuteAction(Entity actor, ActionType action, Entity target, f
         if (roll + mod >= uTarget->ac) {
             int dmg = rand() % 8 + 3;
             uTarget->hp -= dmg;
+            uTarget->flashAmount = 1.0f; // Flash red!
+            
+            if (action == Melee) { if (m_SfxSwordHit) Mix_PlayChannel(-1, m_SfxSwordHit, 0); }
+            else { if (m_SfxBowHit) Mix_PlayChannel(-1, m_SfxBowHit, 0); }
+            
             std::cout << "Hit! Damage: " << dmg << std::endl;
-            if (uTarget->hp <= 0) { m_Registry->DestroyEntity(target); }
+            if (uTarget->hp <= 0) {
+                m_Registry->DestroyEntity(target);
+            }
         } else {
+            if (action == Melee) { if (m_SfxSwordMiss) Mix_PlayChannel(-1, m_SfxSwordMiss, 0); }
             std::cout << "Miss!" << std::endl;
         }
         uActor->hasAction = false;
     } else if (action == Shove) {
-        auto* t1 = m_Registry->GetComponent<Transform3DComponent>(actor);
-        auto* t2 = m_Registry->GetComponent<Transform3DComponent>(target);
-        float angle = atan2(t2->y - t1->y, t2->x - t1->x);
-        t2->x += cos(angle) * 2.0f;
-        t2->y += sin(angle) * 2.0f;
+        if (tActor && tTarget) {
+            float angle = atan2(tTarget->y - tActor->y, tTarget->x - tActor->x);
+            tTarget->x += cos(angle) * 2.0f;
+            tTarget->y += sin(angle) * 2.0f;
+            uTarget->flashAmount = 0.5f;
+            if (m_SfxSwordHit) Mix_PlayChannel(-1, m_SfxSwordHit, 0); // Reuse hit for shove impact
+        }
         uActor->hasAction = false;
     }
 }
 
 void BattleMode::RenderUI(GLRenderer* ren, TextRenderer* tr, int w, int h) {
+    if (m_State == Victory) {
+        ren->DrawRect2D(0, 0, w, h, {0, 0, 0, 150});
+        tr->RenderTextCentered(ren, "VICTORY!", w/2, h/2 - 20, {255, 255, 255, 255});
+        tr->RenderTextCentered(ren, "All enemies defeated.", w/2, h/2 + 20, {200, 200, 200, 255});
+        return;
+    }
+
     DrawTurnOrder(ren, tr, w, h);
     if (m_State == PlayerTurn) {
         DrawActionBar(ren, tr, w, h);
+    }
+}
+
+void BattleMode::CheckVictory() {
+    bool enemyAlive = false;
+    auto view = m_Registry->View<BattleUnitComponent>();
+    for (auto& pair : view) {
+        if (pair.second.team == BattleUnitComponent::Enemy && pair.second.hp > 0) {
+            enemyAlive = true;
+            break;
+        }
+    }
+    if (!enemyAlive) {
+        m_State = Victory;
     }
 }
 
@@ -413,16 +649,17 @@ void BattleMode::DrawActionBar(GLRenderer* ren, TextRenderer* tr, int w, int h) 
         ActionType type;
         std::string label;
         SDL_Color color;
+        std::string key;
     };
     
     std::vector<ActionBtn> btns = {
-        {Move, "Move", {50, 150, 50, 255}},
-        {Melee, "Melee", {150, 50, 50, 255}},
-        {Ranged, "Ranged", {150, 100, 50, 255}},
-        {Dash, "Dash", {50, 100, 150, 255}},
-        {Jump, "Jump", {100, 50, 150, 255}},
-        {Sneak, "Sneak", {50, 50, 50, 255}},
-        {Shove, "Shove", {150, 150, 50, 255}}
+        {Move, "Move", {50, 150, 50, 255}, ""},
+        {Melee, "Melee", {150, 50, 50, 255}, "F"},
+        {Ranged, "Ranged", {150, 100, 50, 255}, "F"},
+        {Dash, "Dash", {50, 100, 150, 255}, ""},
+        {Jump, "Jump", {100, 50, 150, 255}, "Z"},
+        {Sneak, "Sneak", {50, 50, 50, 255}, "C"},
+        {Shove, "Shove", {150, 150, 50, 255}, "V"}
     };
     
     int mx, my;
@@ -445,6 +682,11 @@ void BattleMode::DrawActionBar(GLRenderer* ren, TextRenderer* tr, int w, int h) 
         ren->DrawRect2D(x, y, btnW, btnH, c);
         tr->RenderTextCentered(ren, btns[i].label, x + btnW/2, y + btnH/2, {255, 255, 255, 255});
         
+        // Render Keybind letter in bottom left
+        if (!btns[i].key.empty()) {
+            tr->RenderText(ren, btns[i].key, x + 5, y + btnH - 20, {200, 200, 200, 255});
+        }
+        
         if (click && hover) {
             if (btns[i].type == Dash && unit && unit->hasAction) {
                 unit->currentMovement += unit->movement;
@@ -463,29 +705,50 @@ void BattleMode::DrawActionBar(GLRenderer* ren, TextRenderer* tr, int w, int h) 
 }
 
 void BattleMode::DrawTurnOrder(GLRenderer* ren, TextRenderer* tr, int w, int h) {
-    int startX = w / 2;
-    int y = 20;
-    int size = 40;
-    int gap = 5;
-    
-    int totalW = (int)m_TurnOrder.size() * (size + gap);
-    startX -= totalW / 2;
-    
-    for (int i=0; i<(int)m_TurnOrder.size(); i++) {
-        int x = startX + i * (size + gap);
+    struct RenderUnit {
+        Entity e;
+        bool isCurrent;
+    };
+    std::vector<RenderUnit> toRender;
+    for (int i = 0; i < (int)m_TurnOrder.size(); i++) {
         Entity e = m_TurnOrder[i];
+        if (!m_Registry->Valid(e)) continue; // Skip destroyed
+        auto* u = m_Registry->GetComponent<BattleUnitComponent>(e);
+        // Only render if unit exists and is alive
+        if (u && u->hp > 0) {
+            toRender.push_back({e, i == m_CurrentTurnIndex});
+        }
+    }
+
+    if (toRender.empty()) return;
+
+    int size = 40;
+    int gap = 8;
+    int totalW = (int)toRender.size() * (size + gap);
+    int startX = (w - totalW) / 2;
+    int y = 20;
+    
+    for (int i=0; i<(int)toRender.size(); i++) {
+        int x = startX + i * (size + gap);
+        Entity e = toRender[i].e;
+        bool isCurrent = toRender[i].isCurrent;
         
-        SDL_Color c = {100, 100, 100, 255};
-        if (i == m_CurrentTurnIndex) c = {200, 200, 100, 255}; 
+        SDL_Color borderCol = isCurrent ? SDL_Color{255, 255, 0, 255} : SDL_Color{50, 50, 50, 255};
         
         auto* u = m_Registry->GetComponent<BattleUnitComponent>(e);
+        SDL_Color bgCol = {100, 100, 100, 255};
         if (u) {
-            if (u->team == BattleUnitComponent::Player) c.b = std::min(255, c.b+50);
-            else c.r = std::min(255, c.r+50);
-            if (u->hp <= 0) c = {50, 50, 50, 255}; 
+            if (u->team == BattleUnitComponent::Player) bgCol = {50, 50, 150, 255};
+            else bgCol = {150, 50, 50, 255};
         }
         
-        ren->DrawRect2D(x, y, size, size, c);
+        // Draw larger highlight for current turn
+        if (isCurrent) {
+            ren->DrawRect2D(x - 4, y - 4, size + 8, size + 8, borderCol);
+            // Arrow removed
+        }
+        
+        ren->DrawRect2D(x, y, size, size, bgCol);
         
         auto* mesh = m_Registry->GetComponent<MeshComponent>(e);
         if (mesh) {
@@ -496,7 +759,7 @@ void BattleMode::DrawTurnOrder(GLRenderer* ren, TextRenderer* tr, int w, int h) 
             float pct = (float)u->hp / (float)u->maxHp;
             pct = std::max(0.0f, std::min(1.0f, pct));
             int barH = (int)(size * pct);
-            ren->DrawRect2D(x, y + size - barH, 5, barH, {255, 0, 0, 200});
+            ren->DrawRect2D(x, y + size - barH, 4, barH, {255, 0, 0, 200});
         }
     }
 }
@@ -525,21 +788,13 @@ void BattleMode::UpdateAI(float dt) {
     }
     
     if (target != -1 && actor->hasAction) {
+        auto* t2 = m_Registry->GetComponent<Transform3DComponent>(target);
         if (minDist < 2.0f) {
-            auto* tgt = m_Registry->GetComponent<BattleUnitComponent>(target);
-            int roll = rand() % 20 + 1;
-            if (roll + 4 >= tgt->ac) {
-                tgt->hp -= rand() % 6 + 2;
-                std::cout << "Enemy Hits Player! HP: " << tgt->hp << std::endl;
-                if (tgt->hp <= 0) m_Registry->DestroyEntity(target);
-            } else {
-                std::cout << "Enemy Misses!" << std::endl;
-            }
-            actor->hasAction = false;
+            ExecuteAction(current, Melee, target, 0, 0);
+            return;
         } else {
             float moveDist = std::min(actor->currentMovement, minDist - 1.5f);
             if (moveDist > 0) {
-                auto* t2 = m_Registry->GetComponent<Transform3DComponent>(target);
                 float angle = atan2(t2->y - t1->y, t2->x - t1->x);
                 
                 m_AnimState.actor = current;

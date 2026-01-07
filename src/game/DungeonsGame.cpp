@@ -134,6 +134,13 @@ void DungeonsGame::OnUpdate(float deltaTime) {
           m_MenuSelection = 0;
       }
   }
+  else if (m_State == GameState::AnimationTest) {
+      UpdateAnimationTest(deltaTime);
+      if (Input::IsKeyPressed(SDL_SCANCODE_ESCAPE)) {
+          m_State = GameState::Paused;
+          m_MenuSelection = 0;
+      }
+  }
   else if (m_State == GameState::Paused) {
     HandleInputPause();
   }
@@ -142,6 +149,12 @@ void DungeonsGame::OnUpdate(float deltaTime) {
 void DungeonsGame::UpdateBattle(float dt) {
     if (m_BattleMode) {
         m_BattleMode->Update(dt, m_PlayerEntity);
+    }
+}
+
+void DungeonsGame::UpdateAnimationTest(float dt) {
+    if (m_AnimationTestMode) {
+        m_AnimationTestMode->Update(dt);
     }
 }
 

@@ -9,9 +9,10 @@
 #include "SiegeMode.h"
 #include "ExplorationMode.h"
 #include "BattleMode.h"
+#include "AnimationTestMode.h"
 #include <memory>
 
-enum class GameState { MainMenu, Playing, Creative, Siege, Battle, Paused };
+enum class GameState { MainMenu, Playing, Creative, Siege, Battle, AnimationTest, Paused };
 
 class DungeonsGame : public PixelsEngine::Application {
 public:
@@ -28,12 +29,14 @@ private:
   void InitGame();
   void InitSiege();
   void InitBattle();
+  void InitAnimationTest();
   void InitMainMenu();
 
   void UpdateMainMenu(float dt);
   void UpdateGameplay(float dt);
   void UpdateSiege(float dt);
   void UpdateBattle(float dt);
+  void UpdateAnimationTest(float dt);
 
   void RenderMainMenu();
   void RenderGameplay();
@@ -62,6 +65,7 @@ private:
   std::unique_ptr<SiegeMode> m_SiegeMode;
   std::unique_ptr<ExplorationMode> m_ExplorationMode;
   std::unique_ptr<BattleMode> m_BattleMode;
+  std::unique_ptr<AnimationTestMode> m_AnimationTestMode;
 
   std::shared_ptr<PixelsEngine::Texture> m_BowIdle;
   std::shared_ptr<PixelsEngine::Texture> m_BowDraw;

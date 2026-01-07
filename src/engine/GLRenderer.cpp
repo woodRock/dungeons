@@ -52,41 +52,47 @@ void GLRenderer::Init(int width, int height) {
     }
   )";
 
-  const char *fShader = R"(
-    #version 330 core
-    out vec4 FragColor;
-    in vec2 TexCoord;
-    in vec3 Normal;
-    in vec3 FragPos;
-    uniform sampler2D ourTexture;
-    uniform vec3 lightPos;
-    uniform float alpha;
-    uniform bool useFlatColor;
-    uniform vec4 flatColor;
-
-    void main() {
-        if (useFlatColor) {
-            FragColor = flatColor;
-        } else {
-            vec3 ambient = 0.3 * vec3(1.0);
-            vec3 norm = normalize(Normal);
-            vec3 lightDir = normalize(lightPos - FragPos);
-            vec3 diffuse = max(dot(norm, lightDir), 0.0) * vec3(1.0);
-            vec4 texColor = texture(ourTexture, TexCoord);
-            
-            vec3 finalColor = (ambient + diffuse) * texColor.rgb;
-            if (length(texColor.rgb) < 0.01) finalColor = vec3(1.0, 0.0, 1.0);
-            
-            FragColor = vec4(finalColor, alpha);
-        }
-    }
-  )";
-
-  m_Shader = std::make_unique<Shader>(vShader, fShader);
-  m_Shader->Use();
-  m_Shader->SetFloat("alpha", 1.0f);
-  m_Shader->SetInt("useFlatColor", 0);
+      const char *fShader = R"(
+      #version 330 core
+      out vec4 FragColor;
+      in vec2 TexCoord;
+      in vec3 Normal;
+      in vec3 FragPos;
+      uniform sampler2D ourTexture;
+      uniform vec3 lightPos;
+      uniform float alpha;
+      uniform bool useFlatColor;
+      uniform vec4 flatColor;
+      uniform vec3 flashColor;
+      uniform float flashAmount;
   
+      void main() {
+          if (useFlatColor) {
+              FragColor = flatColor;
+          } else {
+              vec3 ambient = 0.3 * vec3(1.0);
+              vec3 norm = normalize(Normal);
+              vec3 lightDir = normalize(lightPos - FragPos);
+              vec3 diffuse = max(dot(norm, lightDir), 0.0) * vec3(1.0);
+              vec4 texColor = texture(ourTexture, TexCoord);
+              
+              vec3 finalColor = (ambient + diffuse) * texColor.rgb;
+              if (length(texColor.rgb) < 0.01) finalColor = vec3(1.0, 0.0, 1.0);
+              
+              // Apply flash
+              finalColor = mix(finalColor, flashColor, flashAmount);
+              
+              FragColor = vec4(finalColor, alpha);
+          }
+      }
+    )";
+  
+    m_Shader = std::make_unique<Shader>(vShader, fShader);
+    m_Shader->Use();
+    m_Shader->SetFloat("alpha", 1.0f);
+    m_Shader->SetInt("useFlatColor", 0);
+    m_Shader->SetVec3("flashColor", 1.0f, 0.0f, 0.0f);
+    m_Shader->SetFloat("flashAmount", 0.0f);  
   glGenTextures(1, &m_DefaultTexture);
   glBindTexture(GL_TEXTURE_2D, m_DefaultTexture);
   unsigned char white[] = {255, 255, 255, 255};
@@ -240,10 +246,12 @@ void GLRenderer::UpdateSkinnedMesh(RenderMesh& rm, int animIdx, float time) {
     }
 
     // 4. Final Skin Matrices = GlobalTransform * InverseBindMatrix
+    rm.boneGlobalMatrices.resize(globals.size() * 16);
     for(size_t i=0; i<globals.size(); i++) {
         Mat4 ibm; memcpy(ibm.m, rm.skeleton.bones[i].inverseBindMatrix, 64);
         Mat4 finalMatrix = globals[i] * ibm;
         memcpy(&rm.skeleton.jointMatrices[i*16], finalMatrix.m, 64);
+        memcpy(&rm.boneGlobalMatrices[i*16], globals[i].m, 64);
     }
 }
 
@@ -263,12 +271,21 @@ void GLRenderer::Render(SDL_Window *win, const Camera &cam, Registry &reg, bool 
     auto &viewGroup = reg.View<MeshComponent>();
     for (auto &pair : viewGroup) {
         auto &mc = pair.second; auto *t = reg.GetComponent<Transform3DComponent>(pair.first);
+        auto *unit = reg.GetComponent<BattleUnitComponent>(pair.first);
+        
         if (m_Meshes.count(mc.meshName)) {
             RenderMesh &rm = m_Meshes[mc.meshName];
             Mat4 model = Mat4::Translate({t?t->x:0, t?t->z:0, t?-t->y:0});
-            if (t) model = model * Mat4::RotateY(-t->rot);
+            if (t) model = model * Mat4::RotateY(1.57f - t->rot);
             model = model * Mat4::Scale({mc.scaleX, mc.scaleZ, mc.scaleY});
             m_Shader->SetMat4("model", model.m);
+            
+            if (unit && unit->flashAmount > 0.0f) {
+                m_Shader->SetFloat("flashAmount", unit->flashAmount);
+            } else {
+                m_Shader->SetFloat("flashAmount", 0.0f);
+            }
+
             if (rm.isSkinned) {
                 m_Shader->SetInt("useSkinning", 1);
                 std::vector<float> jm(64*16, 0.0f); for(int i=0;i<64;i++) jm[i*16]=jm[i*16+5]=jm[i*16+10]=jm[i*16+15]=1.0f;
@@ -279,13 +296,47 @@ void GLRenderer::Render(SDL_Window *win, const Camera &cam, Registry &reg, bool 
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, (m_Textures.count(mc.textureName)) ? m_Textures[mc.textureName] : m_DefaultTexture);
             glBindVertexArray(rm.VAO); glDrawElements(GL_TRIANGLES, rm.indexCount, GL_UNSIGNED_INT, 0);
+
+            // Handle Attachments (Weapons)
+            auto* attach = reg.GetComponent<AttachmentComponent>(pair.first);
+            if (attach && rm.isSkinned && !rm.boneGlobalMatrices.empty()) {
+                int bIdx = -1;
+                for (size_t i = 0; i < rm.skeleton.bones.size(); i++) {
+                    if (rm.skeleton.bones[i].name == attach->boneName) { bIdx = (int)i; break; }
+                }
+                
+                if (bIdx == -1) {
+                    static bool logged = false;
+                    if (!logged) {
+                        std::cout << "Attachment Error: Bone '" << attach->boneName << "' not found in mesh '" << mc.meshName << "'" << std::endl;
+                        std::cout << "Available bones: ";
+                        for(auto& b : rm.skeleton.bones) std::cout << b.name << ", ";
+                        std::cout << std::endl;
+                        logged = true;
+                    }
+                }
+
+                if (bIdx != -1) {
+                    Mat4 boneGlobal; memcpy(boneGlobal.m, &rm.boneGlobalMatrices[bIdx * 16], 64);
+                    Mat4 weaponModel = model * boneGlobal * Mat4::RotateX(attach->rotX) * Mat4::RotateY(attach->rotY) * Mat4::RotateZ(attach->rotZ) * Mat4::Scale({attach->scale, attach->scale, attach->scale});
+                    m_Shader->SetMat4("model", weaponModel.m);
+                    m_Shader->SetInt("useSkinning", 0);
+                    if (m_Meshes.count(attach->meshName)) {
+                        RenderMesh& wrm = m_Meshes[attach->meshName];
+                        glBindTexture(GL_TEXTURE_2D, (m_Textures.count(attach->textureName)) ? m_Textures[attach->textureName] : m_DefaultTexture);
+                        glBindVertexArray(wrm.VAO); glDrawElements(GL_TRIANGLES, wrm.indexCount, GL_UNSIGNED_INT, 0);
+                    }
+                }
+            }
         }
     }
     if (swap) SDL_GL_SwapWindow(win);
 }
 
 bool GLRenderer::LoadMesh(const std::string &name, const std::string &path) {
-    Mesh m; if (!(path.find(".glb") != std::string::npos ? GLTFLoader::Load(path, m) : OBJLoader::Load(path, m))) return false;
+    Mesh m; 
+    bool isGltf = (path.find(".glb") != std::string::npos || path.find(".gltf") != std::string::npos);
+    if (!(isGltf ? GLTFLoader::Load(path, m) : OBJLoader::Load(path, m))) return false;
     RenderMesh rm; rm.indexCount = (unsigned int)m.indices.size(); rm.isSkinned = m.isSkinned; rm.skeleton = m.skeleton; rm.animations = m.animations;
     glGenVertexArrays(1, &rm.VAO); glGenBuffers(1, &rm.VBO); glGenBuffers(1, &rm.EBO);
     glBindVertexArray(rm.VAO); glBindBuffer(GL_ARRAY_BUFFER, rm.VBO);
@@ -325,7 +376,7 @@ unsigned int GLRenderer::CreateTextureFromSurface(SDL_Surface *s) {
 
 void GLRenderer::Resize(int w, int h) { m_Width = w; m_Height = h; }
 
-void GLRenderer::DrawWireCube(float x, float y, float z, float s, SDL_Color c) {
+void GLRenderer::DrawWireCube(float x, float y, float z, float s, SDL_Color c, float thickness) {
     static unsigned int cubeVAO = 0;
     static unsigned int cubeVBO = 0;
     if (cubeVAO == 0) {
@@ -347,21 +398,22 @@ void GLRenderer::DrawWireCube(float x, float y, float z, float s, SDL_Color c) {
     }
 
     m_Shader->Use();
-    Mat4 model = Mat4::Translate({x, y, z}) * Mat4::Scale({s, s, s});
+    Mat4 model = Mat4::Translate({x, z, -y}) * Mat4::Scale({s, s, s});
     m_Shader->SetMat4("model", model.m);
     m_Shader->SetInt("useSkinning", 0);
     m_Shader->SetInt("useFlatColor", 1);
     m_Shader->SetVec4("flatColor", c.r/255.0f, c.g/255.0f, c.b/255.0f, c.a/255.0f);
+    m_Shader->SetFloat("flashAmount", 0.0f);
     
     glBindVertexArray(cubeVAO);
-    glLineWidth(2.0f);
+    glLineWidth(thickness);
     glDrawArrays(GL_LINES, 0, 24);
     glLineWidth(1.0f);
     
     m_Shader->SetInt("useFlatColor", 0);
 }
 
-void GLRenderer::DrawWireCircle(float x, float y, float z, float radius, SDL_Color c) {
+void GLRenderer::DrawWireCircle(float x, float y, float z, float radius, SDL_Color c, float thickness) {
     static unsigned int circleVAO = 0;
     static unsigned int circleVBO = 0;
     static int segments = 32;
@@ -383,15 +435,46 @@ void GLRenderer::DrawWireCircle(float x, float y, float z, float radius, SDL_Col
     }
 
     m_Shader->Use();
-    Mat4 model = Mat4::Translate({x, y, z}) * Mat4::Scale({radius, radius, 1.0f});
+    Mat4 model = Mat4::Translate({x, z, -y}) * Mat4::RotateX(M_PI/2) * Mat4::Scale({radius, radius, 1.0f});
     m_Shader->SetMat4("model", model.m);
     m_Shader->SetInt("useSkinning", 0);
     m_Shader->SetInt("useFlatColor", 1);
     m_Shader->SetVec4("flatColor", c.r/255.0f, c.g/255.0f, c.b/255.0f, c.a/255.0f);
+    m_Shader->SetFloat("flashAmount", 0.0f);
     
     glBindVertexArray(circleVAO);
-    glLineWidth(2.0f);
+    glLineWidth(thickness);
     glDrawArrays(GL_LINE_STRIP, 0, segments + 1);
+    glLineWidth(1.0f);
+    
+    m_Shader->SetInt("useFlatColor", 0);
+}
+
+void GLRenderer::DrawLine(float x1, float y1, float z1, float x2, float y2, float z2, SDL_Color c, float thickness) {
+    static unsigned int lineVAO = 0;
+    static unsigned int lineVBO = 0;
+    if (lineVAO == 0) {
+        glGenVertexArrays(1, &lineVAO);
+        glGenBuffers(1, &lineVBO);
+    }
+
+    float v[] = { x1, z1, -y1, x2, z2, -y2 };
+    
+    m_Shader->Use();
+    m_Shader->SetMat4("model", Mat4::Identity().m);
+    m_Shader->SetInt("useSkinning", 0);
+    m_Shader->SetInt("useFlatColor", 1);
+    m_Shader->SetVec4("flatColor", c.r/255.0f, c.g/255.0f, c.b/255.0f, c.a/255.0f);
+    m_Shader->SetFloat("flashAmount", 0.0f);
+    
+    glBindVertexArray(lineVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, lineVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(v), v, GL_DYNAMIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    
+    glLineWidth(thickness);
+    glDrawArrays(GL_LINES, 0, 2);
     glLineWidth(1.0f);
     
     m_Shader->SetInt("useFlatColor", 0);

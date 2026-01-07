@@ -18,6 +18,7 @@ struct RenderMesh {
   bool isSkinned = false;
   Skeleton skeleton;
   std::vector<SkeletalAnimation> animations;
+  std::vector<float> boneGlobalMatrices; // Stores global transforms for attachments
 };
 
 class GLRenderer {
@@ -36,8 +37,9 @@ public:
   void InitUI();
     void DrawRect2D(int x, int y, int w, int h, SDL_Color color);
     void DrawTexture2D(unsigned int textureID, int x, int y, int w, int h, SDL_Color color = {255,255,255,255});
-    void DrawWireCube(float x, float y, float z, float size, SDL_Color color);
-    void DrawWireCircle(float x, float y, float z, float radius, SDL_Color color);
+    void DrawWireCube(float x, float y, float z, float size, SDL_Color color, float thickness = 1.0f);
+    void DrawWireCircle(float x, float y, float z, float radius, SDL_Color color, float thickness = 1.0f);
+    void DrawLine(float x1, float y1, float z1, float x2, float y2, float z2, SDL_Color color, float thickness = 1.0f);
     void RenderThumbnail(const std::string& meshName, const std::string& textureName, int x, int y, int size);
     void RenderMeshPreview(const std::string& meshName, const std::string& textureName, float x, float y, float z, float rot, float alpha, float offsetX = 0, float offsetY = 0, float offsetZ = 0);
     

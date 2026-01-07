@@ -21,6 +21,10 @@ void DungeonsGame::OnRender() {
     // We pass false to prevent internal swap.
     m_GLRenderer.Render(m_Window, *m_Camera, m_Registry, false);
 
+    if (m_State == GameState::Battle && m_BattleMode) {
+        m_BattleMode->RenderWorld(&m_GLRenderer);
+    }
+
     if (m_State == GameState::Creative) {
       m_Editor.Render3D(&m_GLRenderer);
     }

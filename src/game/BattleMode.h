@@ -3,6 +3,7 @@
 #include "../engine/GLRenderer.h"
 #include "../engine/Camera.h"
 #include "../engine/Components.h" 
+#include <SDL2/SDL_mixer.h>
 #include <string>
 #include <vector>
 
@@ -13,6 +14,7 @@ public:
     BattleMode(PixelsEngine::Registry* registry, PixelsEngine::GLRenderer* renderer);
     void Init(PixelsEngine::Camera* camera, PixelsEngine::Entity& playerEntity);
     void Update(float dt, PixelsEngine::Entity playerEntity);
+    void RenderWorld(PixelsEngine::GLRenderer* renderer);
     void RenderUI(PixelsEngine::GLRenderer* renderer, PixelsEngine::TextRenderer* textRenderer, int w, int h);
 
 private:
@@ -43,6 +45,15 @@ private:
         float duration = 0.0f;
     } m_AnimState;
 
+    // Audio
+    Mix_Music* m_Music = nullptr;
+    Mix_Chunk* m_SfxJump = nullptr;
+    Mix_Chunk* m_SfxShoot = nullptr;
+    Mix_Chunk* m_SfxBowHit = nullptr;
+    Mix_Chunk* m_SfxSwordHit = nullptr;
+    Mix_Chunk* m_SfxSwordMiss = nullptr;
+
+    bool isMouseOverUI(int mx, int my, int w, int h);
     void LoadMap(const std::string& path);
     void SpawnCharacter(const std::string& mesh, float x, float y, PixelsEngine::BattleUnitComponent::Team team);
     
@@ -51,6 +62,7 @@ private:
     void HandlePlayerInput();
     void ExecuteAction(PixelsEngine::Entity actor, ActionType action, PixelsEngine::Entity target, float x, float y);
     void UpdateAI(float dt);
+    void CheckVictory();
     
     void DrawActionBar(PixelsEngine::GLRenderer* ren, PixelsEngine::TextRenderer* tr, int w, int h);
     void DrawTurnOrder(PixelsEngine::GLRenderer* ren, PixelsEngine::TextRenderer* tr, int w, int h);
