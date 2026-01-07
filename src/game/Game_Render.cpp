@@ -24,6 +24,9 @@ void DungeonsGame::OnRender() {
 
   // 2. Render 3D Scene (OpenGL), don't swap yet if we have UI
   if (m_State != GameState::MainMenu && m_State != GameState::MapSelect && m_State != GameState::FloorSelect) {
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+
     // m_GLRenderer.Render already sets viewport and clears,
     // but we called it above too. That's fine.
     // We pass false to prevent internal swap.

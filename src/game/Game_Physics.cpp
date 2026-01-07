@@ -77,23 +77,7 @@ void DungeonsGame::UpdatePhysics(float dt) {
 
     if (!t) continue;
 
-    // Special handling for player grappling
-    if (entity == m_PlayerEntity && m_IsGrappling) {
-      float dx = m_GrapplePoint.x - t->x;
-      float dy = m_GrapplePoint.y - t->y;
-      float dz = m_GrapplePoint.z - t->z;
-      float dist = sqrt(dx * dx + dy * dy + dz * dz);
 
-      if (dist < 1.0f) {
-        m_IsGrappling = false;
-        phys->velZ = 5.0f;
-      } else {
-        float speed = 20.0f;
-        phys->velX = (dx / dist) * speed;
-        phys->velY = (dy / dist) * speed;
-        phys->velZ = (dz / dist) * speed;
-      }
-    }
 
     // Floor Detection (Improved with AABB)
     float currentFloorHeight = -100.0f; // Default to falling
@@ -402,6 +386,26 @@ void DungeonsGame::UpdateProjectiles(float dt) {
     p->lifeTime -= dt;
 
     bool hitWall = m_Map.Get(int(t->x), int(t->y)) > 0;
+    
+    // Hitbox collision check (for procedural platforms)
+    if (!hitWall) {
+        auto &meshes = m_Registry.View<MeshComponent>();
+        for (auto &mPair : meshes) {
+            auto *hc = m_Registry.GetComponent<HitboxComponent>(mPair.first);
+            auto *wt = m_Registry.GetComponent<Transform3DComponent>(mPair.first);
+            if (hc && wt) {
+                RenderMesh* rm = m_GLRenderer.GetRenderMesh(mPair.second.meshName);
+                if (rm) {
+                    AABB worldAABB = GetWorldAABB(rm->boundingBox, *wt, mPair.second.scaleX, mPair.second.scaleY, mPair.second.scaleZ);
+                    if (worldAABB.Contains(t->x, t->y, t->z)) {
+                        hitWall = true;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     bool hitFloor = t->z < 0;
 
     // Enemy Collision (Siege Mode)
@@ -529,12 +533,6 @@ void DungeonsGame::UpdateProjectiles(float dt) {
                      1.0f,
                      {200, 150, 100, 255},
                      2.0f});
-        }
-        if (p->type == ProjectileComponent::Grapple) {
-          m_IsGrappling = true;
-          m_GrapplePoint = {t->x, t->y, t->z};
-          m_ShakeTimer = 0.15f;
-          m_ShakeIntensity = 0.05f;
         }
       }
       toDestroy.push_back(entity);

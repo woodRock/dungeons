@@ -111,7 +111,7 @@ private:
   Mix_Chunk *m_SfxShoot = nullptr;
   Mix_Chunk *m_SfxHit = nullptr;
   Mix_Chunk *m_SfxJump = nullptr;
-  Mix_Chunk *m_SfxGrapple = nullptr;
+
   Mix_Chunk *m_SfxDoor = nullptr;
   Mix_Chunk *m_SfxChestOpen = nullptr;
   Mix_Music *m_Ambience = nullptr;
@@ -153,10 +153,7 @@ private:
   float m_ShakeIntensity = 0.0f;
   float m_ShakeTimer = 0.0f;
 
-  bool m_IsGrappling = false;
-  struct {
-    float x, y, z;
-  } m_GrapplePoint;
+
 
   // Spatial Audio Helper
   void PlaySpatialSfx(Mix_Chunk *chunk, float x, float y, float z);

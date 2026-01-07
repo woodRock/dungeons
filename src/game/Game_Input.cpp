@@ -169,7 +169,7 @@ void DungeonsGame::HandleInputGameplay(float dt) {
   float maxSpeed = phys->isSliding ? p->speed * 2.0f : p->speed;
   float currentSpeed = sqrt(phys->velX * phys->velX + phys->velY * phys->velY);
 
-  if (currentSpeed > maxSpeed && !m_IsGrappling && !phys->isSliding) {
+  if (currentSpeed > maxSpeed && !phys->isSliding) {
     phys->velX = (phys->velX / currentSpeed) * maxSpeed;
     phys->velY = (phys->velY / currentSpeed) * maxSpeed;
   }
@@ -180,12 +180,7 @@ void DungeonsGame::HandleInputGameplay(float dt) {
 
   // Only handle combat if weapon component exists (not in Creative mode)
   if (weapon) {
-    bool wantsGrapple = Input::IsMouseButtonPressed(SDL_BUTTON_RIGHT) ||
-                        (Input::IsKeyDown(SDL_SCANCODE_E) &&
-                         Input::IsMouseButtonPressed(SDL_BUTTON_LEFT));
-
-    if (Input::IsMouseButtonDown(SDL_BUTTON_LEFT) &&
-        !Input::IsKeyDown(SDL_SCANCODE_E)) {
+    if (Input::IsMouseButtonDown(SDL_BUTTON_LEFT) && !Input::IsKeyDown(SDL_SCANCODE_E)) {
       if (!weapon->isDrawing && weapon->cooldown <= 0) {
         weapon->isDrawing = true;
         weapon->drawTime = 0.0f;
@@ -194,25 +189,6 @@ void DungeonsGame::HandleInputGameplay(float dt) {
         if (weapon->drawTime > 1.0f)
           weapon->drawTime = 1.0f;
       }
-    } else if (wantsGrapple && weapon->cooldown <= 0) {
-      // Fire Grapple
-      if (m_SfxGrapple)
-        Mix_PlayChannel(-1, m_SfxGrapple, 0);
-
-      auto arrow = m_Registry.CreateEntity();
-      float ax = t->x + cos(t->rot) * 0.5f;
-      float ay = t->y + sin(t->rot) * 0.5f;
-
-      m_Registry.AddComponent<Transform3DComponent>(
-          arrow, {ax, ay, t->z, t->rot, t->pitch});
-      m_Registry.AddComponent<ProjectileComponent>(
-          arrow, {ProjectileComponent::Grapple, 0.0f, true, 2.0f});
-
-      float speed = 25.0f;
-      m_Registry.AddComponent<PhysicsComponent>(
-          arrow, {cos(t->rot) * speed, sin(t->rot) * speed, t->pitch * 0.05f,
-                  0.0f, false, false, 0.0f, 0.0f});
-      weapon->cooldown = 1.0f;
     } else {
       if (weapon->isDrawing) {
         // Fire Arrow
@@ -255,6 +231,8 @@ void DungeonsGame::HandleInputGameplay(float dt) {
       weapon->cooldown -= dt;
   }
 }
+
+
 
 void DungeonsGame::HandleInputMenu() {
   int w = m_Width;

@@ -111,8 +111,7 @@ struct DoorComponent {
 };
 
 struct ProjectileComponent {
-  enum Type { Arrow, Grapple };
-  Type type = Arrow;
+      enum Type { Arrow };  Type type = Arrow;
   float damage = 10.0f;
   bool active = true;
   float lifeTime = 5.0f;

@@ -134,12 +134,12 @@ void DungeonsGame::RenderUI() {
             "SECTION 2: PARKOUR. Jump against the mossy wall to Wall Run!";
       else if (t->x > 12 && t->y >= 12)
         tutorial =
-            "SECTION 3: GRAPPLE. Right Click (or E+Click) a pillar to Zip!";
+            "SECTION 3: PARKOUR MASTERY. Show us what you've got!";
     } else if (m_CurrentLevel == 2) {
       tutorial = "LEVEL 2: Wall Run over the Lava to find the hidden target!";
     } else if (m_CurrentLevel == 3) {
       tutorial =
-          "LEVEL 3: GRAPPLE GAUNTLET. Zip between pillars to cross the pit!";
+          "LEVEL 3: THE PIT. Don't look down!";
     }
 
     if (!tutorial.empty())

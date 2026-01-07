@@ -44,7 +44,7 @@ void DungeonsGame::InitMainMenu() {
 
 void DungeonsGame::InitGame() {
   m_Registry = Registry();
-  m_IsGrappling = false;
+
   m_GameFinished = false;
   m_RunTimer = 0.0f;
   m_TargetsDestroyed = 0;
@@ -60,7 +60,7 @@ void DungeonsGame::InitGame() {
 
 void DungeonsGame::InitSiege() {
   m_Registry = Registry();
-  m_IsGrappling = false;
+
   m_GameFinished = false;
   m_State = GameState::Siege;
   SDL_SetRelativeMouseMode(SDL_FALSE);
@@ -73,7 +73,7 @@ void DungeonsGame::InitSiege() {
 
 void DungeonsGame::InitBattle() {
   m_Registry = Registry();
-  m_IsGrappling = false;
+
   m_GameFinished = false;
   m_State = GameState::Battle;
   SDL_SetRelativeMouseMode(SDL_FALSE);
