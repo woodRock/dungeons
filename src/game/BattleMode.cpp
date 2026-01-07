@@ -11,7 +11,9 @@
 using namespace PixelsEngine;
 
 BattleMode::BattleMode(Registry* registry, GLRenderer* renderer)
-    : m_Registry(registry), m_Renderer(renderer) {}
+    : m_Registry(registry), m_Renderer(renderer) {
+    m_SelectedAction = Move;
+}
 
 void BattleMode::Init(Camera* camera, Entity& playerEntity) {
     m_Camera = camera;
@@ -127,6 +129,24 @@ bool BattleMode::isMouseOverUI(int mx, int my, int w, int h) {
     return false;
 }
 
+bool BattleMode::IsPositionOccupied(float x, float y, Entity ignoreEntity) {
+    auto& units = m_Registry->View<BattleUnitComponent>();
+    for (auto& pair : units) {
+        Entity e = pair.first;
+        if (e == ignoreEntity) continue;
+        
+        auto& u = pair.second;
+        if (u.hp <= 0) continue; // Don't collide with dead
+        
+        auto* t = m_Registry->GetComponent<Transform3DComponent>(e);
+        if (t) {
+            float dist = sqrt(pow(x - t->x, 2) + pow(y - t->y, 2));
+            if (dist < 1.2f) return true; // Collision radius
+        }
+    }
+    return false;
+}
+
 void BattleMode::LoadMap(const std::string& path) {
     std::ifstream in(path);
     if (!in.is_open()) return;
@@ -149,8 +169,8 @@ void BattleMode::SpawnCharacter(const std::string& mesh, float x, float y, Battl
     if (mesh == "Rogue") tex = "rogue_tex";
     if (mesh.find("Skeleton") != std::string::npos) tex = "skeleton_tex";
     
-    // Players at -Y face +Y (1.57), rotate 90 CW to 0.0. Enemies at +Y face -Y (-1.57), rotate 90 CW to 3.14.
-    float initialRot = (team == BattleUnitComponent::Player) ? 0.0f : 3.14f;
+    // Players at -Y face +Y, Enemies at +Y face -Y. Swapping from previous to fix 180 deg issue.
+    float initialRot = (team == BattleUnitComponent::Player) ? 3.14f : 0.0f;
     m_Registry->AddComponent<Transform3DComponent>(e, {x, y, 0.0f, initialRot, 0.0f});
     m_Registry->AddComponent<MeshComponent>(e, {mesh, tex, 1.0f, 1.0f, 1.0f});
     
@@ -245,7 +265,7 @@ void BattleMode::NextTurn() {
         std::cout << "Turn: Enemy Unit " << current << std::endl;
     }
     m_Cursor.active = false;
-    m_SelectedAction = None;
+    m_SelectedAction = Move;
 }
 
 void BattleMode::Update(float dt, Entity playerEntity) {
@@ -343,7 +363,13 @@ void BattleMode::Update(float dt, Entity playerEntity) {
         
         // Update weapon mesh based on action
         Entity current = m_TurnOrder[m_CurrentTurnIndex];
+        auto* t = m_Registry->GetComponent<Transform3DComponent>(current);
         auto* attach = m_Registry->GetComponent<AttachmentComponent>(current);
+        
+            if (t && m_Cursor.active) {
+                // Flipped signs to fix inversion
+                t->rot = atan2(t->x - m_Cursor.x, t->y - m_Cursor.y);
+            }
         if (attach) {
             if (m_SelectedAction == Ranged) {
                 attach->meshName = "Crossbow";
@@ -488,7 +514,7 @@ void BattleMode::HandlePlayerInput() {
 
         // ONLY allow movement if Move or Jump is selected
         if (m_SelectedAction == Move || m_SelectedAction == Jump) {
-            if (m_Cursor.hoveredEntity == -1) {
+            if (m_Cursor.hoveredEntity == -1 && !IsPositionOccupied(m_Cursor.x, m_Cursor.y, current)) {
                 float dist = sqrt(pow(m_Cursor.x - t->x, 2) + pow(m_Cursor.y - t->y, 2));
                 float maxRange = (m_SelectedAction == Jump) ? 5.0f : unit->currentMovement;
 
@@ -530,11 +556,11 @@ void BattleMode::HandlePlayerInput() {
                                   pow(t->y - m_Registry->GetComponent<Transform3DComponent>(m_Cursor.hoveredEntity)->y, 2));
                 
                 if (m_SelectedAction == Melee) {
-                    if (dist < 2.0f) ExecuteAction(current, Melee, m_Cursor.hoveredEntity, 0, 0);
+                    if (dist < 2.0f) { ExecuteAction(current, Melee, m_Cursor.hoveredEntity, 0, 0); m_SelectedAction = Move; }
                 } else if (m_SelectedAction == Ranged) {
-                    if (dist < 15.0f) ExecuteAction(current, Ranged, m_Cursor.hoveredEntity, 0, 0);
+                    if (dist < 15.0f) { ExecuteAction(current, Ranged, m_Cursor.hoveredEntity, 0, 0); m_SelectedAction = Move; }
                 } else if (m_SelectedAction == Shove) {
-                    if (dist < 2.0f) ExecuteAction(current, Shove, m_Cursor.hoveredEntity, 0, 0);
+                    if (dist < 2.0f) { ExecuteAction(current, Shove, m_Cursor.hoveredEntity, 0, 0); m_SelectedAction = Move; }
                 }
             }
         }
@@ -554,7 +580,7 @@ void BattleMode::ExecuteAction(Entity actor, ActionType action, Entity target, f
     
     // Rotate actor to face target
     if (tActor && tTarget) {
-        tActor->rot = atan2(tTarget->y - tActor->y, tTarget->x - tActor->x);
+        tActor->rot = atan2(tActor->x - tTarget->x, tActor->y - tTarget->y);
     }
 
     if (action == Ranged) {
@@ -610,8 +636,8 @@ void BattleMode::ExecuteAction(Entity actor, ActionType action, Entity target, f
                     m_State = Attacking;
                     m_AnimState.actor = actor;
                     m_AnimState.timer = 0.0f;
-                    // Speed up ranged attacks (fixed 0.4s travel time)
-                    m_AnimState.duration = (action == Ranged) ? 0.4f : rm->animations[bestIdx].duration;
+                    // Speed up ranged attacks (fixed 0.1s travel time)
+                    m_AnimState.duration = (action == Ranged) ? 0.1f : rm->animations[bestIdx].duration;
                     if (m_AnimState.duration <= 0) m_AnimState.duration = 1.0f;
                 }
             }
@@ -667,8 +693,8 @@ void BattleMode::RenderUI(GLRenderer* ren, TextRenderer* tr, int w, int h) {
 
 void BattleMode::CheckVictory() {
     bool enemyAlive = false;
-    auto view = m_Registry->View<BattleUnitComponent>();
-    for (auto& pair : view) {
+    auto& units = m_Registry->View<BattleUnitComponent>();
+    for (auto& pair : units) {
         if (pair.second.team == BattleUnitComponent::Enemy && pair.second.hp > 0) {
             enemyAlive = true;
             break;
@@ -839,34 +865,45 @@ void BattleMode::UpdateAI(float dt) {
             if (moveDist > 0) {
                 float angle = atan2(t2->y - t1->y, t2->x - t1->x);
                 
-                m_AnimState.actor = current;
-                m_AnimState.startX = t1->x; m_AnimState.startY = t1->y;
-                m_AnimState.targetX = t1->x + cos(angle) * moveDist;
-                m_AnimState.targetY = t1->y + sin(angle) * moveDist;
-                m_AnimState.duration = moveDist / 5.0f;
-                m_AnimState.timer = 0.0f;
-                m_State = Moving;
-                t1->rot = angle;
-                actor->currentMovement -= moveDist;
-                
-                // Set Run Animation for enemy
-                auto* animComp = m_Registry->GetComponent<SkeletalAnimationComponent>(current);
-                auto* mesh = m_Registry->GetComponent<MeshComponent>(current);
-                if (animComp && mesh) {
-                    RenderMesh* rm = m_Renderer->GetRenderMesh(mesh->meshName);
-                    if (rm) {
-                        for(size_t i=0; i<rm->animations.size(); i++) {
-                            if (rm->animations[i].name.find("Run") != std::string::npos || 
-                                rm->animations[i].name.find("Walk") != std::string::npos) {
-                                animComp->animationIndex = (int)i;
-                                animComp->currentTime = 0.0f;
-                                break;
+                float destX = t1->x + cos(angle) * moveDist;
+                float destY = t1->y + sin(angle) * moveDist;
+
+                // Simple collision avoidance for AI: if destination is blocked, try reducing distance
+                while (moveDist > 0.5f && IsPositionOccupied(destX, destY, current)) {
+                    moveDist -= 0.5f;
+                    destX = t1->x + cos(angle) * moveDist;
+                    destY = t1->y + sin(angle) * moveDist;
+                }
+
+                if (moveDist > 0.5f) {
+                    m_AnimState.actor = current;
+                    m_AnimState.startX = t1->x; m_AnimState.startY = t1->y;
+                    m_AnimState.targetX = destX;
+                    m_AnimState.targetY = destY;
+                    m_AnimState.duration = moveDist / 5.0f;
+                    m_AnimState.timer = 0.0f;
+                    m_State = Moving;
+                    t1->rot = atan2(t1->x - destX, t1->y - destY); // Face movement direction
+                    actor->currentMovement -= moveDist;
+                    
+                    // Set Run Animation for enemy
+                    auto* animComp = m_Registry->GetComponent<SkeletalAnimationComponent>(current);
+                    auto* mesh = m_Registry->GetComponent<MeshComponent>(current);
+                    if (animComp && mesh) {
+                        RenderMesh* rm = m_Renderer->GetRenderMesh(mesh->meshName);
+                        if (rm) {
+                            for(size_t i=0; i<rm->animations.size(); i++) {
+                                if (rm->animations[i].name.find("Run") != std::string::npos || 
+                                    rm->animations[i].name.find("Walk") != std::string::npos) {
+                                    animComp->animationIndex = (int)i;
+                                    animComp->currentTime = 0.0f;
+                                    break;
+                                }
                             }
                         }
                     }
+                    return;
                 }
-                
-                return;
             }
         }
     }

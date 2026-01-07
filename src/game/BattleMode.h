@@ -60,6 +60,7 @@ private:
     Mix_Chunk* m_SfxSwordMiss = nullptr;
 
     bool isMouseOverUI(int mx, int my, int w, int h);
+    bool IsPositionOccupied(float x, float y, PixelsEngine::Entity ignoreEntity);
     void LoadMap(const std::string& path);
     void SpawnCharacter(const std::string& mesh, float x, float y, PixelsEngine::BattleUnitComponent::Team team);
     
