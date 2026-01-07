@@ -49,6 +49,8 @@ void SiegeMode::Init(Camera *camera, Entity &playerEntity) {
                        "assets/adventurers/Assets/gltf/crossbow_1handed.gltf");
   m_Renderer->LoadMesh("Arrow",
                        "assets/adventurers/Assets/gltf/arrow_bow.gltf");
+  m_Renderer->LoadMesh("Dagger",
+                       "assets/adventurers/Assets/gltf/dagger.gltf");
 
   // 3. Load Map
   MapLoader::LoadFromFile("assets/dungeons/my_dungeon.map", m_Registry,
@@ -77,7 +79,27 @@ void SiegeMode::Init(Camera *camera, Entity &playerEntity) {
 
 void SiegeMode::SpawnEnemy(const std::string &mesh, float x, float y,
                            CharacterComponent::Type type) {
-  CharacterFactory::CreateSkeleton(m_Registry, m_Renderer, mesh, x, y, 0.0f);
+  Entity e = CharacterFactory::CreateSkeleton(m_Registry, m_Renderer, mesh, x, y, 0.0f);
+  
+  // Add weapon attachment based on skeleton type
+  auto *unit = m_Registry->GetComponent<BattleUnitComponent>(e);
+  if (unit) {
+    AttachmentComponent attach;
+    attach.textureName = mesh + "_tex";
+    attach.scale = 1.0f;
+    attach.boneName = "hand.r";
+    attach.rotX = -7.63f;
+    attach.rotY = 18.148f;
+    attach.rotZ = 1.702f;
+    
+    if (mesh == "skel_warrior") {
+      attach.meshName = "Sword";
+    } else if (mesh == "skel_minion") {
+      attach.meshName = "Dagger";
+    }
+    
+    m_Registry->AddComponent<AttachmentComponent>(e, attach);
+  }
 }
 
 void SiegeMode::Update(float dt, Entity playerEntity, float tunerDist,
@@ -232,7 +254,6 @@ void SiegeMode::Update(float dt, Entity playerEntity, float tunerDist,
       } else { // Melee
         bool hitSomething = false;
         auto &enemies = m_Registry->View<EnemyComponent>();
-        std::vector<Entity> deadEnemies;
 
         for (auto &pair : enemies) {
           auto *et = m_Registry->GetComponent<Transform3DComponent>(pair.first);
@@ -254,10 +275,7 @@ void SiegeMode::Update(float dt, Entity playerEntity, float tunerDist,
               eu->flashAmount = 1.0f;
               m_HitmarkerTimer = 0.15f;
               hitSomething = true;
-              if (eu->hp <= 0) {
-                eu->flashAmount = 0.0f;  // Clear red flash when dead
-                deadEnemies.push_back(pair.first);
-              }
+              // Don't destroy immediately - let enemy AI section fade them out
               break;
             }
           }
@@ -270,25 +288,81 @@ void SiegeMode::Update(float dt, Entity playerEntity, float tunerDist,
           if (m_SfxSwordMiss)
             Mix_PlayChannel(-1, m_SfxSwordMiss, 0);
         }
-
-        for (auto e : deadEnemies)
-          m_Registry->DestroyEntity(e);
       }
     }
   }
 
-  // 6. Enemy AI Update (Chase player)
+  // 6. Enemy AI Update (Chase player) and cleanup dead enemies
   auto &enemies = m_Registry->View<EnemyComponent>();
+  std::vector<Entity> enemiesToRemove;
+  
   for (auto &pair : enemies) {
     auto *et = m_Registry->GetComponent<Transform3DComponent>(pair.first);
+    auto *eu = m_Registry->GetComponent<BattleUnitComponent>(pair.first);
     auto *ephys = m_Registry->GetComponent<PhysicsComponent>(pair.first);
+    auto *anim = m_Registry->GetComponent<SkeletalAnimationComponent>(pair.first);
+    auto *mesh = m_Registry->GetComponent<MeshComponent>(pair.first);
     auto &enemy = pair.second;
-    if (et) {
+    
+    // Check if enemy is dead
+    if (eu && eu->hp <= 0) {
+      // Play death/idle animation
+      if (anim && mesh) {
+        RenderMesh *rm = m_Renderer->GetRenderMesh(mesh->meshName);
+        if (rm) {
+          int idleIdx = -1;
+          for (size_t i = 0; i < rm->animations.size(); i++) {
+            if (rm->animations[i].name.find("Idle") != std::string::npos) {
+              idleIdx = (int)i;
+              break;
+            }
+          }
+          if (idleIdx != -1 && anim->animationIndex != idleIdx) {
+            anim->animationIndex = idleIdx;
+            anim->currentTime = 0.0f;
+          }
+        }
+      }
+      
+      // Decay the flash amount over time
+      if (eu->flashAmount > 0.0f) {
+        eu->flashAmount -= dt * 3.0f;
+        if (eu->flashAmount < 0.0f) {
+          eu->flashAmount = 0.0f;
+        }
+      }
+      
+      // After flash fades, remove the entity
+      if (eu->flashAmount <= 0.0f) {
+        enemiesToRemove.push_back(pair.first);
+      }
+      continue;  // Don't update dead enemies
+    }
+    
+    // Decay flash for living enemies too
+    if (eu && eu->flashAmount > 0.0f) {
+      eu->flashAmount -= dt * 5.0f;
+      if (eu->flashAmount < 0.0f) {
+        eu->flashAmount = 0.0f;
+      }
+    }
+    
+    if (et && ephys) {
       float edx = t->x - et->x;
       float edy = t->y - et->y;
       float dist = sqrt(edx * edx + edy * edy);
-      if (dist > 1.5f) {
-        // Check collision with other enemies
+      
+      bool isMoving = false;
+      bool isAttacking = false;
+      
+      // Attack if close enough
+      if (dist < 2.0f) {
+        isAttacking = true;
+        // TODO: Actually damage player
+      } else if (dist > 1.5f) {
+        isMoving = true;
+        
+        // Check collision with other enemies and avoid
         float collisionAvoidX = 0.0f, collisionAvoidY = 0.0f;
         int nearbyEnemies = 0;
         auto &allEnemies = m_Registry->View<EnemyComponent>();
@@ -299,25 +373,56 @@ void SiegeMode::Update(float dt, Entity playerEntity, float tunerDist,
             float dx = et->x - oet->x;
             float dy = et->y - oet->y;
             float d = sqrt(dx * dx + dy * dy);
-            if (d < 1.0f && d > 0.01f) {  // Too close to another enemy
-              float pushX = (dx / d) * 0.5f;
-              float pushY = (dy / d) * 0.5f;
+            if (d < 0.8f && d > 0.01f) {  // Stronger collision avoidance
+              float pushStr = 1.5f;
+              float pushX = (dx / d) * pushStr;
+              float pushY = (dy / d) * pushStr;
               collisionAvoidX += pushX;
               collisionAvoidY += pushY;
               nearbyEnemies++;
             }
           }
         }
+        
+        // Apply collision avoidance
         if (nearbyEnemies > 0) {
-          edx += collisionAvoidX;
-          edy += collisionAvoidY;
+          et->x += collisionAvoidX * dt;
+          et->y += collisionAvoidY * dt;
         }
+        
+        // Move towards player
         float angle = atan2(edy, edx);
         et->rot = angle + 1.57f;
         et->x += cos(angle) * enemy.speed * dt;
         et->y += sin(angle) * enemy.speed * dt;
       }
+      
+      // Update animation based on state
+      if (anim && mesh) {
+        RenderMesh *rm = m_Renderer->GetRenderMesh(mesh->meshName);
+        if (rm) {
+          std::string targetAnimName = isAttacking ? "Attack" : (isMoving ? "Walk" : "Idle");
+          
+          int targetIdx = -1;
+          for (size_t i = 0; i < rm->animations.size(); i++) {
+            if (rm->animations[i].name.find(targetAnimName) != std::string::npos) {
+              targetIdx = (int)i;
+              break;
+            }
+          }
+          
+          if (targetIdx != -1 && anim->animationIndex != targetIdx) {
+            anim->animationIndex = targetIdx;
+            anim->currentTime = 0.0f;
+          }
+        }
+      }
     }
+  }
+  
+  // Remove dead enemies that have faded
+  for (auto e : enemiesToRemove) {
+    m_Registry->DestroyEntity(e);
   }
 }
 
@@ -403,7 +508,8 @@ void SiegeMode::RenderUI(PixelsEngine::GLRenderer *ren, PixelsEngine::TextRender
   }
 
   // Show nearby doors and interactions
-  if (auto *playerTransform = m_Registry->GetComponent<Transform3DComponent>(playerEntity)) {
+  auto *playerTransform = m_Registry->GetComponent<Transform3DComponent>(playerEntity);
+  if (playerTransform) {
     auto &doors = m_Registry->View<DoorComponent>();
     
     int doorCount = 0;
@@ -422,6 +528,39 @@ void SiegeMode::RenderUI(PixelsEngine::GLRenderer *ren, PixelsEngine::TextRender
                        20, 60 + (doorCount * 25),
                        door->isOpen ? SDL_Color{100, 255, 100, 255} : SDL_Color{255, 100, 100, 255});
         doorCount++;
+      }
+    }
+  }
+  
+  // Draw health bars above enemies in 3D space
+  if (playerTransform) {
+    auto &enemies = m_Registry->View<EnemyComponent>();
+    for (auto &pair : enemies) {
+      auto *et = m_Registry->GetComponent<Transform3DComponent>(pair.first);
+      auto *eu = m_Registry->GetComponent<BattleUnitComponent>(pair.first);
+      
+      if (et && eu && eu->maxHp > 0) {
+        // Only show health bar if damaged
+        if (eu->hp < eu->maxHp) {
+          // Convert 3D position to screen space (simplified)
+          float barWidth = 50.0f;
+          float barHeight = 6.0f;
+          float hpPercent = (float)eu->hp / (float)eu->maxHp;
+          
+          // Position health bar above enemy (approximate screen position)
+          // This is a rough approximation - ideally would project 3D to 2D
+          int screenX = w / 2 + (int)((et->x - playerTransform->x) * 30);
+          int screenY = h / 2 - (int)((et->y - playerTransform->y) * 30) - 80;
+          
+          // Clamp to screen bounds
+          screenX = std::max(10, std::min(w - 60, screenX));
+          screenY = std::max(50, std::min(h - 50, screenY));
+          
+          // Background
+          ren->DrawRect2D(screenX, screenY, (int)barWidth, (int)barHeight, {50, 50, 50, 200});
+          // HP bar
+          ren->DrawRect2D(screenX + 1, screenY + 1, (int)(barWidth - 2) * hpPercent, (int)barHeight - 2, {255, 50, 50, 255});
+        }
       }
     }
   }

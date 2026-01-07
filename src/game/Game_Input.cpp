@@ -56,31 +56,9 @@ void DungeonsGame::HandleInputGameplay(float dt) {
   auto *phys = m_Registry.GetComponent<PhysicsComponent>(m_PlayerEntity);
   auto *weapon = m_Registry.GetComponent<WeaponComponent>(m_PlayerEntity);
 
-  // CRITICAL FIX: Debugging why WASD might fail
   // Weapon is optional (Creative mode may not have weapon)
   if (!t || !p || !phys) {
-    // Only print this once every few seconds to avoid spamming, or just print
-    // it:
-    static int debugSpamCounter = 0;
-    if (debugSpamCounter++ % 600 ==
-        0) { // Print once every ~10 seconds (assuming 60fps)
-      std::cout << "[System] Player Input Skipped - Missing Component: ";
-      if (!t)
-        std::cout << "[Transform] ";
-      if (!p)
-        std::cout << "[PlayerControl] ";
-      if (!phys)
-        std::cout << "[Physics] ";
-      std::cout << std::endl;
-    }
-    return; // We cannot move without these components
-  }
-
-  static int debugCreativeCounter = 0;
-  if (m_State == GameState::Creative) {
-    if (debugCreativeCounter++ % 60 == 0) {
-      std::cout << "[CREATIVE] Has all components, ready for input" << std::endl;
-    }
+    return;
   }
 
   // ---------------------------------------------------------
@@ -149,9 +127,6 @@ void DungeonsGame::HandleInputGameplay(float dt) {
     dvx += cos(movementAngle) * accel;
     dvy += sin(movementAngle) * accel;
     isMoving = true;
-    if (m_State == GameState::Creative) {
-      std::cout << "[CREATIVE-WASD] W pressed: accel=" << accel << " dvx=" << dvx << " dvy=" << dvy << std::endl;
-    }
   }
   if (Input::IsKeyDown(SDL_SCANCODE_S)) {
     dvx -= cos(movementAngle) * accel;
@@ -169,16 +144,8 @@ void DungeonsGame::HandleInputGameplay(float dt) {
     isMoving = true;
   }
 
-  if (m_State == GameState::Creative && (dvx != 0 || dvy != 0)) {
-    std::cout << "[CREATIVE-VEL] Before: velX=" << phys->velX << " velY=" << phys->velY;
-  }
-
   phys->velX += dvx;
   phys->velY += dvy;
-
-  if (m_State == GameState::Creative && (dvx != 0 || dvy != 0)) {
-    std::cout << " After: velX=" << phys->velX << " velY=" << phys->velY << std::endl;
-  }
 
   // ---------------------------------------------------------
   // 5. Crouch & Slide

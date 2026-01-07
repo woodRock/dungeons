@@ -400,14 +400,6 @@ void GLRenderer::Render(SDL_Window *win, const Camera &cam, Registry &reg,
                          ? m_Textures[mc.textureName]
                          : m_DefaultTexture;
       glBindTexture(GL_TEXTURE_2D, texID);
-      static bool loggedOnce = false;
-      if (!loggedOnce && rm.isSkinned) {
-        std::cout << "Rendering skinned mesh: " << mc.meshName 
-                  << " with texture: " << mc.textureName 
-                  << " (ID: " << texID << ", found: " << m_Textures.count(mc.textureName) 
-                  << ")" << std::endl;
-        loggedOnce = true;
-      }
       glBindVertexArray(rm.VAO);
       glDrawElements(GL_TRIANGLES, rm.indexCount, GL_UNSIGNED_INT, 0);
 
@@ -419,20 +411,6 @@ void GLRenderer::Render(SDL_Window *win, const Camera &cam, Registry &reg,
           if (rm.skeleton.bones[i].name == attach->boneName) {
             bIdx = (int)i;
             break;
-          }
-        }
-
-        if (bIdx == -1) {
-          static bool logged = false;
-          if (!logged) {
-            std::cout << "Attachment Error: Bone '" << attach->boneName
-                      << "' not found in mesh '" << mc.meshName << "'"
-                      << std::endl;
-            std::cout << "Available bones: ";
-            for (auto &b : rm.skeleton.bones)
-              std::cout << b.name << ", ";
-            std::cout << std::endl;
-            logged = true;
           }
         }
 
@@ -526,7 +504,6 @@ bool GLRenderer::LoadTexture(const std::string &name, const std::string &path) {
   SDL_FreeSurface(s);
   SDL_FreeSurface(opt);
   m_Textures[name] = t;
-  std::cout << "Loaded texture: " << name << " from " << path << " (ID: " << t << ")" << std::endl;
   return true;
 }
 
@@ -735,7 +712,7 @@ void GLRenderer::RenderMeshPreview(const std::string &meshName,
 
   m_Shader->Use();
 
-  Mat4 model = Mat4::Translate({x + ox, y + oy, z + oz}) * Mat4::RotateY(-rot);
+  Mat4 model = Mat4::Translate({x + ox, z + oz, -(y + oy)}) * Mat4::RotateY(-rot);
   m_Shader->SetMat4("model", model.m);
   m_Shader->SetInt("useSkinning", 0);
   m_Shader->SetInt("useFlatColor", 0);

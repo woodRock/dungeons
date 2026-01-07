@@ -29,7 +29,6 @@ void Simulation::SimulateKeyDown(SDL_Scancode key) {
   event.type = SDL_KEYDOWN;
   event.key.keysym.scancode = key;
   Input::ProcessEvent(event);
-  std::cout << "[Simulation] Key DOWN: " << SDL_GetScancodeName(key) << std::endl;
 }
 
 void Simulation::SimulateKeyUp(SDL_Scancode key) {
@@ -37,7 +36,6 @@ void Simulation::SimulateKeyUp(SDL_Scancode key) {
   event.type = SDL_KEYUP;
   event.key.keysym.scancode = key;
   Input::ProcessEvent(event);
-  std::cout << "[Simulation] Key UP: " << SDL_GetScancodeName(key) << std::endl;
 }
 
 void Simulation::SimulateKeyPress(SDL_Scancode key, float duration) {

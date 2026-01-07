@@ -391,14 +391,15 @@ void CreativeMode::UpdateCursor() {
     float snapSize = m_GridSize;
     bool isDoor = false;
     bool isScaffoldDoor = false;
+    bool isCorner = false;
 
     if (m_SelectedSlot >= 0 && m_SelectedSlot < m_Hotbar.size()) {
       std::string name = m_Hotbar[m_SelectedSlot].meshName;
       std::transform(name.begin(), name.end(), name.begin(), ::tolower);
       isDoor = (name == "wall_doorway_door");
       isScaffoldDoor = (name == "wall_doorway_scaffold_door");
-      if (name.find("small") != std::string::npos ||
-          name.find("corner") != std::string::npos) {
+      isCorner = (name.find("corner") != std::string::npos);
+      if (name.find("small") != std::string::npos && !isCorner) {
         snapSize = m_GridSize / 4.0f;
       }
     }
@@ -406,8 +407,8 @@ void CreativeMode::UpdateCursor() {
     m_Highlight.x = round(prevX / snapSize) * snapSize;
     m_Highlight.y = round(prevY / snapSize) * snapSize;
 
-    // Fix sinking: Ensure Z is snapped to grid but at least 0
-    m_Highlight.z = round(prevZ / snapSize) * snapSize;
+    // Fix sinking: Ensure Z is snapped to full grid (not quarter-grid for corners)
+    m_Highlight.z = round(prevZ / m_GridSize) * m_GridSize;
     if (m_Highlight.z < 0)
       m_Highlight.z = 0;
 
@@ -570,14 +571,35 @@ ActionResult CreativeMode::ExecuteAction(bool place) {
       bool isActualDoor = (lowName == "wall_doorway_door" ||
                            lowName == "wall_doorway_scaffold_door");
 
+      auto *mc = m_Registry->GetComponent<MeshComponent>(e);
+      
       if (isActualDoor) {
         m_Registry->AddComponent<InteractableComponent>(
             e, {InteractableComponent::Door, false});
-        auto *mc = m_Registry->GetComponent<MeshComponent>(e);
         mc->offsetX = -(m_GridSize / 6.0f);
       } else if (lowName.find("chest") != std::string::npos) {
         m_Registry->AddComponent<InteractableComponent>(
             e, {InteractableComponent::Chest, false});
+      } else if (lowName.find("corner") != std::string::npos) {
+        // Position corner based on rotation
+        float quarterGrid = m_GridSize / 4.0f;
+        if (m_Highlight.rot < M_PI * 0.5f) {
+          // North-East corner
+          mc->offsetX = quarterGrid;
+          mc->offsetY = quarterGrid;
+        } else if (m_Highlight.rot < M_PI) {
+          // South-East corner
+          mc->offsetX = quarterGrid;
+          mc->offsetY = -quarterGrid;
+        } else if (m_Highlight.rot < M_PI * 1.5f) {
+          // South-West corner
+          mc->offsetX = -quarterGrid;
+          mc->offsetY = -quarterGrid;
+        } else {
+          // North-West corner
+          mc->offsetX = -quarterGrid;
+          mc->offsetY = quarterGrid;
+        }
       }
 
       // Add Animation for skinned meshes (Characters)
@@ -637,15 +659,37 @@ void CreativeMode::RenderWorld(GLRenderer *ren) {
   if (m_Highlight.active) {
     EditorAsset &asset = m_Hotbar[m_SelectedSlot];
     if (!asset.meshName.empty()) {
-      float ox = 0;
+      float ox = 0, oy = 0;
       std::string ln = asset.meshName;
       std::transform(ln.begin(), ln.end(), ln.begin(), ::tolower);
-      if (ln == "wall_doorway_door" || ln == "wall_doorway_scaffold_door")
+      
+      if (ln == "wall_doorway_door" || ln == "wall_doorway_scaffold_door") {
         ox = -(m_GridSize / 6.0f);
+      } else if (ln.find("corner") != std::string::npos) {
+        // Position corner based on rotation (offset to place in corner of tile)
+        float quarterGrid = m_GridSize / 4.0f;
+        if (m_Highlight.rot < M_PI * 0.5f) {
+          // North-East corner
+          ox = quarterGrid;
+          oy = quarterGrid;
+        } else if (m_Highlight.rot < M_PI) {
+          // South-East corner
+          ox = quarterGrid;
+          oy = -quarterGrid;
+        } else if (m_Highlight.rot < M_PI * 1.5f) {
+          // South-West corner
+          ox = -quarterGrid;
+          oy = -quarterGrid;
+        } else {
+          // North-West corner
+          ox = -quarterGrid;
+          oy = quarterGrid;
+        }
+      }
 
       ren->RenderMeshPreview(asset.meshName, asset.textureName, m_Highlight.x,
                              m_Highlight.y, m_Highlight.z, m_Highlight.rot,
-                             0.5f, ox, 0, 0);
+                             0.5f, ox, oy, 0);
     }
   }
 }
@@ -812,7 +856,6 @@ void CreativeMode::SaveDungeon(const std::string &filename) {
         << " " << t->z << " " << t->rot << "\n";
   }
   out.close();
-  std::cout << "Saved dungeon to " << filename << std::endl;
 }
 
 void CreativeMode::LoadDungeon(const std::string &filename) {
@@ -866,7 +909,6 @@ void CreativeMode::LoadDungeon(const std::string &filename) {
           e, {idleIdx, (float)(rand() % 100) * 0.01f, 1.0f});
     }
   }
-  std::cout << "Loaded dungeon from " << filename << std::endl;
 }
 
 } // namespace PixelsEngine

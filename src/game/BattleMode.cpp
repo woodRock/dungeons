@@ -1110,13 +1110,6 @@ void BattleMode::RaycastCursor() {
   Vec3 RayDir_gl = Vec3::Normalize(R_gl * vx + U_gl * vy + F_gl);
   Vec3 RayOrigin_gl = {m_Camera->x, m_Camera->z, -m_Camera->y};
 
-  // Debug Ray
-  static int logTimer = 0;
-  if (logTimer++ % 60 == 0) {
-    // std::cout << "RayDir Y: " << RayDir_gl.y << " Origin Y: " <<
-    // RayOrigin_gl.y << std::endl;
-  }
-
   if (abs(RayDir_gl.y) > 0.001f) {
     float t = -RayOrigin_gl.y / RayDir_gl.y;
 

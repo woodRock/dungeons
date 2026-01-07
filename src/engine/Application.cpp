@@ -86,13 +86,6 @@ Application::Application(const char *title, int width, int height)
   //    m_Window, -1, SDL_RENDERER_SOFTWARE); // Use Software to avoid GL
   //    context conflict?
 
-  // if (!m_Renderer) {
-  //   std::cout << "Warning: SDL Renderer could not be created for UI." <<
-  //   std::endl;
-  // } else {
-  //     SDL_SetRenderDrawBlendMode(m_Renderer, SDL_BLENDMODE_BLEND);
-  // }
-
   // SDL_RenderSetLogicalSize(m_Renderer, width, height);
   m_Renderer = nullptr;
 

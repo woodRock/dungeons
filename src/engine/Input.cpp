@@ -45,36 +45,46 @@ void Input::ProcessEvent(const SDL_Event &e) {
   if (e.type == SDL_KEYDOWN) {
     if (e.key.keysym.scancode < SDL_NUM_SCANCODES) {
       m_KeyboardState[e.key.keysym.scancode] = 1;
-      // Debug output
-      if (e.key.keysym.scancode == SDL_SCANCODE_W ||
-          e.key.keysym.scancode == SDL_SCANCODE_A ||
-          e.key.keysym.scancode == SDL_SCANCODE_S ||
-          e.key.keysym.scancode == SDL_SCANCODE_D) {
-        std::cout << "Key DOWN: " << SDL_GetScancodeName(e.key.keysym.scancode) << std::endl;
-      }
     }
   } else if (e.type == SDL_KEYUP) {
     if (e.key.keysym.scancode < SDL_NUM_SCANCODES) {
       m_KeyboardState[e.key.keysym.scancode] = 0;
-      // Debug output
-      if (e.key.keysym.scancode == SDL_SCANCODE_W ||
-          e.key.keysym.scancode == SDL_SCANCODE_A ||
-          e.key.keysym.scancode == SDL_SCANCODE_S ||
-          e.key.keysym.scancode == SDL_SCANCODE_D) {
-        std::cout << "Key UP: " << SDL_GetScancodeName(e.key.keysym.scancode) << std::endl;
-      }
     }
   } else if (e.type == SDL_MOUSEBUTTONDOWN) {
     m_MouseState |= SDL_BUTTON(e.button.button);
-    m_MouseX = e.button.x;
-    m_MouseY = e.button.y;
+    // Scale mouse coordinates properly for fullscreen/windowed mode
+    if (m_Renderer) {
+      float logX, logY;
+      SDL_RenderWindowToLogical(m_Renderer, e.button.x, e.button.y, &logX, &logY);
+      m_MouseX = (int)logX;
+      m_MouseY = (int)logY;
+    } else {
+      m_MouseX = (int)(e.button.x * m_ScaleX);
+      m_MouseY = (int)(e.button.y * m_ScaleY);
+    }
   } else if (e.type == SDL_MOUSEBUTTONUP) {
     m_MouseState &= ~SDL_BUTTON(e.button.button);
-    m_MouseX = e.button.x;
-    m_MouseY = e.button.y;
+    // Scale mouse coordinates properly for fullscreen/windowed mode
+    if (m_Renderer) {
+      float logX, logY;
+      SDL_RenderWindowToLogical(m_Renderer, e.button.x, e.button.y, &logX, &logY);
+      m_MouseX = (int)logX;
+      m_MouseY = (int)logY;
+    } else {
+      m_MouseX = (int)(e.button.x * m_ScaleX);
+      m_MouseY = (int)(e.button.y * m_ScaleY);
+    }
   } else if (e.type == SDL_MOUSEMOTION) {
-    m_MouseX = e.motion.x;
-    m_MouseY = e.motion.y;
+    // Scale mouse coordinates properly for fullscreen/windowed mode
+    if (m_Renderer) {
+      float logX, logY;
+      SDL_RenderWindowToLogical(m_Renderer, e.motion.x, e.motion.y, &logX, &logY);
+      m_MouseX = (int)logX;
+      m_MouseY = (int)logY;
+    } else {
+      m_MouseX = (int)(e.motion.x * m_ScaleX);
+      m_MouseY = (int)(e.motion.y * m_ScaleY);
+    }
     m_MouseRelX += e.motion.xrel;
     m_MouseRelY += e.motion.yrel;
   } else if (e.type == SDL_TEXTINPUT) {

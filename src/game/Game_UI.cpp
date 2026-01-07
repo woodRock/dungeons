@@ -108,8 +108,13 @@ void DungeonsGame::RenderUI() {
     return;
   }
 
+  // Only show tutorials and crosshair in Playing state
+  if (m_State != GameState::Playing && m_State != GameState::Creative) {
+    return;
+  }
+
   auto *t = m_Registry.GetComponent<Transform3DComponent>(m_PlayerEntity);
-  if (t) {
+  if (t && m_State == GameState::Playing) {
     std::string tutorial = "";
     if (m_CurrentLevel == 1) {
       if (t->x < 8)
