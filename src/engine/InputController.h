@@ -76,4 +76,25 @@ private:
   float m_JumpForce = 6.0f;
 };
 
+// Top-down movement controller (moves in world space N/S/E/W)
+class TopDownMovementController : public InputController {
+public:
+  TopDownMovementController(Registry* registry, Entity playerEntity);
+  ~TopDownMovementController() override = default;
+  
+  void HandleInput(float dt) override;
+  
+  void SetAcceleration(float accel) { m_Acceleration = accel; }
+  void SetFriction(float friction) { m_Friction = friction; }
+  void SetMaxSpeed(float maxSpeed) { m_MaxSpeed = maxSpeed; }
+
+private:
+  Registry* m_Registry;
+  Entity m_PlayerEntity;
+  
+  float m_Acceleration = 40.0f;
+  float m_Friction = 0.9f;
+  float m_MaxSpeed = 12.0f;
+};
+
 } // namespace PixelsEngine

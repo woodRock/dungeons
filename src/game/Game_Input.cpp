@@ -268,7 +268,7 @@ void DungeonsGame::HandleInputMenu() {
   int gap = 70;
   int startX = w / 2 - btnW / 2;
   bool action = false;
-  int numButtons = m_InOptions ? 2 : 6;
+  int numButtons = m_InOptions ? 2 : 7;
 
   // Mouse
   for (int i = 0; i < numButtons; i++) {
@@ -317,20 +317,36 @@ void DungeonsGame::HandleInputMenu() {
         SDL_SetRelativeMouseMode(SDL_TRUE);
         break;
       case 2:
+        // Dungeon Mode - Scan for dungeon campaigns
+        m_AvailableMaps.clear();
+        if (std::filesystem::exists("assets/dungeons/")) {
+            for (const auto & entry : std::filesystem::directory_iterator("assets/dungeons/")) {
+                if (entry.path().extension() == ".dungeon") {
+                    m_AvailableMaps.push_back(entry.path().stem().string());
+                }
+            }
+        }
+        if (!m_AvailableMaps.empty()) {
+            m_State = GameState::MapSelect;
+            m_MapSelectIdx = 0;
+            SDL_SetRelativeMouseMode(SDL_FALSE);
+        }
+        break;
+      case 3:
         InitSiege();
         m_State = GameState::Siege;
         SDL_SetRelativeMouseMode(SDL_TRUE);
         break;
-      case 3:
+      case 4:
         InitBattle();
         m_State = GameState::Battle;
         SDL_SetRelativeMouseMode(SDL_FALSE);
         break;
-      case 4:
+      case 5:
         m_InOptions = true;
         m_MenuSelection = 0;
         break;
-      case 5:
+      case 6:
         m_IsRunning = false;
         break;
       }
@@ -407,10 +423,14 @@ void DungeonsGame::HandleInputPause() {
         SDL_SetRelativeMouseMode(SDL_TRUE);
         break;
       case 1:
-        m_CreativeMode.SaveDungeon("assets/dungeons/my_dungeon.map");
+        m_CreativeMode.ToggleSaveMenu();
+        m_State = GameState::Creative;
+        SDL_SetRelativeMouseMode(SDL_FALSE);
         break;
       case 2:
-        m_CreativeMode.LoadDungeon("assets/dungeons/my_dungeon.map");
+        m_CreativeMode.ToggleSaveMenu();
+        m_State = GameState::Creative;
+        SDL_SetRelativeMouseMode(SDL_FALSE);
         break;
       case 3:
         m_InOptions = true;

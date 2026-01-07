@@ -1,4 +1,5 @@
 #include "MapLoader.h"
+#include "AssetManager.h"
 #include "ECS.h"
 #include "Graphics.h"
 #include "GLRenderer.h"
@@ -132,13 +133,35 @@ int MapLoader::LoadFromFileWithPath(const std::string& path, Registry* registry,
   float x, y, z, rotation;
 
   while (in >> meshName >> textureName >> x >> y >> z >> rotation) {
+    std::string actualMeshToLoad = meshName;
+    std::string actualTexToLoad = textureName;
+    
+    if (meshName == "player_spawn") {
+        actualMeshToLoad = "Knight";
+        actualTexToLoad = "Knight_tex";
+    }
+
     // Load mesh if not already loaded
-    if (!renderer->GetRenderMesh(meshName)) {
-      std::string fullPath = assetBasePath + meshName + ".obj";
-      if (!renderer->LoadMesh(meshName, fullPath)) {
-        std::cerr << "MapLoader: Failed to load mesh: " << meshName
-                  << " from " << fullPath << std::endl;
-        continue;
+    if (!renderer->GetRenderMesh(actualMeshToLoad)) {
+      if (actualMeshToLoad == "Knight" || actualMeshToLoad.find("Skeleton") != std::string::npos) {
+          // Characters should be pre-loaded, but if not, try to load them
+          // This is a safety fallback
+          std::string meshPath = (actualMeshToLoad == "Knight") ? 
+              "assets/adventurers/Characters/gltf/Knight.glb" :
+              "assets/skeletons/characters/gltf/" + actualMeshToLoad + ".glb";
+          std::string texPath = (actualMeshToLoad == "Knight") ?
+              "assets/adventurers/Textures/knight_texture.png" :
+              "assets/skeletons/texture/skeleton_texture.png";
+          
+          auto am = std::make_unique<AssetManager>(renderer);
+          am->LoadCharacter(actualMeshToLoad, meshPath, texPath);
+      } else {
+          std::string fullPath = assetBasePath + actualMeshToLoad + ".obj";
+          if (!renderer->LoadMesh(actualMeshToLoad, fullPath)) {
+            std::cerr << "MapLoader: Failed to load mesh: " << actualMeshToLoad
+                      << " from " << fullPath << std::endl;
+            continue;
+          }
       }
     }
 
@@ -148,7 +171,18 @@ int MapLoader::LoadFromFileWithPath(const std::string& path, Registry* registry,
         e, {x, y, z, rotation, 0});
     registry->AddComponent<MeshComponent>(e, {meshName, textureName, 1, 1, 1});
     
-    // Add hitbox based on mesh type
+    // Restore animations if skinned
+    RenderMesh* rm = renderer->GetRenderMesh(actualMeshToLoad);
+    if (rm && rm->isSkinned) {
+        int idleIdx = 0;
+        for (size_t i = 0; i < rm->animations.size(); ++i) {
+            if (rm->animations[i].name.find("Idle") != std::string::npos) {
+                idleIdx = (int)i;
+                break;
+            }
+        }
+        registry->AddComponent<SkeletalAnimationComponent>(e, {idleIdx, 0.0f, 1.0f});
+    }
     HitboxComponent hitbox;
     SetHitboxFromMeshName(meshName, hitbox);
     registry->AddComponent<HitboxComponent>(e, hitbox);

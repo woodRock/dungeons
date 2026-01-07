@@ -1,4 +1,5 @@
 #include "CreativeMode.h"
+#include "../engine/AssetManager.h"
 #include "../engine/Components.h"
 #include "../engine/GLTFLoader.h"
 #include "../engine/Input.h"
@@ -155,6 +156,9 @@ void CreativeMode::ScanAssets() {
   m_FilteredAssetIndices.clear();
   for (size_t i = 0; i < m_Assets.size(); ++i)
     m_FilteredAssetIndices.push_back(i);
+
+  // Add special player_spawn marker
+  m_Assets.push_back({"player_spawn", "Knight", "Knight_tex"});
 }
 
 void CreativeMode::ToggleEditorMode() {
@@ -218,10 +222,48 @@ ActionResult CreativeMode::Update(float dt, Entity /*playerEntity*/) {
       SDL_SetRelativeMouseMode(SDL_TRUE);
     }
     return ActionResult::None;
+  } else if (m_ShowSaveMenu) {
+    std::string* activeBuffer = nullptr;
+    if (m_FocusedInput == ActiveInput::MapName) activeBuffer = &m_MapInputBuffer;
+    else if (m_FocusedInput == ActiveInput::DungeonName) activeBuffer = &m_DungeonInputBuffer;
+
+    if (Input::IsKeyPressed(SDL_SCANCODE_BACKSPACE) && activeBuffer && activeBuffer->length() > 0) {
+        activeBuffer->pop_back();
+    }
+    
+    std::string text = Input::GetTextInput();
+    if (!text.empty()) {
+        if (activeBuffer) {
+            *activeBuffer += text;
+        }
+        Input::ClearTextInput();
+    }
+
+    if (Input::IsKeyPressed(SDL_SCANCODE_RETURN)) {
+      if (m_MenuState == EditorMenuState::Dungeons) {
+          if (m_FocusedInput == ActiveInput::MapName && !m_MapInputBuffer.empty()) {
+              SaveDungeon("assets/dungeons/" + m_MapInputBuffer + ".map");
+              m_CurrentMapName = m_MapInputBuffer;
+              ScanSavedMaps();
+          } else if (m_FocusedInput == ActiveInput::DungeonName && !m_DungeonInputBuffer.empty()) {
+              std::ofstream out("assets/dungeons/" + m_DungeonInputBuffer + ".dungeon");
+              out.close();
+              ScanDungeons();
+              m_DungeonInputBuffer = "";
+          }
+      }
+    }
+
+    if (Input::IsKeyPressed(SDL_SCANCODE_ESCAPE)) {
+      m_ShowSaveMenu = false;
+      Input::StopTextInput();
+      SDL_SetRelativeMouseMode(SDL_TRUE);
+    }
+    return ActionResult::None;
   } else {
     UpdateCursor();
 
-    // Hold to Break logic
+    // ... existing breaking logic ...
     bool breaking = Input::IsMouseButtonDown(SDL_BUTTON_LEFT) &&
                     !Input::IsKeyDown(SDL_SCANCODE_LCTRL) &&
                     !Input::IsKeyDown(SDL_SCANCODE_LGUI);
@@ -246,9 +288,22 @@ ActionResult CreativeMode::Update(float dt, Entity /*playerEntity*/) {
 
     if (Input::IsKeyPressed(SDL_SCANCODE_E)) {
       m_ShowInventory = true;
+      m_SearchQuery = "";
       Input::StartTextInput();
       Input::ClearKeys();
       SDL_SetRelativeMouseMode(SDL_FALSE);
+    }
+
+    if (Input::IsKeyPressed(SDL_SCANCODE_S) && (Input::IsKeyDown(SDL_SCANCODE_LCTRL) || Input::IsKeyDown(SDL_SCANCODE_LGUI))) {
+        m_ShowSaveMenu = true;
+        m_MapInputBuffer = m_CurrentMapName == "untitled" ? "" : m_CurrentMapName;
+        m_DungeonInputBuffer = "";
+        m_FocusedInput = ActiveInput::MapName;
+        Input::StartTextInput();
+        Input::ClearKeys();
+        SDL_SetRelativeMouseMode(SDL_FALSE);
+        ScanSavedMaps();
+        ScanDungeons();
     }
 
     if (Input::IsKeyPressed(SDL_SCANCODE_1))
@@ -561,11 +616,19 @@ ActionResult CreativeMode::ExecuteAction(bool place) {
       m_Registry->AddComponent<Transform3DComponent>(
           e, {m_Highlight.x, m_Highlight.y, m_Highlight.z, m_Highlight.rot, 0});
 
-      m_Registry->AddComponent<MeshComponent>(e, {asset.meshName,
+      // Special case: player_spawn uses Knight mesh but is stored as player_spawn
+      std::string meshToStore = asset.meshName;
+      std::string actualMeshToRender = asset.meshName;
+      if (asset.name == "player_spawn") {
+          meshToStore = "player_spawn";
+          actualMeshToRender = "Knight";
+      }
+
+      m_Registry->AddComponent<MeshComponent>(e, {meshToStore,
                                                   asset.textureName, 1.0f, 1.0f,
                                                   1.0f, 0.0f, 0.0f, 0.0f});
 
-      std::string lowName = asset.meshName;
+      std::string lowName = meshToStore;
       std::transform(lowName.begin(), lowName.end(), lowName.begin(),
                      ::tolower);
       bool isActualDoor = (lowName == "wall_doorway_door" ||
@@ -581,29 +644,21 @@ ActionResult CreativeMode::ExecuteAction(bool place) {
         m_Registry->AddComponent<InteractableComponent>(
             e, {InteractableComponent::Chest, false});
       } else if (lowName.find("corner") != std::string::npos) {
-        // Position corner based on rotation
+        // ... corner offset logic ...
         float quarterGrid = m_GridSize / 4.0f;
         if (m_Highlight.rot < M_PI * 0.5f) {
-          // North-East corner
-          mc->offsetX = quarterGrid;
-          mc->offsetY = quarterGrid;
+          mc->offsetX = quarterGrid; mc->offsetY = quarterGrid;
         } else if (m_Highlight.rot < M_PI) {
-          // South-East corner
-          mc->offsetX = quarterGrid;
-          mc->offsetY = -quarterGrid;
+          mc->offsetX = quarterGrid; mc->offsetY = -quarterGrid;
         } else if (m_Highlight.rot < M_PI * 1.5f) {
-          // South-West corner
-          mc->offsetX = -quarterGrid;
-          mc->offsetY = -quarterGrid;
+          mc->offsetX = -quarterGrid; mc->offsetY = -quarterGrid;
         } else {
-          // North-West corner
-          mc->offsetX = -quarterGrid;
-          mc->offsetY = quarterGrid;
+          mc->offsetX = -quarterGrid; mc->offsetY = quarterGrid;
         }
       }
 
       // Add Animation for skinned meshes (Characters)
-      RenderMesh *rm = m_Renderer->GetRenderMesh(asset.meshName);
+      RenderMesh *rm = m_Renderer->GetRenderMesh(actualMeshToRender);
       if (rm && rm->isSkinned && !rm->animations.empty()) {
         int idleIdx = 0;
         for (size_t i = 0; i < rm->animations.size(); ++i) {
@@ -700,19 +755,208 @@ void CreativeMode::RenderUI(GLRenderer *ren, TextRenderer *tr, int w, int h) {
 
   if (m_ShowInventory) {
     DrawInventory(ren, tr, w, h);
+  } else if (m_ShowSaveMenu) {
+    DrawSaveMenu(ren, tr, w, h);
   }
 
   DrawHotbar(ren, tr, w, h);
 
-  if (!m_ShowInventory) {
+  if (!m_ShowInventory && !m_ShowSaveMenu) {
     // Instruction
-    tr->RenderText(ren, "E: Inventory | 1-9: Select Slot | Click: Place/Break",
+    tr->RenderText(ren, "E: Inventory | Ctrl+S: Save | 1-9: Select | Click: Place",
                    20, 20, {255, 255, 255, 255});
 
     // Crosshair
-    ren->DrawRect2D(w / 2 - 10, h / 2, 20, 1, {255, 255, 255, 128});
-    ren->DrawRect2D(w / 2, h / 2 - 10, 1, 20, {255, 255, 255, 128});
+    ren->DrawRect2D((float)w / 2 - 10, (float)h / 2, 20.0f, 1.0f, {255, 255, 255, 128});
+    ren->DrawRect2D((float)w / 2, (float)h / 2 - 10, 1.0f, 20.0f, {255, 255, 255, 128});
   }
+}
+
+void CreativeMode::ScanSavedMaps() {
+    m_SavedMaps.clear();
+    std::string path = "assets/dungeons/";
+    if (fs::exists(path)) {
+        for (const auto &entry : fs::directory_iterator(path)) {
+            if (entry.path().extension() == ".map") {
+                m_SavedMaps.push_back(entry.path().stem().string());
+            }
+        }
+    }
+}
+
+void CreativeMode::ScanDungeons() {
+    m_SavedDungeons.clear();
+    std::string path = "assets/dungeons/";
+    if (fs::exists(path)) {
+        for (const auto &entry : fs::directory_iterator(path)) {
+            if (entry.path().extension() == ".dungeon") {
+                m_SavedDungeons.push_back(entry.path().stem().string());
+            }
+        }
+    }
+}
+
+void CreativeMode::LoadDungeonLevels(const std::string& dungeonName) {
+    m_CurrentDungeonLevels.clear();
+    std::ifstream in("assets/dungeons/" + dungeonName + ".dungeon");
+    if (in.is_open()) {
+        std::string level;
+        while (in >> level) {
+            if (!level.empty()) m_CurrentDungeonLevels.push_back(level);
+        }
+        in.close();
+    }
+}
+
+void CreativeMode::SaveDungeonLevels(const std::string& dungeonName) {
+    std::ofstream out("assets/dungeons/" + dungeonName + ".dungeon");
+    if (out.is_open()) {
+        for (const auto& level : m_CurrentDungeonLevels) {
+            out << level << "\n";
+        }
+        out.close();
+    }
+}
+
+void CreativeMode::DrawSaveMenu(GLRenderer *ren, TextRenderer *tr, int w, int h) {
+    ren->DrawRect2D(0, 0, (float)w, (float)h, {0, 0, 0, 200});
+    
+    float boxW = 600.0f;
+    float boxH = 500.0f;
+    float x = (w - boxW) / 2.0f;
+    float y = (h - boxH) / 2.0f;
+    ren->DrawRect2D(x, y, boxW, boxH, {40, 40, 45, 255});
+    
+    int mx, my;
+    Input::GetMousePosition(mx, my);
+    bool clicked = Input::IsMouseButtonPressed(SDL_BUTTON_LEFT);
+
+    if (m_MenuState == EditorMenuState::Dungeons) {
+        tr->RenderText(ren, "MANAGE DUNGEONS", (int)x + 20, (int)y + 20, {255, 255, 100, 255});
+        
+        // Save Current Map
+        tr->RenderText(ren, "SAVE CURRENT MAP AS:", (int)x + 20, (int)y + 60, {200, 200, 200, 255});
+        
+        bool mapFocus = (m_FocusedInput == ActiveInput::MapName);
+        ren->DrawRect2D(x + 20, y + 90, boxW - 160, 40, mapFocus ? SDL_Color{40, 40, 50, 255} : SDL_Color{20, 20, 20, 255});
+        tr->RenderText(ren, m_MapInputBuffer + (mapFocus ? "_" : ""), (int)x + 30, (int)y + 100, {255, 255, 255, 255});
+        
+        if (clicked && mx >= x + 20 && mx <= x + boxW - 140 && my >= y + 90 && my <= y + 130) {
+            m_FocusedInput = ActiveInput::MapName;
+        }
+
+        bool hoverSave = (mx >= x + boxW - 130 && mx <= x + boxW - 20 && my >= y + 90 && my <= y + 130);
+        ren->DrawRect2D(x + boxW - 130, y + 90, 110, 40, hoverSave ? SDL_Color{100, 100, 200, 255} : SDL_Color{50, 50, 150, 255});
+        tr->RenderText(ren, "SAVE MAP", (int)x + boxW - 120, (int)y + 100, {255, 255, 255, 255});
+        if (hoverSave && clicked && !m_MapInputBuffer.empty()) {
+            SaveDungeon("assets/dungeons/" + m_MapInputBuffer + ".map");
+            m_CurrentMapName = m_MapInputBuffer;
+            ScanSavedMaps();
+        }
+
+        // Create New Dungeon
+        tr->RenderText(ren, "CREATE NEW DUNGEON:", (int)x + 20, (int)y + 150, {200, 200, 200, 255});
+        
+        bool dgnFocus = (m_FocusedInput == ActiveInput::DungeonName);
+        ren->DrawRect2D(x + 20, y + 180, boxW - 160, 40, dgnFocus ? SDL_Color{40, 40, 50, 255} : SDL_Color{20, 20, 20, 255});
+        tr->RenderText(ren, m_DungeonInputBuffer + (dgnFocus ? "_" : ""), (int)x + 30, (int)y + 190, {255, 255, 255, 255});
+        
+        if (clicked && mx >= x + 20 && mx <= x + boxW - 140 && my >= y + 180 && my <= y + 220) {
+            m_FocusedInput = ActiveInput::DungeonName;
+        }
+
+        bool hoverCreate = (mx >= x + boxW - 130 && mx <= x + boxW - 20 && my >= y + 180 && my <= y + 220);
+        ren->DrawRect2D(x + boxW - 130, y + 180, 110, 40, hoverCreate ? SDL_Color{100, 200, 100, 255} : SDL_Color{50, 150, 50, 255});
+        tr->RenderText(ren, "CREATE DGN", (int)x + boxW - 125, (int)y + 190, {255, 255, 255, 255});
+        if (hoverCreate && clicked && !m_DungeonInputBuffer.empty()) {
+            std::ofstream out("assets/dungeons/" + m_DungeonInputBuffer + ".dungeon");
+            out.close();
+            m_DungeonInputBuffer = "";
+            ScanDungeons();
+        }
+
+        // Dungeon List
+        tr->RenderText(ren, "SELECT DUNGEON TO EDIT LEVELS:", (int)x + 20, (int)y + 240, {200, 200, 200, 255});
+        float itemY = y + 270;
+        for (const auto& dgn : m_SavedDungeons) {
+            bool hover = (mx >= x + 20 && mx <= x + boxW - 100 && my >= itemY && my <= itemY + 35);
+            ren->DrawRect2D(x + 20, itemY, boxW - 120, 35, hover ? SDL_Color{80, 80, 90, 255} : SDL_Color{30, 30, 35, 255});
+            tr->RenderText(ren, dgn, (int)x + 30, (int)itemY + 10, {255, 255, 255, 255});
+            if (hover && clicked) {
+                m_SelectedDungeon = dgn;
+                m_MenuState = EditorMenuState::Levels;
+                LoadDungeonLevels(dgn);
+            }
+
+            bool hoverDel = (mx >= x + boxW - 90 && mx <= x + boxW - 20 && my >= itemY && my <= itemY + 35);
+            ren->DrawRect2D(x + boxW - 90, itemY, 70, 35, hoverDel ? SDL_Color{200, 50, 50, 255} : SDL_Color{100, 30, 30, 255});
+            tr->RenderText(ren, "DEL", (int)x + boxW - 75, (int)itemY + 10, {255, 255, 255, 255});
+            if (hoverDel && clicked) {
+                fs::remove("assets/dungeons/" + dgn + ".dungeon");
+                ScanDungeons();
+                break;
+            }
+            itemY += 40;
+            if (itemY > y + boxH - 40) break;
+        }
+    } else {
+        // LEVELS VIEW
+        tr->RenderText(ren, "DUNGEON: " + m_SelectedDungeon, (int)x + 20, (int)y + 20, {255, 255, 100, 255});
+        
+        bool hoverBack = (mx >= x + boxW - 100 && mx <= x + boxW - 20 && my >= y + 15 && my <= y + 45);
+        ren->DrawRect2D(x + boxW - 100, y + 15, 80, 30, hoverBack ? SDL_Color{100, 100, 120, 255} : SDL_Color{60, 60, 70, 255});
+        tr->RenderText(ren, "BACK", (int)x + boxW - 85, (int)y + 22, {255, 255, 255, 255});
+        if (hoverBack && clicked) m_MenuState = EditorMenuState::Dungeons;
+
+        tr->RenderText(ren, "Active Map: " + m_CurrentMapName, (int)x + 20, (int)y + 60, {100, 255, 100, 255});
+        
+        // Add Map Button
+        bool hoverAdd = (mx >= x + 20 && mx <= x + 200 && my >= y + 90 && my <= y + 130);
+        ren->DrawRect2D(x + 20, y + 90, 180, 40, hoverAdd ? SDL_Color{100, 200, 100, 255} : SDL_Color{50, 150, 50, 255});
+        tr->RenderText(ren, "ADD ACTIVE", (int)x + 35, (int)y + 100, {255, 255, 255, 255});
+        if (hoverAdd && clicked && m_CurrentMapName != "untitled") {
+            m_CurrentDungeonLevels.push_back(m_CurrentMapName);
+            SaveDungeonLevels(m_SelectedDungeon);
+        }
+
+        // New/Clear Map Button
+        bool hoverClear = (mx >= x + 220 && mx <= x + 400 && my >= y + 90 && my <= y + 130);
+        ren->DrawRect2D(x + 220, y + 90, 180, 40, hoverClear ? SDL_Color{200, 150, 50, 255} : SDL_Color{150, 100, 30, 255});
+        tr->RenderText(ren, "NEW MAP", (int)x + 260, (int)y + 100, {255, 255, 255, 255});
+        if (hoverClear && clicked) {
+            // Clear entities
+            std::vector<Entity> toKill;
+            auto& view = m_Registry->View<MeshComponent>();
+            for (auto& pair : view) toKill.push_back(pair.first);
+            for (auto e : toKill) m_Registry->DestroyEntity(e);
+            m_CurrentMapName = "untitled";
+        }
+
+        float itemY = y + 150;
+        int idx = 0;
+        for (auto it = m_CurrentDungeonLevels.begin(); it != m_CurrentDungeonLevels.end(); ++idx) {
+            bool hover = (mx >= x + 20 && mx <= x + boxW - 100 && my >= itemY && my <= itemY + 35);
+            ren->DrawRect2D(x + 20, itemY, boxW - 120, 35, hover ? SDL_Color{80, 80, 90, 255} : SDL_Color{30, 30, 35, 255});
+            tr->RenderText(ren, std::to_string(idx+1) + ". " + *it, (int)x + 30, (int)itemY + 10, {255, 255, 255, 255});
+            if (hover && clicked) {
+                m_CurrentMapName = *it;
+                LoadDungeon("assets/dungeons/" + *it + ".map");
+            }
+
+            bool hoverRem = (mx >= x + boxW - 90 && mx <= x + boxW - 20 && my >= itemY && my <= itemY + 35);
+            ren->DrawRect2D(x + boxW - 90, itemY, 70, 35, hoverRem ? SDL_Color{200, 50, 50, 255} : SDL_Color{100, 30, 30, 255});
+            tr->RenderText(ren, "REM", (int)x + boxW - 75, (int)itemY + 10, {255, 255, 255, 255});
+            if (hoverRem && clicked) {
+                it = m_CurrentDungeonLevels.erase(it);
+                SaveDungeonLevels(m_SelectedDungeon);
+                continue; 
+            }
+            
+            ++it;
+            itemY += 40;
+            if (itemY > y + boxH - 40) break;
+        }
+    }
 }
 
 void CreativeMode::DrawHotbar(GLRenderer *ren, TextRenderer *tr, int w,
@@ -856,12 +1100,22 @@ void CreativeMode::SaveDungeon(const std::string &filename) {
         << " " << t->z << " " << t->rot << "\n";
   }
   out.close();
+  std::cout << "Saved map to: " << filename << std::endl;
 }
 
 void CreativeMode::LoadDungeon(const std::string &filename) {
   std::ifstream in(filename);
   if (!in.is_open())
     return;
+
+  // Pre-load characters to ensure they are available
+  auto assetManager = std::make_unique<AssetManager>(m_Renderer);
+  assetManager->LoadCharacter("Knight",
+                               "assets/adventurers/Characters/gltf/Knight.glb",
+                               "assets/adventurers/Textures/knight_texture.png");
+  assetManager->LoadCharacter("Skeleton_Warrior",
+                               "assets/skeletons/characters/gltf/Skeleton_Warrior.glb",
+                               "assets/skeletons/texture/skeleton_texture.png");
 
   // Clear existing mesh entities
   std::vector<Entity> toKill;
@@ -877,8 +1131,12 @@ void CreativeMode::LoadDungeon(const std::string &filename) {
   while (in >> meshName >> texName >> x >> y >> z >> rot) {
     auto e = m_Registry->CreateEntity();
     m_Registry->AddComponent<Transform3DComponent>(e, {x, y, z, rot, 0.0f});
+    
+    std::string visualMesh = (meshName == "player_spawn") ? "Knight" : meshName;
+    std::string visualTex = (meshName == "player_spawn") ? "Knight_tex" : texName;
+
     m_Registry->AddComponent<MeshComponent>(
-        e, {meshName, texName, 1.0f, 1.0f, 1.0f});
+        e, {meshName, texName, 1.0f, 1.0f, 1.0f}); // Keep logical name in component
 
     std::string lowName = meshName;
     std::transform(lowName.begin(), lowName.end(), lowName.begin(), ::tolower);
@@ -896,7 +1154,8 @@ void CreativeMode::LoadDungeon(const std::string &filename) {
     }
 
     // Restore animations for skinned meshes
-    RenderMesh *rm = m_Renderer->GetRenderMesh(meshName);
+    std::string animMesh = (meshName == "player_spawn") ? "Knight" : meshName;
+    RenderMesh *rm = m_Renderer->GetRenderMesh(animMesh);
     if (rm && rm->isSkinned && !rm->animations.empty()) {
       int idleIdx = 0;
       for (size_t i = 0; i < rm->animations.size(); ++i) {
@@ -909,6 +1168,7 @@ void CreativeMode::LoadDungeon(const std::string &filename) {
           e, {idleIdx, (float)(rand() % 100) * 0.01f, 1.0f});
     }
   }
+  std::cout << "Loaded map from: " << filename << std::endl;
 }
 
 } // namespace PixelsEngine

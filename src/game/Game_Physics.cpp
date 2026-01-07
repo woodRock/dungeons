@@ -8,7 +8,7 @@ using namespace PixelsEngine;
 void DungeonsGame::UpdatePhysics(float dt) {
 
   if (m_State != GameState::Playing && m_State != GameState::Creative &&
-      m_State != GameState::Siege)
+      m_State != GameState::Siege && m_State != GameState::Dungeon)
     return;
 
   auto *phys = m_Registry.GetComponent<PhysicsComponent>(m_PlayerEntity);
@@ -26,7 +26,7 @@ void DungeonsGame::UpdatePhysics(float dt) {
 
     // Sliding height and friction
     float eyeHeight = phys->isSliding ? 0.75f : 1.5f;
-    if (m_State == GameState::Siege)
+    if (m_State == GameState::Siege || m_State == GameState::Dungeon)
       eyeHeight = 0.0f; // Character feet on ground
 
     float currentFriction =

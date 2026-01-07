@@ -117,30 +117,34 @@ void ThirdPersonCamera::Update(float dt) {
 // TopDownCamera Implementation
 // ============================================================================
 
-TopDownCamera::TopDownCamera(Camera* camera)
-    : m_Camera(camera) {}
+TopDownCamera::TopDownCamera(Camera* camera, Registry* registry, Entity targetEntity)
+    : m_Camera(camera), m_Registry(registry), m_TargetEntity(targetEntity) {}
 
 void TopDownCamera::HandleInput(float dt) {
-  if (!m_Camera) return;
-
-  float moveSpeed = m_MoveSpeed * dt;
-
-  if (Input::IsKeyDown(SDL_SCANCODE_W)) {
-    m_Camera->y += moveSpeed;
-  }
-  if (Input::IsKeyDown(SDL_SCANCODE_S)) {
-    m_Camera->y -= moveSpeed;
-  }
-  if (Input::IsKeyDown(SDL_SCANCODE_A)) {
-    m_Camera->x -= moveSpeed;
-  }
-  if (Input::IsKeyDown(SDL_SCANCODE_D)) {
-    m_Camera->x += moveSpeed;
-  }
+  // Top-down follow camera doesn't need manual movement input
 }
 
 void TopDownCamera::Update(float dt) {
-  // Top-down camera doesn't need per-frame updates
+  if (!m_Camera || !m_Registry) return;
+
+  auto *t = m_Registry->GetComponent<Transform3DComponent>(m_TargetEntity);
+  if (!t) return;
+
+  // Fixed top-down position relative to player
+  // Offset "North" (-Y) to look "South" (+Y)
+  float targetX = t->x;
+  float targetY = t->y - m_Distance; 
+  float targetZ = t->z + m_Height;
+
+  // Smooth camera movement
+  float smoothSpeed = 5.0f * dt;
+  m_Camera->x += (targetX - m_Camera->x) * smoothSpeed;
+  m_Camera->y += (targetY - m_Camera->y) * smoothSpeed;
+  m_Camera->z += (targetZ - m_Camera->z) * smoothSpeed;
+
+  // Point down and South (+Y)
+  m_Camera->yaw = M_PI / 2.0f; 
+  m_Camera->pitch = -0.98f; // Match height/distance ratio (atan(12/8))
 }
 
 } // namespace PixelsEngine

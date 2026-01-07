@@ -111,4 +111,58 @@ void ThirdPersonMovementController::HandleInput(float dt) {
   }
 }
 
+// ============================================================================
+// TopDownMovementController Implementation
+// ============================================================================
+
+TopDownMovementController::TopDownMovementController(Registry* registry, Entity playerEntity)
+    : m_Registry(registry), m_PlayerEntity(playerEntity) {
+    m_Acceleration = 100.0f;
+    m_Friction = 0.98f;
+    m_MaxSpeed = 20.0f;
+}
+
+void TopDownMovementController::HandleInput(float dt) {
+  if (!m_Registry) return;
+
+  auto *t = m_Registry->GetComponent<Transform3DComponent>(m_PlayerEntity);
+  auto *phys = m_Registry->GetComponent<PhysicsComponent>(m_PlayerEntity);
+  
+  if (!t || !phys) return;
+
+  // Apply friction (per-frame damping)
+  phys->velX *= m_Friction;
+  phys->velY *= m_Friction;
+
+  float accel = m_Acceleration * dt;
+  float dx = 0, dy = 0;
+
+  if (Input::IsKeyDown(m_KeyForward)) dy += 1.0f;
+  if (Input::IsKeyDown(m_KeyBack))    dy -= 1.0f;
+  if (Input::IsKeyDown(m_KeyLeft))    dx += 1.0f;
+  if (Input::IsKeyDown(m_KeyRight))   dx -= 1.0f;
+
+  if (dx != 0 || dy != 0) {
+    // Normalize and apply acceleration
+    float len = sqrt(dx * dx + dy * dy);
+    dx /= len;
+    dy /= len;
+
+    phys->velX += dx * accel;
+    phys->velY += dy * accel;
+
+    // Rotate player to face movement direction
+    // Formula: atan2(dy, dx) + PI/2 correctly maps world-space movement to asset rotation
+    t->rot = atan2(dy, dx) + M_PI/2.0f;
+  }
+
+  // Clamp velocity
+  float speed = sqrt(phys->velX * phys->velX + phys->velY * phys->velY);
+  if (speed > m_MaxSpeed) {
+    float scale = m_MaxSpeed / speed;
+    phys->velX *= scale;
+    phys->velY *= scale;
+  }
+}
+
 } // namespace PixelsEngine

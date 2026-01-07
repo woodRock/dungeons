@@ -40,14 +40,16 @@ void DungeonsGame::RenderMainMenu() {
                m_MenuSelection == 0);
     DrawButton(w / 2 - btnW / 2, startY + gap, btnW, btnH, "CREATIVE MODE",
                m_MenuSelection == 1);
-    DrawButton(w / 2 - btnW / 2, startY + gap * 2, btnW, btnH, "SKELETON SIEGE",
+    DrawButton(w / 2 - btnW / 2, startY + gap * 2, btnW, btnH, "DUNGEON MODE",
                m_MenuSelection == 2);
-    DrawButton(w / 2 - btnW / 2, startY + gap * 3, btnW, btnH, "BATTLE MODE",
+    DrawButton(w / 2 - btnW / 2, startY + gap * 3, btnW, btnH, "SKELETON SIEGE",
                m_MenuSelection == 3);
-    DrawButton(w / 2 - btnW / 2, startY + gap * 4, btnW, btnH, "OPTIONS",
+    DrawButton(w / 2 - btnW / 2, startY + gap * 4, btnW, btnH, "BATTLE MODE",
                m_MenuSelection == 4);
-    DrawButton(w / 2 - btnW / 2, startY + gap * 5, btnW, btnH, "QUIT",
+    DrawButton(w / 2 - btnW / 2, startY + gap * 5, btnW, btnH, "OPTIONS",
                m_MenuSelection == 5);
+    DrawButton(w / 2 - btnW / 2, startY + gap * 6, btnW, btnH, "QUIT",
+               m_MenuSelection == 6);
   } else {
     bool isFullscreen =
         SDL_GetWindowFlags(m_Window) & SDL_WINDOW_FULLSCREEN_DESKTOP;

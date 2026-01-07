@@ -72,20 +72,24 @@ private:
   float m_CameraPitch = 0.0f;
 };
 
-// Top-down isometric-style camera
+// Top-down isometric-style camera following a target
 class TopDownCamera : public CameraController {
 public:
-  TopDownCamera(Camera* camera);
+  TopDownCamera(Camera* camera, Registry* registry, Entity targetEntity);
   ~TopDownCamera() override = default;
   
   void Update(float dt) override;
   void HandleInput(float dt) override;
   
-  void SetMoveSpeed(float speed) { m_MoveSpeed = speed; }
+  void SetHeight(float height) { m_Height = height; }
+  void SetDistance(float dist) { m_Distance = dist; }
 
 private:
   Camera* m_Camera;
-  float m_MoveSpeed = 10.0f;
+  Registry* m_Registry;
+  Entity m_TargetEntity;
+  float m_Height = 15.0f;
+  float m_Distance = 10.0f;
 };
 
 } // namespace PixelsEngine

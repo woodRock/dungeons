@@ -10,9 +10,10 @@
 #include "CreativeMode.h"
 #include "ExplorationMode.h"
 #include "SiegeMode.h"
+#include "DungeonMode.h"
 #include <memory>
 
-enum class GameState { MainMenu, Playing, Creative, Siege, Battle, Paused };
+enum class GameState { MainMenu, Playing, Creative, Siege, Battle, Dungeon, Paused, MapSelect, FloorSelect };
 
 class DungeonsGame : public PixelsEngine::Application {
 public:
@@ -29,16 +30,23 @@ private:
   void InitGame();
   void InitSiege();
   void InitBattle();
+  void InitDungeon();
   void InitMainMenu();
 
   void UpdateMainMenu(float dt);
   void UpdateGameplay(float dt);
   void UpdateSiege(float dt);
   void UpdateBattle(float dt);
+  void UpdateDungeon(float dt);
+  void UpdateMapSelect(float dt);
+  void UpdateFloorSelect(float dt);
 
   void RenderMainMenu();
   void RenderGameplay();
   void RenderCreative();
+  void RenderDungeon();
+  void RenderMapSelect();
+  void RenderFloorSelect();
   void RenderUI();
   void RenderPauseMenu();
 
@@ -46,6 +54,8 @@ private:
   void HandleInputCreative(float dt);
   void HandleInputMenu();
   void HandleInputPause();
+  void HandleInputMapSelect();
+  void HandleInputFloorSelect();
 
   void UpdatePhysics(float dt);
   void UpdateDoors(float dt);
@@ -66,10 +76,18 @@ private:
   std::unique_ptr<SiegeMode> m_SiegeMode;
   std::unique_ptr<ExplorationMode> m_ExplorationMode;
   std::unique_ptr<BattleMode> m_BattleMode;
+  std::unique_ptr<PixelsEngine::DungeonMode> m_DungeonMode;
 
   std::shared_ptr<PixelsEngine::Texture> m_BowIdle;
   std::shared_ptr<PixelsEngine::Texture> m_BowDraw;
   std::shared_ptr<PixelsEngine::Texture> m_Crosshair;
+
+  // Dungeon Map Select State
+  std::vector<std::string> m_AvailableMaps;
+  std::vector<std::string> m_AvailableFloors;
+  int m_MapSelectIdx = 0;
+  int m_FloorSelectIdx = 0;
+  std::string m_SelectedDungeonFile = "";
 
   // Sounds
   Mix_Chunk *m_SfxShoot = nullptr;

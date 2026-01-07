@@ -15,7 +15,7 @@ void DungeonsGame::OnRender() {
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
   // 2. Render 3D Scene (OpenGL), don't swap yet if we have UI
-  if (m_State != GameState::MainMenu) {
+  if (m_State != GameState::MainMenu && m_State != GameState::MapSelect && m_State != GameState::FloorSelect) {
     // m_GLRenderer.Render already sets viewport and clears,
     // but we called it above too. That's fine.
     // We pass false to prevent internal swap.
@@ -29,7 +29,7 @@ void DungeonsGame::OnRender() {
       m_CreativeMode.RenderWorld(&m_GLRenderer);
     }
   } else {
-    // Menu specific clear if different
+    // Menu or MapSelect specific clear
     glClearColor(0.1f, 0.1f, 0.2f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   }
@@ -44,8 +44,15 @@ void DungeonsGame::OnRender() {
     }
   } else if (m_State == GameState::Paused) {
     RenderPauseMenu();
+  } else if (m_State == GameState::MapSelect) {
+    RenderMapSelect();
+  } else if (m_State == GameState::FloorSelect) {
+    RenderFloorSelect();
   } else if (m_State == GameState::Playing || m_State == GameState::Battle ||
-             m_State == GameState::Siege) {
+             m_State == GameState::Siege || m_State == GameState::Dungeon) {
+    if (m_State == GameState::Dungeon && m_DungeonMode) {
+        m_DungeonMode->RenderUI(&m_GLRenderer, m_TextRenderer.get(), m_Width, m_Height);
+    }
     RenderUI();
   }
 
@@ -56,9 +63,3 @@ void DungeonsGame::OnRender() {
 
 // RenderGameplay was not found in Game_UI.cpp, so we keep a stub here.
 void DungeonsGame::RenderGameplay() {}
-
-// The following are defined in Game_UI.cpp, so we do NOT define them here.
-// void DungeonsGame::RenderMainMenu() {}
-// void DungeonsGame::RenderUI() {}
-// void DungeonsGame::RenderPauseMenu() {}
-// void DungeonsGame::DrawButton(...) {}
