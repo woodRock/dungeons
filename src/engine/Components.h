@@ -216,6 +216,7 @@ struct BattleUnitComponent {
     bool isSelected = false;
     bool isTurn = false;
     float flashAmount = 0.0f;
+    int preferredAction = 2; // Default to Melee (index from ActionType)
 };
 
 struct AttachmentComponent {

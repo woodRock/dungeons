@@ -265,7 +265,7 @@ void BattleMode::NextTurn() {
         std::cout << "Turn: Enemy Unit " << current << std::endl;
     }
     m_Cursor.active = false;
-    m_SelectedAction = Melee;
+    m_SelectedAction = Move; // Default to move
 }
 
 void BattleMode::Update(float dt, Entity playerEntity) {
@@ -361,20 +361,25 @@ void BattleMode::Update(float dt, Entity playerEntity) {
     } else if (m_State == PlayerTurn) {
         HandlePlayerInput();
         
-        // Update weapon mesh based on action
         Entity current = m_TurnOrder[m_CurrentTurnIndex];
+        auto* unit = m_Registry->GetComponent<BattleUnitComponent>(current);
         auto* t = m_Registry->GetComponent<Transform3DComponent>(current);
         auto* attach = m_Registry->GetComponent<AttachmentComponent>(current);
         
-            if (t && m_Cursor.active) {
-                // Flipped signs to fix inversion
-                t->rot = atan2(t->x - m_Cursor.x, t->y - m_Cursor.y);
-            }
-        if (attach) {
-            if (m_SelectedAction == Ranged) {
+        // Update preferred action if user explicitly toggled Melee or Ranged
+        if (unit && (m_SelectedAction == Melee || m_SelectedAction == Ranged)) {
+            unit->preferredAction = (int)m_SelectedAction;
+        }
+
+        if (t && m_Cursor.active) {
+            t->rot = atan2(t->x - m_Cursor.x, t->y - m_Cursor.y);
+        }
+
+        if (attach && unit) {
+            if (unit->preferredAction == (int)Ranged) {
                 attach->meshName = "Crossbow";
                 attach->rotX = -16.896f; attach->rotY = 30.052f; attach->rotZ = 11.404f;
-            } else if (m_SelectedAction == Melee) {
+            } else {
                 attach->meshName = "Sword";
                 attach->rotX = -7.63f; attach->rotY = 18.148f; attach->rotZ = 1.702f;
             }
@@ -497,19 +502,18 @@ void BattleMode::HandlePlayerInput() {
     if (Input::IsMouseButtonPressed(SDL_BUTTON_LEFT)) {
         bool ctrl = Input::IsKeyDown(SDL_SCANCODE_LCTRL) || Input::IsKeyDown(SDL_SCANCODE_RCTRL);
         
-        // Ctrl + Click to attack hovered target
+        // Ctrl + Click to attack hovered target using preferred weapon
         if (ctrl && m_Cursor.hoveredEntity != -1) {
             auto* target = m_Registry->GetComponent<BattleUnitComponent>(m_Cursor.hoveredEntity);
             if (target && target->team == BattleUnitComponent::Enemy && unit->hasAction) {
                 float dist = sqrt(pow(t->x - m_Registry->GetComponent<Transform3DComponent>(m_Cursor.hoveredEntity)->x, 2) + 
                                   pow(t->y - m_Registry->GetComponent<Transform3DComponent>(m_Cursor.hoveredEntity)->y, 2));
                 
-                // Default to melee unless we are explicitly in ranged mode
-                ActionType quickAction = (m_SelectedAction == Ranged) ? Ranged : Melee;
+                ActionType quickAction = (ActionType)unit->preferredAction;
                 float range = (quickAction == Melee) ? 2.0f : 15.0f;
                 if (dist <= range) {
                     ExecuteAction(current, quickAction, m_Cursor.hoveredEntity, 0, 0);
-                    m_SelectedAction = Melee;
+                    m_SelectedAction = Move; // Reset to default move
                 }
                 return;
             }
