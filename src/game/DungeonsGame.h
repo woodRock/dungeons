@@ -81,6 +81,7 @@ private:
   PixelsEngine::Entity m_PlayerEntity;
 
   GameState m_State = GameState::MainMenu;
+  GameState m_PreviousState = GameState::MainMenu; // Store state before pause
   int m_MenuSelection = 0; // 0: Play/Resume, 1: Options, 2: Quit/MainMenu
   bool m_InOptions = false;
 

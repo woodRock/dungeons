@@ -30,6 +30,7 @@ void GLRenderer::Init(int width, int height) {
     out vec2 TexCoord;
     out vec3 Normal;
     out vec3 FragPos;
+    out float Depth;
 
     uniform mat4 model;
     uniform mat4 view;
@@ -49,8 +50,9 @@ void GLRenderer::Init(int width, int height) {
         vec4 worldPos = model * skinMatrix * vec4(aPos, 1.0);
         gl_Position = projection * view * worldPos;
         TexCoord = aTexCoord;
-        Normal = mat3(model) * mat3(skinMatrix) * aNormal;
+        Normal = normalize(mat3(model) * mat3(skinMatrix) * aNormal);
         FragPos = vec3(worldPos);
+        Depth = gl_Position.z;
     }
   )";
 
@@ -60,28 +62,53 @@ void GLRenderer::Init(int width, int height) {
       in vec2 TexCoord;
       in vec3 Normal;
       in vec3 FragPos;
+      in float Depth;
       uniform sampler2D ourTexture;
       uniform vec3 lightPos;
+      uniform vec3 viewPos;
       uniform float alpha;
       uniform bool useFlatColor;
       uniform vec4 flatColor;
       uniform vec3 flashColor;
       uniform float flashAmount;
-  
+      
       void main() {
           if (useFlatColor) {
               FragColor = flatColor;
           } else {
-              vec3 ambient = 0.3 * vec3(1.0);
-              vec3 norm = normalize(Normal);
-              vec3 lightDir = normalize(lightPos - FragPos);
-              vec3 diffuse = max(dot(norm, lightDir), 0.0) * vec3(1.0);
               vec4 texColor = texture(ourTexture, TexCoord);
               
-              vec3 finalColor = (ambient + diffuse) * texColor.rgb;
+              // Ambient lighting with slight tint for dungeon feel
+              vec3 ambient = 0.35 * vec3(0.95, 0.95, 1.0);
+              
+              // Diffuse lighting
+              vec3 norm = normalize(Normal);
+              vec3 lightDir = normalize(lightPos - FragPos);
+              float diff = max(dot(norm, lightDir), 0.0);
+              vec3 diffuse = diff * vec3(1.0, 0.95, 0.9);
+              
+              // Specular highlights
+              vec3 viewDir = normalize(viewPos - FragPos);
+              vec3 reflectDir = reflect(-lightDir, norm);
+              float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
+              vec3 specular = 0.3 * spec * vec3(1.0);
+              
+              // Rim lighting for silhouette
+              float rim = 1.0 - dot(norm, viewDir);
+              rim = pow(rim, 2.0);
+              vec3 rimColor = 0.15 * rim * vec3(1.0, 0.8, 0.6);
+              
+              // Combine lighting
+              vec3 finalColor = (ambient + diffuse + specular + rimColor) * texColor.rgb;
               if (length(texColor.rgb) < 0.01) finalColor = vec3(1.0, 0.0, 1.0);
               
-              // Apply flash
+              // Distance fog
+              float fogDist = length(viewPos - FragPos);
+              float fogFactor = clamp(1.0 - fogDist / 100.0, 0.0, 1.0);
+              vec3 fogColor = vec3(0.15, 0.15, 0.2);
+              finalColor = mix(fogColor, finalColor, fogFactor);
+              
+              // Apply flash effect
               finalColor = mix(finalColor, flashColor, flashAmount);
               
               FragColor = vec4(finalColor, alpha);
@@ -358,6 +385,7 @@ void GLRenderer::Render(SDL_Window *win, const Camera &cam, Registry &reg,
   m_Shader->SetMat4("view", view.m);
   m_Shader->SetMat4("projection", proj.m);
   m_Shader->SetVec3("lightPos", glEye.x, glEye.y, glEye.z);
+  m_Shader->SetVec3("viewPos", glEye.x, glEye.y, glEye.z);
   m_Shader->SetInt("ourTexture", 0);
   m_Shader->SetInt("useAlpha", 0);
   auto &viewGroup = reg.View<MeshComponent>();

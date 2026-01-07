@@ -37,6 +37,7 @@ void DungeonsGame::HandleInputGameplay(float dt) {
   }
 
   if (Input::IsKeyPressed(SDL_SCANCODE_ESCAPE)) {
+    m_PreviousState = m_State;
     m_State = GameState::Paused;
     SDL_SetRelativeMouseMode(SDL_FALSE);
     m_MenuSelection = 0;
@@ -350,7 +351,8 @@ void DungeonsGame::HandleInputPause() {
       m_InOptions = false;
       m_MenuSelection = 3;
     } else {
-      m_State = GameState::Playing;
+      // Resume to previous game mode
+      m_State = m_PreviousState;
       SDL_SetRelativeMouseMode(SDL_TRUE);
     }
     return;
@@ -400,9 +402,8 @@ void DungeonsGame::HandleInputPause() {
     if (!m_InOptions) {
       switch (m_MenuSelection) {
       case 0:
-        m_State = GameState::Playing;
-        if (m_CreativeMode.IsActive())
-          m_State = GameState::Creative;
+        // Resume to previous game mode
+        m_State = m_PreviousState;
         SDL_SetRelativeMouseMode(SDL_TRUE);
         break;
       case 1:

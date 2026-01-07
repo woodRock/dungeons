@@ -24,6 +24,7 @@ void DungeonsGame::OnUpdate(float deltaTime) {
     // Let the creative mode/editor own its loop for placement/UI
     m_CreativeMode.Update(deltaTime, m_PlayerEntity);
     if (Input::IsKeyPressed(SDL_SCANCODE_ESCAPE)) {
+      m_PreviousState = m_State;
       m_State = GameState::Paused;
       SDL_SetRelativeMouseMode(SDL_FALSE);
       m_MenuSelection = 0;
@@ -39,6 +40,7 @@ void DungeonsGame::OnUpdate(float deltaTime) {
     UpdateProjectiles(deltaTime);
     UpdateAnimations(deltaTime);
     if (Input::IsKeyPressed(SDL_SCANCODE_ESCAPE)) {
+      m_PreviousState = m_State;
       m_State = GameState::Paused;
       SDL_SetRelativeMouseMode(SDL_FALSE);
       m_MenuSelection = 0;
@@ -52,6 +54,7 @@ void DungeonsGame::OnUpdate(float deltaTime) {
     UpdateProjectiles(deltaTime);
     UpdateAnimations(deltaTime);
     if (Input::IsKeyPressed(SDL_SCANCODE_ESCAPE)) {
+      m_PreviousState = m_State;
       m_State = GameState::Paused;
       m_MenuSelection = 0;
     }
