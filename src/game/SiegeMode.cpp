@@ -135,7 +135,8 @@ void SiegeMode::Update(float dt, Entity playerEntity, float tunerDist,
   }
 
   // Determine if player is moving for animation
-  bool moving = phys && (phys->velX != 0 || phys->velY != 0);
+  // Use a small threshold to avoid jitter and ensure idle plays when stopped
+  bool moving = phys && (phys->velX * phys->velX + phys->velY * phys->velY > 0.01f);
 
   if (false) {  // Keep this block for future reference, but skip execution
     phys->velZ = pctrl ? pctrl->jumpForce : 6.0f;
@@ -214,21 +215,30 @@ void SiegeMode::Update(float dt, Entity playerEntity, float tunerDist,
   if (m_HitmarkerTimer > 0)
     m_HitmarkerTimer -= dt;
 
-  if (Input::IsMouseButtonPressed(SDL_BUTTON_LEFT)) {
+  // Use IsMouseButtonDown for more responsive combat feel
+  if (Input::IsMouseButtonDown(SDL_BUTTON_LEFT)) {
     if (m_AttackTimer <= 0.0f) {
 
       std::string animName = (unit->preferredAction == 3)
                                  ? "Ranged_Bow_Shoot"
                                  : "Melee_1H_Attack_Chop";
+      
+      bool animFound = false;
       if (rm && anim) {
         for (size_t i = 0; i < rm->animations.size(); i++) {
           if (rm->animations[i].name.find(animName) != std::string::npos) {
             anim->animationIndex = (int)i;
             anim->currentTime = 0.0f;
             m_AttackTimer = rm->animations[i].duration;
+            animFound = true;
             break;
           }
         }
+      }
+      
+      // Fallback timer if animation not found
+      if (!animFound) {
+        m_AttackTimer = 0.5f;
       }
 
       if (unit->preferredAction == 3) { // Ranged
@@ -236,20 +246,20 @@ void SiegeMode::Update(float dt, Entity playerEntity, float tunerDist,
           Mix_PlayChannel(-1, m_SfxShoot, 0);
 
         auto arrow = m_Registry->CreateEntity();
+        // Position arrow at chest height and forward
+        float forwardX = -sin(t->rot);
+        float forwardY = -cos(t->rot);
+        
         m_Registry->AddComponent<Transform3DComponent>(
-            arrow, {t->x, t->y, t->z + 1.2f, t->rot, m_CameraController->GetCameraPitch()});
+            arrow, {t->x + forwardX * 0.5f, t->y + forwardY * 0.5f, t->z + 1.2f, t->rot, m_CameraController->GetCameraPitch()});
         m_Registry->AddComponent<MeshComponent>(
             arrow, {"Arrow", "Knight_tex", 1, 1, 1});
         m_Registry->AddComponent<ProjectileComponent>(
             arrow, {ProjectileComponent::Arrow, 25.0f, true, 5.0f});
 
-        // Shoot in player's facing direction
-        float shootForwardX = -sin(t->rot);
-        float shootForwardY = -cos(t->rot);
-
         float projSpeed = 40.0f;
         m_Registry->AddComponent<PhysicsComponent>(
-            arrow, {shootForwardX * projSpeed, shootForwardY * projSpeed, 0.0f,
+            arrow, {forwardX * projSpeed, forwardY * projSpeed, 0.0f,
                     0.0f, false, false, 0.0f, 0.0f});
       } else { // Melee
         bool hitSomething = false;

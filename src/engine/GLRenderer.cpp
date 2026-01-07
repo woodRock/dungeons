@@ -156,7 +156,7 @@ void GLRenderer::InitUI() {
   glBindVertexArray(0);
 }
 
-void GLRenderer::DrawRect2D(int x, int y, int w, int h, SDL_Color color) {
+void GLRenderer::DrawRect2D(float x, float y, float w, float h, SDL_Color color) {
   glDisable(GL_DEPTH_TEST);
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -179,8 +179,8 @@ void GLRenderer::DrawRect2D(int x, int y, int w, int h, SDL_Color color) {
                      0,
                      1};
   m_UIShader->SetMat4("projection", ortho);
-  Mat4 model = Mat4::Translate({(float)x, (float)y, 0}) *
-               Mat4::Scale({(float)w, (float)h, 1});
+  Mat4 model = Mat4::Translate({x, y, 0}) *
+               Mat4::Scale({w, h, 1});
   m_UIShader->SetMat4("model", model.m);
   float c[4] = {color.r / 255.0f, color.g / 255.0f, color.b / 255.0f,
                 color.a / 255.0f};
@@ -192,7 +192,48 @@ void GLRenderer::DrawRect2D(int x, int y, int w, int h, SDL_Color color) {
   glDisable(GL_BLEND);
 }
 
-void GLRenderer::DrawTexture2D(unsigned int texID, int x, int y, int w, int h,
+void GLRenderer::DrawRotatedRect2D(float x, float y, float w, float h, float angle, SDL_Color color) {
+  glDisable(GL_DEPTH_TEST);
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  m_UIShader->Use();
+  float L = 0, R = (float)m_Width, B = (float)m_Height, T = 0;
+  float ortho[16] = {2.0f / (R - L),
+                     0,
+                     0,
+                     0,
+                     0,
+                     2.0f / (T - B),
+                     0,
+                     0,
+                     0,
+                     0,
+                     -1,
+                     0,
+                     -(R + L) / (R - L),
+                     -(T + B) / (T - B),
+                     0,
+                     1};
+  m_UIShader->SetMat4("projection", ortho);
+  
+  // Pivot around the center
+  Mat4 model = Mat4::Translate({x, y, 0}) *
+               Mat4::RotateZ(angle) *
+               Mat4::Translate({-w * 0.5f, -h * 0.5f, 0}) *
+               Mat4::Scale({w, h, 1});
+               
+  m_UIShader->SetMat4("model", model.m);
+  float c[4] = {color.r / 255.0f, color.g / 255.0f, color.b / 255.0f,
+                color.a / 255.0f};
+  glUniform4fv(glGetUniformLocation(m_UIShader->ID, "color"), 1, c);
+  m_UIShader->SetInt("useTexture", 0);
+  glBindVertexArray(m_QuadVAO);
+  glDrawArrays(GL_TRIANGLES, 0, 6);
+  glEnable(GL_DEPTH_TEST);
+  glDisable(GL_BLEND);
+}
+
+void GLRenderer::DrawTexture2D(unsigned int texID, float x, float y, float w, float h,
                                SDL_Color color) {
   glDisable(GL_DEPTH_TEST);
   glEnable(GL_BLEND);
@@ -216,8 +257,8 @@ void GLRenderer::DrawTexture2D(unsigned int texID, int x, int y, int w, int h,
                      0,
                      1};
   m_UIShader->SetMat4("projection", ortho);
-  Mat4 model = Mat4::Translate({(float)x, (float)y, 0}) *
-               Mat4::Scale({(float)w, (float)h, 1});
+  Mat4 model = Mat4::Translate({x, y, 0}) *
+               Mat4::Scale({w, h, 1});
   m_UIShader->SetMat4("model", model.m);
   float c[4] = {color.r / 255.0f, color.g / 255.0f, color.b / 255.0f,
                 color.a / 255.0f};

@@ -3,6 +3,10 @@
 #include <cmath>
 #include <algorithm>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 namespace PixelsEngine {
 
 Minimap::Minimap() {}
@@ -25,7 +29,6 @@ void Minimap::SetSize(int width, int height) {
 }
 
 void Minimap::SetZoom(float zoom) {
-    // Clamp zoom to reasonable levels
     if (zoom < 0.5f) zoom = 0.5f;
     if (zoom > 5.0f) zoom = 5.0f;
     m_Zoom = zoom;
@@ -35,166 +38,176 @@ void Minimap::SetVisible(bool visible) {
     m_Visible = visible;
 }
 
-// Helper to convert world coordinates to minimap screen coordinates.
-// Returns false if the point is outside the minimap bounds.
-bool Minimap::WorldToMinimap(float worldX, float worldY, float playerX, float playerY, int& outX, int& outY) {
-    int centerX = m_PosX + m_Width / 2;
-    int centerY = m_PosY + m_Height / 2;
+// Coordinate Conversion: World Space -> Minimap Screen Space
+// Applies: Translation -> Rotation -> Mirroring -> Scaling -> Bounds Check
+bool Minimap::WorldToMinimap(float worldX, float worldY, float playerX, float playerY, float playerAngle, float& outX, float& outY) {
+    float centerX = (float)m_PosX + m_Width / 2.0f;
+    float centerY = (float)m_PosY + m_Height / 2.0f;
+    
+    float scale = m_Settings.baseScale * m_Zoom;
 
-    // "North-Up" logic: we only scale relative to player position, we do NOT rotate the world.
-    // The world stays fixed to cardinal directions, the player arrow rotates.
-    float effectiveScale = m_Settings.baseScale * m_Zoom;
-
+    // 1. Get position relative to player
     float dx = worldX - playerX;
     float dy = worldY - playerY;
 
-    // Apply scale
-    float relX = dx * effectiveScale;
-    float relY = dy * effectiveScale;
+    // 2. Rotation Logic (Forward-Up View)
+    // Rotate world opposite to player rotation.
+    // Offset by -90 degrees (-PI/2) because screen "Up" is -Y in SDL.
+    float theta = -playerAngle - (M_PI / 2.0f); 
 
-    // Bounds checking (Strict clipping)
-    // We add a small margin so objects don't touch the border
-    int margin = 2; 
-    int halfW = (m_Width / 2) - margin;
-    int halfH = (m_Height / 2) - margin;
+    float cosA = cos(theta);
+    float sinA = sin(theta);
 
-    if (abs(relX) > halfW || abs(relY) > halfH) {
+    // Standard 2D rotation matrix
+    float rotX = dx * cosA - dy * sinA;
+    float rotY = dx * sinA + dy * cosA;
+
+    // 3. Mirror & Scale
+    // Negate X to mirror horizontally (fix for coordinate system mismatch)
+    float screenRelX = -(rotX * scale); 
+    float screenRelY = rotY * scale;
+
+    // 4. Bounds Checking (Clipping)
+    float margin = 2.0f; 
+    float halfW = (m_Width / 2.0f) - margin;
+    float halfH = (m_Height / 2.0f) - margin;
+
+    if (abs(screenRelX) > halfW || abs(screenRelY) > halfH) {
         return false;
     }
 
-    outX = centerX + (int)relX;
-    outY = centerY + (int)relY;
+    outX = centerX + screenRelX;
+    outY = centerY + screenRelY;
     return true;
 }
 
 void Minimap::RenderBackground(GLRenderer* renderer) {
-    // 1. Draw Background
-    renderer->DrawRect2D(m_PosX, m_PosY, m_Width, m_Height, m_Settings.bgColor);
+    // Outer glow/shadow
+    SDL_Color glow = m_Settings.borderColor;
+    glow.a = 60;
+    renderer->DrawRect2D((float)m_PosX - 4.0f, (float)m_PosY - 4.0f, (float)m_Width + 8.0f, (float)m_Height + 8.0f, glow);
 
-    // 2. Draw Border (Constructed of 4 rects)
-    int t = m_Settings.borderThickness;
+    // Background fill
+    renderer->DrawRect2D((float)m_PosX, (float)m_PosY, (float)m_Width, (float)m_Height, m_Settings.bgColor);
+
+    // Border
+    float t = (float)m_Settings.borderThickness;
     SDL_Color c = m_Settings.borderColor;
 
-    // Top
-    renderer->DrawRect2D(m_PosX, m_PosY, m_Width, t, c);
-    // Bottom
-    renderer->DrawRect2D(m_PosX, m_PosY + m_Height - t, m_Width, t, c);
-    // Left
-    renderer->DrawRect2D(m_PosX, m_PosY, t, m_Height, c);
-    // Right
-    renderer->DrawRect2D(m_PosX + m_Width - t, m_PosY, t, m_Height, c);
+    renderer->DrawRect2D((float)m_PosX, (float)m_PosY, (float)m_Width, t, c); // Top
+    renderer->DrawRect2D((float)m_PosX, (float)m_PosY + m_Height - t, (float)m_Width, t, c); // Bottom
+    renderer->DrawRect2D((float)m_PosX, (float)m_PosY, t, (float)m_Height, c); // Left
+    renderer->DrawRect2D((float)m_PosX + m_Width - t, (float)m_PosY, t, (float)m_Height, c); // Right
 }
 
-void Minimap::RenderPlayerIcon(GLRenderer* renderer, float rotation) {
-    int centerX = m_PosX + m_Width / 2;
-    int centerY = m_PosY + m_Height / 2;
+void Minimap::RenderPlayerIcon(GLRenderer* renderer) {
+    float centerX = (float)m_PosX + m_Width / 2.0f;
+    float centerY = (float)m_PosY + m_Height / 2.0f;
 
-    // Draw a direction indicator arrow
-    // We calculate a triangle or arrow shape based on rotation
-    float arrowLen = 10.0f;
-    float wingLen = 6.0f;
+    SDL_Color color = m_Settings.playerColor;
+
+    // A more modern triangular arrow icon facing UP
+    // We use rotated rectangles to build it
     
-    // Tip of the arrow
-    float tipX = centerX + cos(rotation) * arrowLen;
-    float tipY = centerY + sin(rotation) * arrowLen;
-
-    // Back left wing
-    float leftX = centerX + cos(rotation + 2.5f) * wingLen;
-    float leftY = centerY + sin(rotation + 2.5f) * wingLen;
-
-    // Back right wing
-    float rightX = centerX + cos(rotation - 2.5f) * wingLen;
-    float rightY = centerY + sin(rotation - 2.5f) * wingLen;
-
-    // Since we only have DrawRect2D, we draw a small cluster of pixels 
-    // or very thin rects to simulate lines/shape.
+    // Main body
+    renderer->DrawRotatedRect2D(centerX, centerY + 2.0f, 6.0f, 14.0f, 0.0f, color);
     
-    // Center Dot
-    renderer->DrawRect2D(centerX - 2, centerY - 2, 4, 4, m_Settings.playerColor);
-
-    // Tip
-    renderer->DrawRect2D((int)tipX - 1, (int)tipY - 1, 3, 3, m_Settings.playerColor);
-
-    // Visualize the "Arrow" by drawing points interpolated between center and tip
-    int steps = 5;
-    for(int i = 1; i < steps; i++) {
-        float t = (float)i / steps;
-        
-        // Main Shaft
-        int sx = centerX + (int)((tipX - centerX) * t);
-        int sy = centerY + (int)((tipY - centerY) * t);
-        renderer->DrawRect2D(sx, sy, 2, 2, m_Settings.playerColor);
-    }
+    // Left wing
+    renderer->DrawRotatedRect2D(centerX - 4.0f, centerY + 6.0f, 4.0f, 10.0f, 0.6f, color);
+    
+    // Right wing
+    renderer->DrawRotatedRect2D(centerX + 4.0f, centerY + 6.0f, 4.0f, 10.0f, -0.6f, color);
+    
+    // Tip glow/point
+    SDL_Color tipColor = {255, 255, 255, 200};
+    renderer->DrawRect2D(centerX - 1.0f, centerY - 8.0f, 2.0f, 4.0f, tipColor);
 }
 
 void Minimap::RenderEntities(GLRenderer* renderer, Registry* registry, Entity playerEntity, Camera* camera) {
     if (!camera) return;
 
-    // --- RENDER ENVIRONMENT (MESHES) ---
+    float scale = m_Settings.baseScale * m_Zoom;
+    float mapRotation = -camera->yaw - (M_PI / 2.0f);
+
+    // 1. Render Environment (Meshes)
     auto& meshView = registry->View<MeshComponent>();
     
-    // Optimization: Don't create string objects inside the loop if possible, 
-    // or use a component tag system in the future.
     for (auto& pair : meshView) {
         Entity e = pair.first;
         if (e == playerEntity) continue;
 
         auto* t = registry->GetComponent<Transform3DComponent>(e);
         auto* mesh = registry->GetComponent<MeshComponent>(e);
+        
         if (!t || !mesh) continue;
 
-        // Determine Type
+        // Categorize mesh based on name
         std::string meshName = mesh->meshName;
-        // Basic lowercasing
         std::transform(meshName.begin(), meshName.end(), meshName.begin(), ::tolower);
 
-        SDL_Color color = m_Settings.wallColor;
-        int size = 4;
+        SDL_Color color = m_Settings.propColor;
         
-        // Simple culling of floors to reduce overdraw
+        // Skip floors/ceilings to avoid clutter
         if (meshName.find("floor") != std::string::npos || meshName.find("ceiling") != std::string::npos) {
             continue;
         }
 
-        if (meshName.find("wall") != std::string::npos) {
-            color = m_Settings.wallColor;
-            size = 8; // Walls are chunky
-        } 
-        else if (meshName.find("door") != std::string::npos) {
-            color = {200, 180, 50, 255}; 
-            size = 6;
-        }
-        else if (meshName.find("chest") != std::string::npos) {
-            color = m_Settings.chestColor;
-            size = 6;
-        }
-        else {
-            // General props
-            color = m_Settings.propColor;
-            size = 4;
+        float screenX, screenY;
+        if (!WorldToMinimap(t->x, t->y, camera->x, camera->y, camera->yaw, screenX, screenY)) {
+            continue;
         }
 
-        int screenX, screenY;
-        if (WorldToMinimap(t->x, t->y, camera->x, camera->y, screenX, screenY)) {
-            renderer->DrawRect2D(screenX - size/2, screenY - size/2, size, size, color);
+        // Structural elements
+        if (meshName.find("door") != std::string::npos) {
+            color = m_Settings.doorColor; 
+            renderer->DrawRotatedRect2D(screenX, screenY, 4.2f * scale, 1.0f * scale, -t->rot - mapRotation, color);
+        } else if (meshName.find("corner") != std::string::npos) {
+            color = m_Settings.wallColor;
+            float legLen = 6.0f; // Extra long to ensure overlap at all junction types
+            float thickness = 1.2f;
+            float angle = -t->rot - mapRotation;
+            
+            // Draw two legs to form a proper L-corner
+            // Leg 1: horizontal (relative to asset rotation)
+            float offX1 = cos(angle) * (legLen * 0.25f * scale);
+            float offY1 = sin(angle) * (legLen * 0.25f * scale);
+            renderer->DrawRotatedRect2D(screenX + offX1, screenY + offY1, 
+                                        legLen * 0.5f * scale, thickness * scale, angle, color);
+            
+            // Leg 2: vertical (relative to asset rotation)
+            float angle2 = angle + M_PI * 0.5f;
+            float offX2 = cos(angle2) * (legLen * 0.25f * scale);
+            float offY2 = sin(angle2) * (legLen * 0.25f * scale);
+            renderer->DrawRotatedRect2D(screenX + offX2, screenY + offY2, 
+                                        thickness * scale, legLen * 0.5f * scale, angle, color);
+            continue; 
+        } else if (meshName.find("wall") != std::string::npos) {
+            color = m_Settings.wallColor;
+            renderer->DrawRotatedRect2D(screenX, screenY, 4.2f * scale, 1.2f * scale, -t->rot - mapRotation, color);
+        } else if (meshName.find("chest") != std::string::npos) {
+            color = m_Settings.chestColor;
+            float size = 1.5f * scale;
+            renderer->DrawRect2D(screenX - size/2.0f, screenY - size/2.0f, size, size, color);
+        } else {
+            // Props
+            float size = 0.5f * scale;
+            renderer->DrawRect2D(screenX - size/2.0f, screenY - size/2.0f, size, size, color);
         }
     }
 
-    // --- RENDER ENEMIES ---
-    // Rendered after meshes so they appear on top
+    // 2. Render Enemies (On top of environment)
     auto& charView = registry->View<CharacterComponent>();
     for (auto& pair : charView) {
         Entity e = pair.first;
         if (e == playerEntity) continue;
-
+        
         auto* t = registry->GetComponent<Transform3DComponent>(e);
-        // Assuming CharacterComponent implies it's alive/movable
         if (!t) continue;
 
-        int screenX, screenY;
-        if (WorldToMinimap(t->x, t->y, camera->x, camera->y, screenX, screenY)) {
-            int size = 6;
-            renderer->DrawRect2D(screenX - size/2, screenY - size/2, size, size, m_Settings.enemyColor);
+        float screenX, screenY;
+        if (WorldToMinimap(t->x, t->y, camera->x, camera->y, camera->yaw, screenX, screenY)) {
+            float size = 8.0f;
+            renderer->DrawRect2D(screenX - size/2.0f, screenY - size/2.0f, size, size, m_Settings.enemyColor);
         }
     }
 }
@@ -203,18 +216,13 @@ void Minimap::Render(GLRenderer* renderer, Registry* registry, Entity playerEnti
                      Camera* camera, int screenWidth, int screenHeight) {
     if (!m_Visible || !renderer || !registry || !camera) return;
 
-    // Safety check: Ensure minimap is within screen bounds (responsive layout)
+    // Responsive positioning: Ensure map stays within window bounds if resized
     if (m_PosX + m_Width > screenWidth) m_PosX = screenWidth - m_Width - 10;
     if (m_PosY + m_Height > screenHeight) m_PosY = screenHeight - m_Height - 10;
 
     RenderBackground(renderer);
-    
-    // We pass the Camera position, not the Player Entity position, 
-    // to ensure the map centers on what the user is seeing.
     RenderEntities(renderer, registry, playerEntity, camera);
-    
-    // Render Player Arrow on top of everything
-    RenderPlayerIcon(renderer, camera->yaw);
+    RenderPlayerIcon(renderer);
 }
 
 } // namespace PixelsEngine

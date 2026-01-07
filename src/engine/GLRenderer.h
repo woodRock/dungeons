@@ -36,8 +36,9 @@ public:
 
   // UI Rendering
   void InitUI();
-  void DrawRect2D(int x, int y, int w, int h, SDL_Color color);
-  void DrawTexture2D(unsigned int textureID, int x, int y, int w, int h,
+  void DrawRect2D(float x, float y, float w, float h, SDL_Color color);
+  void DrawRotatedRect2D(float x, float y, float w, float h, float angle, SDL_Color color);
+  void DrawTexture2D(unsigned int textureID, float x, float y, float w, float h,
                      SDL_Color color = {255, 255, 255, 255});
   void DrawWireCube(float x, float y, float z, float size, SDL_Color color,
                     float thickness = 1.0f);
