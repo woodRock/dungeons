@@ -539,6 +539,24 @@ bool GLRenderer::LoadMesh(const std::string &name, const std::string &path) {
   rm.isSkinned = m.isSkinned;
   rm.skeleton = m.skeleton;
   rm.animations = m.animations;
+  
+  // Calculate bounding box from vertices
+  if (!m.vertices.empty()) {
+    float minX = m.vertices[0].x, maxX = m.vertices[0].x;
+    float minY = m.vertices[0].y, maxY = m.vertices[0].y;
+    float minZ = m.vertices[0].z, maxZ = m.vertices[0].z;
+    
+    for (const auto& v : m.vertices) {
+      minX = std::min(minX, v.x);
+      maxX = std::max(maxX, v.x);
+      minY = std::min(minY, v.y);
+      maxY = std::max(maxY, v.y);
+      minZ = std::min(minZ, v.z);
+      maxZ = std::max(maxZ, v.z);
+    }
+    rm.boundingBox = AABB(minX, minY, minZ, maxX, maxY, maxZ);
+  }
+  
   glGenVertexArrays(1, &rm.VAO);
   glGenBuffers(1, &rm.VBO);
   glGenBuffers(1, &rm.EBO);

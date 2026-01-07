@@ -12,6 +12,32 @@
 
 namespace PixelsEngine {
 
+struct AABB {
+  float minX, minY, minZ;
+  float maxX, maxY, maxZ;
+  
+  AABB() : minX(0), minY(0), minZ(0), maxX(0), maxY(0), maxZ(0) {}
+  AABB(float minX_, float minY_, float minZ_, float maxX_, float maxY_, float maxZ_)
+    : minX(minX_), minY(minY_), minZ(minZ_), maxX(maxX_), maxY(maxY_), maxZ(maxZ_) {}
+  
+  // Check if two AABBs overlap
+  bool Overlaps(const AABB& other) const {
+    return !(maxX < other.minX || minX > other.maxX ||
+             maxY < other.minY || minY > other.maxY ||
+             maxZ < other.minZ || minZ > other.maxZ);
+  }
+  
+  // Check if point is inside AABB
+  bool Contains(float x, float y, float z) const {
+    return x >= minX && x <= maxX && y >= minY && y <= maxY && z >= minZ && z <= maxZ;
+  }
+  
+  // Get transformed AABB (translated by position)
+  AABB Translate(float x, float y, float z) const {
+    return AABB(minX + x, minY + y, minZ + z, maxX + x, maxY + y, maxZ + z);
+  }
+};
+
 struct RenderMesh {
   unsigned int VAO, VBO, EBO;
   unsigned int indexCount;
@@ -20,6 +46,7 @@ struct RenderMesh {
   std::vector<SkeletalAnimation> animations;
   std::vector<float>
       boneGlobalMatrices; // Stores global transforms for attachments
+  AABB boundingBox;      // Collision bounding box
 };
 
 class GLRenderer {

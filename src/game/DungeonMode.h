@@ -35,6 +35,8 @@ public:
     bool IsActive() const { return m_Active; }
     void SetActive(bool active) { m_Active = active; }
     Entity GetPlayerEntity() const { return m_PlayerEntity; }
+    int GetCurrentLevelIdx() const { return m_CurrentLevelIdx; }
+    int GetTotalLevels() const { return m_LevelList.size(); }
 
 private:
     void LoadLevel(const std::string& levelName);

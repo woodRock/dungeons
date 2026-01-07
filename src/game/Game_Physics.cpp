@@ -2,8 +2,66 @@
 #include "../engine/TextureManager.h"
 #include "DungeonsGame.h"
 #include <cmath>
+#include <algorithm>
 
 using namespace PixelsEngine;
+
+namespace {
+    // Helper to transform AABB from Mesh Space to Game World Space
+    AABB GetWorldAABB(const AABB& local, const Transform3DComponent& t, float scaleX, float scaleY, float scaleZ) {
+        float minX = 1e9, minY = 1e9, minZ = 1e9;
+        float maxX = -1e9, maxY = -1e9, maxZ = -1e9;
+        
+        // 8 corners of local AABB
+        float corners[8][3] = {
+            {local.minX, local.minY, local.minZ},
+            {local.maxX, local.minY, local.minZ},
+            {local.minX, local.maxY, local.minZ},
+            {local.maxX, local.maxY, local.minZ},
+            {local.minX, local.minY, local.maxZ},
+            {local.maxX, local.minY, local.maxZ},
+            {local.minX, local.maxY, local.maxZ},
+            {local.maxX, local.maxY, local.maxZ}
+        };
+
+        float cosR = cos(-t.rot);
+        float sinR = sin(-t.rot);
+
+        for(int i=0; i<8; ++i) {
+            float mx = corners[i][0];
+            float my = corners[i][1];
+            float mz = corners[i][2];
+            
+            // Apply Scaling (Note: GLRenderer maps Game Scale Z -> Mesh Y, Game Scale Y -> Mesh Z)
+            float smx = mx * scaleX;
+            float smy = my * scaleZ; 
+            float smz = mz * scaleY; 
+            
+            // Apply Rotation (RotateY)
+            float gl_x = smx * cosR + smz * sinR;
+            float gl_y = smy;
+            float gl_z = -smx * sinR + smz * cosR;
+            
+            // Apply Translation and Map to Game Space
+            // Game X = GL X + t.x
+            // Game Y = -GL Z + t.y
+            // Game Z = GL Y + t.z
+            
+            float g_x = gl_x + t.x;
+            float g_y = -gl_z + t.y; 
+            float g_z = gl_y + t.z;
+            
+            if(g_x < minX) minX = g_x;
+            if(g_x > maxX) maxX = g_x;
+            if(g_y < minY) minY = g_y;
+            if(g_y > maxY) maxY = g_y;
+            if(g_z < minZ) minZ = g_z;
+            if(g_z > maxZ) maxZ = g_z;
+        }
+        
+        return AABB(minX, minY, minZ, maxX, maxY, maxZ);
+    }
+}
 
 void DungeonsGame::UpdatePhysics(float dt) {
   if (m_State != GameState::Playing && m_State != GameState::Creative &&
@@ -37,25 +95,70 @@ void DungeonsGame::UpdatePhysics(float dt) {
       }
     }
 
-    // Floor Detection (Improved)
+    // Floor Detection (Improved with AABB)
     float currentFloorHeight = -100.0f; // Default to falling
     bool overFloor = false;
 
     // Check against all tiles/meshes for floor
     auto &meshes = m_Registry.View<MeshComponent>();
     for (auto &mPair : meshes) {
-        std::string lowName = mPair.second.meshName;
+        if (mPair.first == entity) continue;
+
+        auto &mc = mPair.second;
+        std::string lowName = mc.meshName;
         std::transform(lowName.begin(), lowName.end(), lowName.begin(), ::tolower);
         
-        if (lowName.find("floor") != std::string::npos || lowName.find("stairs") != std::string::npos) {
+        bool isWalkable = false;
+        
+        // 1. Name check
+        if (lowName.find("floor") != std::string::npos || 
+            lowName.find("stairs") != std::string::npos ||
+            lowName.find("ground") != std::string::npos ||
+            lowName.find("platform") != std::string::npos ||
+            lowName.find("bridge") != std::string::npos) {
+            isWalkable = true;
+        }
+
+        // 2. Hitbox check (climbable objects)
+        if (!isWalkable) {
+            auto *hc = m_Registry.GetComponent<HitboxComponent>(mPair.first);
+            if (hc && hc->isClimbable) {
+                isWalkable = true;
+            }
+        }
+        
+        if (isWalkable) {
             auto *ft = m_Registry.GetComponent<Transform3DComponent>(mPair.first);
             if (ft) {
-                // Tiles are 4x4
-                float halfSize = 2.0f;
-                if (t->x >= ft->x - halfSize && t->x <= ft->x + halfSize &&
-                    t->y >= ft->y - halfSize && t->y <= ft->y + halfSize) {
-                    currentFloorHeight = std::max(currentFloorHeight, ft->z);
-                    overFloor = true;
+                RenderMesh* rm = m_GLRenderer.GetRenderMesh(mc.meshName);
+                if (rm) {
+                    // Use transformed AABB for collision
+                    AABB worldAABB = GetWorldAABB(rm->boundingBox, *ft, mc.scaleX, mc.scaleY, mc.scaleZ);
+                    
+                    // Check horizontal overlap with player (treating player as a point or small radius)
+                    // We allow a small tolerance
+                    if (t->x >= worldAABB.minX && t->x <= worldAABB.maxX &&
+                        t->y >= worldAABB.minY && t->y <= worldAABB.maxY) {
+                        
+                        // Check vertical. We want the surface that is below or slightly above the player.
+                        // Ideally, we want the highest surface that is <= t->z + stepHeight
+                        
+                        float floorZ = worldAABB.maxZ;
+                        if (floorZ <= t->z + 1.5f) { // Allow stepping up/snapping
+                             if (floorZ > currentFloorHeight) {
+                                 currentFloorHeight = floorZ;
+                                 overFloor = true;
+                             }
+                        }
+                    }
+                } else {
+                    // Fallback to old logic if RenderMesh not found
+                    float halfSize = 2.0f;
+                    if (t->x >= ft->x - halfSize && t->x <= ft->x + halfSize &&
+                        t->y >= ft->y - halfSize && t->y <= ft->y + halfSize) {
+                        currentFloorHeight = std::max(currentFloorHeight, ft->z);
+                        overFloor = true;
+                    }
                 }
             }
         }
@@ -123,7 +226,72 @@ void DungeonsGame::UpdatePhysics(float dt) {
       }
     }
 
-    // Horizontal velocity
+    // Horizontal Collision (Walls/Obstacles)
+    float playerRadius = 0.4f;
+    float playerHeight = 1.8f;
+
+    // Check X Axis
+    {
+        float nextX = t->x + phys->velX * dt;
+        AABB playerAABB(nextX - playerRadius, t->y - playerRadius, t->z,
+                        nextX + playerRadius, t->y + playerRadius, t->z + playerHeight);
+        
+        bool collided = false;
+        for (auto &mPair : meshes) {
+            if (mPair.first == entity) continue;
+            
+            auto *hc = m_Registry.GetComponent<HitboxComponent>(mPair.first);
+            if (!hc || !hc->isSolid) continue;
+
+            auto *wt = m_Registry.GetComponent<Transform3DComponent>(mPair.first);
+            if (!wt) continue;
+
+            RenderMesh* rm = m_GLRenderer.GetRenderMesh(mPair.second.meshName);
+            if (rm) {
+                AABB wallAABB = GetWorldAABB(rm->boundingBox, *wt, mPair.second.scaleX, mPair.second.scaleY, mPair.second.scaleZ);
+                if (playerAABB.Overlaps(wallAABB)) {
+                    collided = true;
+                    break;
+                }
+            }
+        }
+        if (collided) phys->velX = 0;
+    }
+
+    // Check Y Axis
+    {
+        float nextY = t->y + phys->velY * dt;
+        // Note: We use t->x (current X) or updated X?
+        // Usually separating axis allows sliding: Use the X that will apply if no collision, OR current X.
+        // If we set velX=0 above, current X is effectively the "next" X.
+        // So checking nextY with t->x is correct for independent axis resolution.
+        
+        AABB playerAABB(t->x - playerRadius, nextY - playerRadius, t->z,
+                        t->x + playerRadius, nextY + playerRadius, t->z + playerHeight);
+        
+        bool collided = false;
+        for (auto &mPair : meshes) {
+            if (mPair.first == entity) continue;
+
+            auto *hc = m_Registry.GetComponent<HitboxComponent>(mPair.first);
+            if (!hc || !hc->isSolid) continue;
+
+            auto *wt = m_Registry.GetComponent<Transform3DComponent>(mPair.first);
+            if (!wt) continue;
+
+            RenderMesh* rm = m_GLRenderer.GetRenderMesh(mPair.second.meshName);
+            if (rm) {
+                AABB wallAABB = GetWorldAABB(rm->boundingBox, *wt, mPair.second.scaleX, mPair.second.scaleY, mPair.second.scaleZ);
+                if (playerAABB.Overlaps(wallAABB)) {
+                    collided = true;
+                    break;
+                }
+            }
+        }
+        if (collided) phys->velY = 0;
+    }
+
+    // Horizontal velocity application
     t->x += phys->velX * dt;
     t->y += phys->velY * dt;
 
@@ -258,6 +426,7 @@ void DungeonsGame::UpdateProjectiles(float dt) {
             Mix_PlayChannel(-1, m_SfxHit, 0);
 
           if (enemyComp.health <= 0) {
+            m_LastDungeonStats.enemiesKilled++;
             // Death particles
             for (int i = 0; i < 10; i++) {
               auto frag = m_Registry.CreateEntity();

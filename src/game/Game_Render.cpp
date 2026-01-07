@@ -52,6 +52,12 @@ void DungeonsGame::OnRender() {
     RenderMapSelect();
   } else if (m_State == GameState::FloorSelect) {
     RenderFloorSelect();
+  } else if (m_State == GameState::Settings) {
+    RenderSettings();
+  } else if (m_State == GameState::GameOver) {
+    RenderGameOver();
+  } else if (m_State == GameState::CharacterSelect) {
+    RenderCharacterSelect();
   } else if (m_State == GameState::Playing || m_State == GameState::Battle ||
              m_State == GameState::Siege || m_State == GameState::Dungeon) {
     if (m_State == GameState::Dungeon && m_DungeonMode) {

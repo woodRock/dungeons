@@ -11,9 +11,18 @@
 #include "ExplorationMode.h"
 #include "SiegeMode.h"
 #include "DungeonMode.h"
+#include "GameSettings.h"
 #include <memory>
 
-enum class GameState { MainMenu, Playing, Creative, Siege, Battle, Dungeon, Paused, MapSelect, FloorSelect };
+struct DungeonStats {
+  int enemiesKilled = 0;
+  float timeElapsed = 0.0f;
+  int currentLevel = 0;
+  int totalLevels = 0;
+  int playerHealth = 100;
+};
+
+enum class GameState { MainMenu, Playing, Creative, Siege, Battle, Dungeon, Paused, MapSelect, FloorSelect, Settings, GameOver, CharacterSelect };
 
 class DungeonsGame : public PixelsEngine::Application {
 public:
@@ -49,6 +58,9 @@ private:
   void RenderFloorSelect();
   void RenderUI();
   void RenderPauseMenu();
+  void RenderSettings();
+  void RenderGameOver();
+  void RenderCharacterSelect();
 
   void HandleInputGameplay(float dt);
   void HandleInputCreative(float dt);
@@ -56,11 +68,17 @@ private:
   void HandleInputPause();
   void HandleInputMapSelect();
   void HandleInputFloorSelect();
+  void HandleInputSettings();
+  void HandleInputGameOver();
+  void HandleInputCharacterSelect();
 
   void UpdatePhysics(float dt);
   void UpdateDoors(float dt);
   void UpdateProjectiles(float dt);
   void UpdateAnimations(float dt);
+
+  // Game Mechanics
+  void DamagePlayer(int damage);
 
   // UI Helpers
   void DrawButton(int x, int y, int w, int h, const std::string &text,
@@ -113,6 +131,12 @@ private:
   int m_TargetsDestroyed = 0;
   int m_TotalTargets = 0;
   int m_CurrentLevel = 1;
+
+  // Settings & Character Selection
+  std::string m_SelectedCharacter = "Knight";
+  DungeonStats m_LastDungeonStats;
+  int m_SettingsSelection = 0;
+  int m_CharacterSelection = 0;
 
   // Main Menu Camera Props
   float m_MenuCamAngle = 0.0f;

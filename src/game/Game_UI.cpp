@@ -269,3 +269,139 @@ void DungeonsGame::RenderUI() {
     m_Minimap->Render(&m_GLRenderer, &m_Registry, m_PlayerEntity, m_Camera.get(), w, h);
   }
 }
+void DungeonsGame::RenderSettings() {
+  int w = m_Width;
+  int h = m_Height;
+
+  // Background
+  m_GLRenderer.DrawRect2D(0, 0, w, h, {50, 50, 50, 255});
+
+  m_TextRenderer->RenderTextCentered(&m_GLRenderer, "SETTINGS", w / 2, 50,
+                                     {255, 255, 255, 255});
+
+  int startX = w / 2 - 200;
+  int startY = 150;
+  int gap = 60;
+  GameSettings& settings = GameSettings::Instance();
+
+  // Music Volume
+  m_TextRenderer->RenderText(&m_GLRenderer, "Music Volume",
+                             startX, startY, {200, 200, 200, 255});
+  std::string musicVol = std::to_string((int)(settings.GetMusicVolume() * 100)) + "%";
+  m_TextRenderer->RenderText(&m_GLRenderer, musicVol,
+                             startX + 250, startY, 
+                             m_SettingsSelection == 0 ? SDL_Color{255, 100, 100, 255} : SDL_Color{200, 200, 200, 255});
+
+  // SFX Volume
+  m_TextRenderer->RenderText(&m_GLRenderer, "SFX Volume",
+                             startX, startY + gap, {200, 200, 200, 255});
+  std::string sfxVol = std::to_string((int)(settings.GetSFXVolume() * 100)) + "%";
+  m_TextRenderer->RenderText(&m_GLRenderer, sfxVol,
+                             startX + 250, startY + gap,
+                             m_SettingsSelection == 1 ? SDL_Color{255, 100, 100, 255} : SDL_Color{200, 200, 200, 255});
+
+  // Mouse Sensitivity
+  m_TextRenderer->RenderText(&m_GLRenderer, "Mouse Sensitivity",
+                             startX, startY + gap * 2, {200, 200, 200, 255});
+  std::string mouseSens = std::to_string((int)(settings.GetMouseSensitivity() * 100)) + "%";
+  m_TextRenderer->RenderText(&m_GLRenderer, mouseSens,
+                             startX + 250, startY + gap * 2,
+                             m_SettingsSelection == 2 ? SDL_Color{255, 100, 100, 255} : SDL_Color{200, 200, 200, 255});
+
+  // Difficulty
+  m_TextRenderer->RenderText(&m_GLRenderer, "Difficulty",
+                             startX, startY + gap * 3, {200, 200, 200, 255});
+  m_TextRenderer->RenderText(&m_GLRenderer, settings.GetDifficultyName(),
+                             startX + 250, startY + gap * 3,
+                             m_SettingsSelection == 3 ? SDL_Color{255, 100, 100, 255} : SDL_Color{200, 200, 200, 255});
+
+  // Back button
+  DrawButton(w / 2 - 100, h - 120, 200, 50, "BACK",
+             m_SettingsSelection == 4);
+}
+
+void DungeonsGame::RenderGameOver() {
+  int w = m_Width;
+  int h = m_Height;
+
+  // Background
+  m_GLRenderer.DrawRect2D(0, 0, w, h, {30, 30, 50, 255});
+
+  // Title
+  m_TextRenderer->RenderTextCentered(&m_GLRenderer, "GAME OVER", w / 2, 60,
+                                     {255, 100, 100, 255});
+
+  // Stats
+  int startY = 180;
+  int gap = 50;
+  
+  // Cap display at total levels
+  int displayLevel = std::min(m_LastDungeonStats.currentLevel, m_LastDungeonStats.totalLevels);
+  std::string statsText = "Level: " + std::to_string(displayLevel) + 
+                          "/" + std::to_string(m_LastDungeonStats.totalLevels);
+  m_TextRenderer->RenderTextCentered(&m_GLRenderer, statsText, w / 2, startY,
+                                     {200, 200, 200, 255});
+
+  statsText = "Enemies Defeated: " + std::to_string(m_LastDungeonStats.enemiesKilled);
+  m_TextRenderer->RenderTextCentered(&m_GLRenderer, statsText, w / 2, startY + gap,
+                                     {200, 200, 200, 255});
+
+  statsText = "Time Survived: " + std::to_string((int)m_LastDungeonStats.timeElapsed) + "s";
+  m_TextRenderer->RenderTextCentered(&m_GLRenderer, statsText, w / 2, startY + gap * 2,
+                                     {200, 200, 200, 255});
+
+  // Buttons
+  int btnW = 200;
+  int btnH = 50;
+  int btnGap = 80;
+  int btnStartX = w / 2 - btnW / 2;
+  int btnStartY = startY + gap * 4;
+
+  DrawButton(btnStartX - btnW - 20, btnStartY, btnW, btnH, "RETRY",
+             m_MenuSelection == 0);
+  DrawButton(btnStartX + btnW + 20, btnStartY, btnW, btnH, "MAIN MENU",
+             m_MenuSelection == 1);
+}
+
+void DungeonsGame::RenderCharacterSelect() {
+  int w = m_Width;
+  int h = m_Height;
+
+  // Background
+  m_GLRenderer.DrawRect2D(0, 0, w, h, {40, 40, 60, 255});
+
+  m_TextRenderer->RenderTextCentered(&m_GLRenderer, "SELECT CHARACTER", w / 2, 60,
+                                     {255, 200, 100, 255});
+
+  int btnW = 200;
+  int btnH = 60;
+  int gap = 100;
+  int startX = (w - (btnW * 2 + gap)) / 2;
+  int startY = 200;
+
+  // Knight
+  DrawButton(startX, startY, btnW, btnH, "KNIGHT",
+             m_CharacterSelection == 0 || (m_SelectedCharacter == "Knight" && m_CharacterSelection == 4));
+
+  // Ranger
+  DrawButton(startX + btnW + gap, startY, btnW, btnH, "RANGER",
+             m_CharacterSelection == 1 || (m_SelectedCharacter == "Ranger" && m_CharacterSelection == 4));
+
+  // Mage
+  DrawButton(startX, startY + btnH + 50, btnW, btnH, "MAGE",
+             m_CharacterSelection == 2 || (m_SelectedCharacter == "Mage" && m_CharacterSelection == 4));
+
+  // Rogue
+  DrawButton(startX + btnW + gap, startY + btnH + 50, btnW, btnH, "ROGUE",
+             m_CharacterSelection == 3 || (m_SelectedCharacter == "Rogue" && m_CharacterSelection == 4));
+
+  // Confirm button
+  DrawButton(w / 2 - 100, h - 120, 200, 50, "CONFIRM",
+             m_CharacterSelection == 4);
+  
+  // Character preview text on the right
+  m_TextRenderer->RenderTextCentered(&m_GLRenderer, m_SelectedCharacter, w - 150, 300,
+                                     {200, 200, 255, 255});
+  m_TextRenderer->RenderTextCentered(&m_GLRenderer, "SELECTED", w - 150, 350,
+                                     {200, 200, 255, 255});
+}

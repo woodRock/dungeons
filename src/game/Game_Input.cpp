@@ -317,20 +317,10 @@ void DungeonsGame::HandleInputMenu() {
         SDL_SetRelativeMouseMode(SDL_TRUE);
         break;
       case 2:
-        // Dungeon Mode - Scan for dungeon campaigns
-        m_AvailableMaps.clear();
-        if (std::filesystem::exists("assets/saves/")) {
-            for (const auto & entry : std::filesystem::directory_iterator("assets/saves/")) {
-                if (entry.path().extension() == ".dungeon") {
-                    m_AvailableMaps.push_back(entry.path().stem().string());
-                }
-            }
-        }
-        if (!m_AvailableMaps.empty()) {
-            m_State = GameState::MapSelect;
-            m_MapSelectIdx = 0;
-            SDL_SetRelativeMouseMode(SDL_FALSE);
-        }
+        // Dungeon Mode - Go to Character Selection
+        m_State = GameState::CharacterSelect;
+        m_CharacterSelection = 0;
+        SDL_SetRelativeMouseMode(SDL_FALSE);
         break;
       case 3:
         InitSiege();
@@ -433,8 +423,9 @@ void DungeonsGame::HandleInputPause() {
         SDL_SetRelativeMouseMode(SDL_FALSE);
         break;
       case 3:
-        m_InOptions = true;
-        m_MenuSelection = 0;
+        // Go to Settings
+        m_State = GameState::Settings;
+        m_SettingsSelection = 0;
         break;
       case 4:
         m_State = GameState::MainMenu;
@@ -510,5 +501,278 @@ void DungeonsGame::HandleInputCreative(float dt) {
   }
   if (Input::IsKeyDown(SDL_SCANCODE_LSHIFT)) {
     m_Camera->z -= moveSpeed;
+  }
+}
+void DungeonsGame::HandleInputSettings() {
+  GameSettings& settings = GameSettings::Instance();
+  int numOptions = 5;
+
+  if (Input::IsKeyPressed(SDL_SCANCODE_W) ||
+      Input::IsKeyPressed(SDL_SCANCODE_UP)) {
+    m_SettingsSelection--;
+    if (m_SettingsSelection < 0)
+      m_SettingsSelection = numOptions - 1;
+  }
+  if (Input::IsKeyPressed(SDL_SCANCODE_S) ||
+      Input::IsKeyPressed(SDL_SCANCODE_DOWN)) {
+    m_SettingsSelection++;
+    if (m_SettingsSelection >= numOptions)
+      m_SettingsSelection = 0;
+  }
+
+  if (Input::IsKeyPressed(SDL_SCANCODE_A) ||
+      Input::IsKeyPressed(SDL_SCANCODE_LEFT)) {
+    if (m_SettingsSelection == 0)
+      settings.SetMusicVolume(settings.GetMusicVolume() - 0.1f);
+    else if (m_SettingsSelection == 1)
+      settings.SetSFXVolume(settings.GetSFXVolume() - 0.1f);
+    else if (m_SettingsSelection == 2)
+      settings.SetMouseSensitivity(settings.GetMouseSensitivity() - 0.1f);
+    else if (m_SettingsSelection == 3)
+      settings.SetDifficulty(settings.GetDifficulty() - 1);
+  }
+  if (Input::IsKeyPressed(SDL_SCANCODE_D) ||
+      Input::IsKeyPressed(SDL_SCANCODE_RIGHT)) {
+    if (m_SettingsSelection == 0)
+      settings.SetMusicVolume(settings.GetMusicVolume() + 0.1f);
+    else if (m_SettingsSelection == 1)
+      settings.SetSFXVolume(settings.GetSFXVolume() + 0.1f);
+    else if (m_SettingsSelection == 2)
+      settings.SetMouseSensitivity(settings.GetMouseSensitivity() + 0.1f);
+    else if (m_SettingsSelection == 3)
+      settings.SetDifficulty(settings.GetDifficulty() + 1);
+  }
+
+  if (Input::IsKeyPressed(SDL_SCANCODE_RETURN) ||
+      Input::IsKeyPressed(SDL_SCANCODE_SPACE)) {
+    if (m_SettingsSelection == 4) {
+      // Back
+      m_State = GameState::Paused;
+      m_MenuSelection = 0;
+    }
+  }
+
+  if (Input::IsKeyPressed(SDL_SCANCODE_ESCAPE)) {
+    m_State = GameState::Paused;
+    m_MenuSelection = 0;
+  }
+}
+
+void DungeonsGame::HandleInputGameOver() {
+  int w = m_Width;
+  int h = m_Height;
+  int mx, my;
+  Input::GetMousePosition(mx, my);
+  bool clicked = Input::IsMouseButtonPressed(SDL_BUTTON_LEFT);
+  
+  int btnW = 200;
+  int btnH = 50;
+  int btnStartX = w / 2 - 100;
+  int btnStartY = h - 120;
+  
+  // Retry button
+  if (mx >= btnStartX - btnW - 20 && mx <= btnStartX - 20 && my >= btnStartY && my <= btnStartY + btnH) {
+    m_MenuSelection = 0;
+    if (clicked) {
+      // Retry - go back to map select with same character
+      m_AvailableMaps.clear();
+      if (std::filesystem::exists("assets/saves/")) {
+          for (const auto & entry : std::filesystem::directory_iterator("assets/saves/")) {
+              if (entry.path().extension() == ".dungeon") {
+                  m_AvailableMaps.push_back(entry.path().stem().string());
+              }
+          }
+      }
+      if (!m_AvailableMaps.empty()) {
+          m_State = GameState::MapSelect;
+          m_MapSelectIdx = 0;
+          SDL_SetRelativeMouseMode(SDL_FALSE);
+      }
+      return;
+    }
+  }
+  // Main Menu button
+  else if (mx >= btnStartX + btnW + 20 && mx <= btnStartX + btnW + 20 + btnW && my >= btnStartY && my <= btnStartY + btnH) {
+    m_MenuSelection = 1;
+    if (clicked) {
+      m_State = GameState::MainMenu;
+      m_MenuSelection = 0;
+      return;
+    }
+  }
+  
+  // Keyboard input
+  if (Input::IsKeyPressed(SDL_SCANCODE_LEFT) ||
+      Input::IsKeyPressed(SDL_SCANCODE_A)) {
+    m_MenuSelection = 0;
+  }
+  if (Input::IsKeyPressed(SDL_SCANCODE_RIGHT) ||
+      Input::IsKeyPressed(SDL_SCANCODE_D)) {
+    m_MenuSelection = 1;
+  }
+
+  if (Input::IsKeyPressed(SDL_SCANCODE_RETURN) ||
+      Input::IsKeyPressed(SDL_SCANCODE_SPACE)) {
+    if (m_MenuSelection == 0) {
+      // Retry - go back to map select
+      m_AvailableMaps.clear();
+      if (std::filesystem::exists("assets/saves/")) {
+          for (const auto & entry : std::filesystem::directory_iterator("assets/saves/")) {
+              if (entry.path().extension() == ".dungeon") {
+                  m_AvailableMaps.push_back(entry.path().stem().string());
+              }
+          }
+      }
+      if (!m_AvailableMaps.empty()) {
+          m_State = GameState::MapSelect;
+          m_MapSelectIdx = 0;
+          SDL_SetRelativeMouseMode(SDL_FALSE);
+      }
+    } else {
+      // Main Menu
+      m_State = GameState::MainMenu;
+      m_MenuSelection = 0;
+    }
+  }
+}
+
+void DungeonsGame::HandleInputCharacterSelect() {
+  int w = m_Width;
+  int h = m_Height;
+  int mx, my;
+  Input::GetMousePosition(mx, my);
+  bool clicked = Input::IsMouseButtonPressed(SDL_BUTTON_LEFT);
+  
+  int numCharacters = 5; // 4 characters + confirm button
+  int charactersPerRow = 2;
+
+  // Character button positions
+  int btnW = 200;
+  int btnH = 60;
+  int gap = 100;
+  int startX = (w - (btnW * 2 + gap)) / 2;
+  int startY = 200;
+  
+  // Knight button
+  if (mx >= startX && mx <= startX + btnW && my >= startY && my <= startY + btnH) {
+    m_CharacterSelection = 0;
+    if (clicked) {
+      m_SelectedCharacter = "Knight";
+      m_CharacterSelection = 4; // Move to confirm
+    }
+  }
+  // Ranger button
+  else if (mx >= startX + btnW + gap && mx <= startX + btnW + gap + btnW && my >= startY && my <= startY + btnH) {
+    m_CharacterSelection = 1;
+    if (clicked) {
+      m_SelectedCharacter = "Ranger";
+      m_CharacterSelection = 4; // Move to confirm
+    }
+  }
+  // Mage button
+  else if (mx >= startX && mx <= startX + btnW && my >= startY + btnH + 50 && my <= startY + btnH + 50 + btnH) {
+    m_CharacterSelection = 2;
+    if (clicked) {
+      m_SelectedCharacter = "Mage";
+      m_CharacterSelection = 4; // Move to confirm
+    }
+  }
+  // Rogue button
+  else if (mx >= startX + btnW + gap && mx <= startX + btnW + gap + btnW && my >= startY + btnH + 50 && my <= startY + btnH + 50 + btnH) {
+    m_CharacterSelection = 3;
+    if (clicked) {
+      m_SelectedCharacter = "Rogue";
+      m_CharacterSelection = 4; // Move to confirm
+    }
+  }
+  // Confirm button
+  else if (mx >= w/2 - 100 && mx <= w/2 + 100 && my >= h - 120 && my <= h - 70) {
+    m_CharacterSelection = 4;
+    if (clicked) {
+      // Character confirmed - scan for available dungeon campaigns
+      m_AvailableMaps.clear();
+      if (std::filesystem::exists("assets/saves/")) {
+          for (const auto & entry : std::filesystem::directory_iterator("assets/saves/")) {
+              if (entry.path().extension() == ".dungeon") {
+                  m_AvailableMaps.push_back(entry.path().stem().string());
+              }
+          }
+      }
+      if (!m_AvailableMaps.empty()) {
+          m_State = GameState::MapSelect;
+          m_MapSelectIdx = 0;
+          SDL_SetRelativeMouseMode(SDL_FALSE);
+      }
+      return;
+    }
+  }
+
+  // Keyboard navigation
+  if (Input::IsKeyPressed(SDL_SCANCODE_W) ||
+      Input::IsKeyPressed(SDL_SCANCODE_UP)) {
+    if (m_CharacterSelection >= 4) {
+      m_CharacterSelection = 1;
+    } else {
+      m_CharacterSelection -= charactersPerRow;
+      if (m_CharacterSelection < 0)
+        m_CharacterSelection = numCharacters - 1;
+    }
+  }
+  if (Input::IsKeyPressed(SDL_SCANCODE_S) ||
+      Input::IsKeyPressed(SDL_SCANCODE_DOWN)) {
+    if (m_CharacterSelection < 4) {
+      m_CharacterSelection = 4;
+    } else {
+      m_CharacterSelection = 0;
+    }
+  }
+  if (Input::IsKeyPressed(SDL_SCANCODE_A) ||
+      Input::IsKeyPressed(SDL_SCANCODE_LEFT)) {
+    m_CharacterSelection--;
+    if (m_CharacterSelection < 0)
+      m_CharacterSelection = numCharacters - 1;
+  }
+  if (Input::IsKeyPressed(SDL_SCANCODE_D) ||
+      Input::IsKeyPressed(SDL_SCANCODE_RIGHT)) {
+    m_CharacterSelection++;
+    if (m_CharacterSelection >= numCharacters)
+      m_CharacterSelection = 0;
+  }
+
+  if (Input::IsKeyPressed(SDL_SCANCODE_RETURN) ||
+      Input::IsKeyPressed(SDL_SCANCODE_SPACE)) {
+    if (m_CharacterSelection < 4) {
+      // Select character and move to confirm
+      if (m_CharacterSelection == 0)
+        m_SelectedCharacter = "Knight";
+      else if (m_CharacterSelection == 1)
+        m_SelectedCharacter = "Ranger";
+      else if (m_CharacterSelection == 2)
+        m_SelectedCharacter = "Mage";
+      else if (m_CharacterSelection == 3)
+        m_SelectedCharacter = "Rogue";
+      m_CharacterSelection = 4;
+    } else if (m_CharacterSelection == 4) {
+      // Confirm and proceed
+      m_AvailableMaps.clear();
+      if (std::filesystem::exists("assets/saves/")) {
+          for (const auto & entry : std::filesystem::directory_iterator("assets/saves/")) {
+              if (entry.path().extension() == ".dungeon") {
+                  m_AvailableMaps.push_back(entry.path().stem().string());
+              }
+          }
+      }
+      if (!m_AvailableMaps.empty()) {
+          m_State = GameState::MapSelect;
+          m_MapSelectIdx = 0;
+          SDL_SetRelativeMouseMode(SDL_FALSE);
+      }
+      return;
+    }
+  }
+
+  if (Input::IsKeyPressed(SDL_SCANCODE_ESCAPE)) {
+    m_State = GameState::MainMenu;
+    m_MenuSelection = 0;
   }
 }

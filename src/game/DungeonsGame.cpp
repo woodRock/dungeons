@@ -18,6 +18,21 @@ void DungeonsGame::OnUpdate(float deltaTime) {
     return;
   }
 
+  if (m_State == GameState::Settings) {
+    HandleInputSettings();
+    return;
+  }
+
+  if (m_State == GameState::GameOver) {
+    HandleInputGameOver();
+    return;
+  }
+
+  if (m_State == GameState::CharacterSelect) {
+    HandleInputCharacterSelect();
+    return;
+  }
+
   // From here on, delegate to mode-specific update functions.
   switch (m_State) {
   case GameState::Creative: {
@@ -50,7 +65,18 @@ void DungeonsGame::OnUpdate(float deltaTime) {
   case GameState::Dungeon: {
     if (m_DungeonMode) {
       m_DungeonMode->Update(deltaTime, m_PlayerEntity);
+      // Update dungeon stats
+      m_LastDungeonStats.currentLevel = m_DungeonMode->GetCurrentLevelIdx() + 1;
+      m_LastDungeonStats.totalLevels = m_DungeonMode->GetTotalLevels();
+      // Check if dungeon is cleared
+      if (!m_DungeonMode->IsActive() && m_State == GameState::Dungeon) {
+        m_State = GameState::GameOver;
+        SDL_SetRelativeMouseMode(SDL_FALSE);
+        m_MenuSelection = 0;
+      }
     }
+    m_RunTimer += deltaTime;
+    m_LastDungeonStats.timeElapsed = m_RunTimer;
     UpdatePhysics(deltaTime);
     UpdateDoors(deltaTime);
     UpdateProjectiles(deltaTime);
@@ -252,6 +278,15 @@ void DungeonsGame::HandleInputFloorSelect() {
         
         m_DungeonMode->StartDungeon(floors);
         m_DungeonMode->Init(m_Camera.get(), m_PlayerEntity);
+        
+        // Initialize dungeon stats
+        m_LastDungeonStats.enemiesKilled = 0;
+        m_LastDungeonStats.timeElapsed = 0.0f;
+        m_LastDungeonStats.currentLevel = m_FloorSelectIdx + 1;
+        m_LastDungeonStats.totalLevels = m_AvailableFloors.size();
+        m_LastDungeonStats.playerHealth = 100;
+        m_RunTimer = 0.0f;
+        
         m_State = GameState::Dungeon;
         SDL_SetRelativeMouseMode(SDL_TRUE);
     }
@@ -317,5 +352,18 @@ void DungeonsGame::UpdateAnimations(float dt) {
                                        anim.currentTime);
       }
     }
+  }
+}
+
+void DungeonsGame::DamagePlayer(int damage) {
+  if (m_State != GameState::Dungeon && m_State != GameState::Siege && m_State != GameState::Battle)
+    return;
+  
+  m_LastDungeonStats.playerHealth -= damage;
+  if (m_LastDungeonStats.playerHealth <= 0) {
+    m_LastDungeonStats.playerHealth = 0;
+    m_State = GameState::GameOver;
+    SDL_SetRelativeMouseMode(SDL_FALSE);
+    m_MenuSelection = 0;
   }
 }
