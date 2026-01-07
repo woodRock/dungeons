@@ -100,11 +100,18 @@ void DungeonsGame::RenderUI() {
 
   if (m_State == GameState::Battle && m_BattleMode) {
     m_BattleMode->RenderUI(&m_GLRenderer, m_TextRenderer.get(), w, h);
+    if (m_Minimap) {
+      m_Minimap->Render(&m_GLRenderer, &m_Registry, m_PlayerEntity, m_Camera.get(), w, h);
+    }
     return;
   }
 
   if (m_State == GameState::Siege && m_SiegeMode) {
     m_SiegeMode->RenderUI(&m_GLRenderer, m_TextRenderer.get(), w, h, m_PlayerEntity);
+    // Render minimap for Siege mode
+    if (m_Minimap) {
+      m_Minimap->Render(&m_GLRenderer, &m_Registry, m_PlayerEntity, m_Camera.get(), w, h);
+    }
     return;
   }
 
@@ -253,5 +260,10 @@ void DungeonsGame::RenderUI() {
     m_TextRenderer->RenderTextCentered(&m_GLRenderer, "Press R to Retry", w / 2,
 
                                        h / 2 + 90, {200, 200, 200, 255});
+  }
+  
+  // Render minimap (only in Playing state, not in Creative or Paused)
+  if (m_State == GameState::Playing && m_Minimap) {
+    m_Minimap->Render(&m_GLRenderer, &m_Registry, m_PlayerEntity, m_Camera.get(), w, h);
   }
 }

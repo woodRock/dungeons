@@ -15,6 +15,9 @@ DungeonsGame::~DungeonsGame() {}
 void DungeonsGame::OnStart() {
   m_GLRenderer.Init(m_Width, m_Height);
   m_TextRenderer = std::make_unique<TextRenderer>("assets/font.ttf", 24);
+  m_Minimap = std::make_unique<Minimap>();
+  m_Minimap->Init(200, 200);
+  m_Minimap->SetPosition(m_Width - 220, 20); // Top right corner
 
   // Load basic dungeon texture
   if (!m_GLRenderer.LoadTexture(

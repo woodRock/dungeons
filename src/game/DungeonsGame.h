@@ -3,6 +3,7 @@
 #include "../engine/ECS.h"
 #include "../engine/GLRenderer.h"
 #include "../engine/Map.h"
+#include "../engine/Minimap.h"
 #include "../engine/Raycaster.h"
 #include "../engine/TextRenderer.h"
 #include "BattleMode.h"
@@ -59,6 +60,7 @@ private:
   PixelsEngine::Raycaster m_Raycaster;
   PixelsEngine::Map m_Map;
   std::unique_ptr<PixelsEngine::TextRenderer> m_TextRenderer;
+  std::unique_ptr<PixelsEngine::Minimap> m_Minimap;
 
   PixelsEngine::CreativeMode m_CreativeMode;
   std::unique_ptr<SiegeMode> m_SiegeMode;

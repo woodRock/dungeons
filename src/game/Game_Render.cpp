@@ -39,6 +39,9 @@ void DungeonsGame::OnRender() {
     RenderMainMenu();
   } else if (m_State == GameState::Creative) {
     m_CreativeMode.RenderUI(&m_GLRenderer, m_TextRenderer.get(), m_Width, m_Height);
+    if (m_Minimap) {
+      m_Minimap->Render(&m_GLRenderer, &m_Registry, m_PlayerEntity, m_Camera.get(), m_Width, m_Height);
+    }
   } else if (m_State == GameState::Paused) {
     RenderPauseMenu();
   } else if (m_State == GameState::Playing || m_State == GameState::Battle ||
