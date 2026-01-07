@@ -294,18 +294,6 @@ ActionResult CreativeMode::Update(float dt, Entity /*playerEntity*/) {
       SDL_SetRelativeMouseMode(SDL_FALSE);
     }
 
-    if (Input::IsKeyPressed(SDL_SCANCODE_S) && (Input::IsKeyDown(SDL_SCANCODE_LCTRL) || Input::IsKeyDown(SDL_SCANCODE_LGUI))) {
-        m_ShowSaveMenu = true;
-        m_MapInputBuffer = m_CurrentMapName == "untitled" ? "" : m_CurrentMapName;
-        m_DungeonInputBuffer = "";
-        m_FocusedInput = ActiveInput::MapName;
-        Input::StartTextInput();
-        Input::ClearKeys();
-        SDL_SetRelativeMouseMode(SDL_FALSE);
-        ScanSavedMaps();
-        ScanDungeons();
-    }
-
     if (Input::IsKeyPressed(SDL_SCANCODE_1))
       m_SelectedSlot = 0;
     if (Input::IsKeyPressed(SDL_SCANCODE_2))
@@ -763,7 +751,7 @@ void CreativeMode::RenderUI(GLRenderer *ren, TextRenderer *tr, int w, int h) {
 
   if (!m_ShowInventory && !m_ShowSaveMenu) {
     // Instruction
-    tr->RenderText(ren, "E: Inventory | Ctrl+S: Save | 1-9: Select | Click: Place",
+    tr->RenderText(ren, "E: Inventory | 1-9: Select | Click: Place",
                    20, 20, {255, 255, 255, 255});
 
     // Crosshair
