@@ -6,251 +6,134 @@
 using namespace PixelsEngine;
 
 void DungeonsGame::UpdatePhysics(float dt) {
-
   if (m_State != GameState::Playing && m_State != GameState::Creative &&
       m_State != GameState::Siege && m_State != GameState::Dungeon)
     return;
 
-  auto *phys = m_Registry.GetComponent<PhysicsComponent>(m_PlayerEntity);
+  auto &physicsView = m_Registry.View<PhysicsComponent>();
+  
+  for (auto &physPair : physicsView) {
+    Entity entity = physPair.first;
+    auto *phys = &physPair.second;
+    auto *t = m_Registry.GetComponent<Transform3DComponent>(entity);
 
-  auto *t = m_Registry.GetComponent<Transform3DComponent>(m_PlayerEntity);
+    if (!t) continue;
 
-  if (phys && t) {
-
-    if (phys->isGrounded) {
-
-      phys->wallRunTimer = 5.0f; // Reset stamina on ground
-
-      phys->doubleJumpCount = 0; // Reset double jump
-    }
-
-    // Sliding height and friction
-    float eyeHeight = phys->isSliding ? 0.75f : 1.5f;
-    if (m_State == GameState::Siege || m_State == GameState::Dungeon)
-      eyeHeight = 0.0f; // Character feet on ground
-
-    float currentFriction =
-        phys->isGrounded ? phys->friction : phys->friction * 0.2f;
-
-    if (phys->isFlying)
-      currentFriction = 10.0f;
-
-    if (phys->isSliding)
-      currentFriction *= 0.1f; // Much less friction while sliding
-
-    if (m_IsGrappling) {
-
+    // Special handling for player grappling
+    if (entity == m_PlayerEntity && m_IsGrappling) {
       float dx = m_GrapplePoint.x - t->x;
-
       float dy = m_GrapplePoint.y - t->y;
-
       float dz = m_GrapplePoint.z - t->z;
-
       float dist = sqrt(dx * dx + dy * dy + dz * dz);
 
       if (dist < 1.0f) {
-
         m_IsGrappling = false;
-
-        // Boost up slightly on arrival
-
         phys->velZ = 5.0f;
-
       } else {
-
         float speed = 20.0f;
-
         phys->velX = (dx / dist) * speed;
-
         phys->velY = (dy / dist) * speed;
-
         phys->velZ = (dz / dist) * speed;
       }
     }
 
-    // Wall Run Logic
+    // Floor Detection (Improved)
+    float currentFloorHeight = -100.0f; // Default to falling
+    bool overFloor = false;
 
-    if (!phys->isGrounded && phys->wallRunTimer > 0.0f) {
-
-      float checkDist = 1.0f;
-
-      // Check Left (-90 deg) and Right (+90 deg) relative to player rotation
-
-      // Note: rot is in radians.
-
-      float leftX = t->x + cos(t->rot - M_PI / 2.0f) * checkDist;
-
-      float leftY = t->y + sin(t->rot - M_PI / 2.0f) * checkDist;
-
-      float rightX = t->x + cos(t->rot + M_PI / 2.0f) * checkDist;
-
-      float rightY = t->y + sin(t->rot + M_PI / 2.0f) * checkDist;
-
-      // Assuming tile 2 is the only runnable wall (Mossy)
-
-      bool wallLeft = (m_Map.Get((int)leftX, (int)leftY) == 2);
-
-      bool wallRight = (m_Map.Get((int)rightX, (int)rightY) == 2);
-
-      if (wallLeft || wallRight) {
-
-        // Must have some speed (momentum)
-
-        float speed = sqrt(phys->velX * phys->velX + phys->velY * phys->velY);
-
-        if (speed > 0.5f) {
-
-          phys->isWallRunning = true;
-
-          phys->wallRunTimer -= dt;
-
-          phys->velZ = 0.0f; // No gravity while running
-
-          phys->doubleJumpCount = 0; // Allow jump off wall
-
-        } else {
-
-          phys->isWallRunning = false;
+    // Check against all tiles/meshes for floor
+    auto &meshes = m_Registry.View<MeshComponent>();
+    for (auto &mPair : meshes) {
+        std::string lowName = mPair.second.meshName;
+        std::transform(lowName.begin(), lowName.end(), lowName.begin(), ::tolower);
+        
+        if (lowName.find("floor") != std::string::npos || lowName.find("stairs") != std::string::npos) {
+            auto *ft = m_Registry.GetComponent<Transform3DComponent>(mPair.first);
+            if (ft) {
+                // Tiles are 4x4
+                float halfSize = 2.0f;
+                if (t->x >= ft->x - halfSize && t->x <= ft->x + halfSize &&
+                    t->y >= ft->y - halfSize && t->y <= ft->y + halfSize) {
+                    currentFloorHeight = std::max(currentFloorHeight, ft->z);
+                    overFloor = true;
+                }
+            }
         }
-
-      } else {
-
-        phys->isWallRunning = false;
-      }
-
-    } else {
-
-      phys->isWallRunning = false;
     }
 
-    if (!phys->isGrounded && !phys->isWallRunning && !phys->isFlying) {
+    // Base eye height adjustment
+    float eyeOffset = 0.0f;
+    if (entity == m_PlayerEntity && m_State != GameState::Siege && m_State != GameState::Dungeon) {
+        eyeOffset = phys->isSliding ? 0.75f : 1.5f;
+    }
+    
+    float targetZ = currentFloorHeight + eyeOffset;
 
+    // Apply Gravity
+    if (!phys->isGrounded && !phys->isWallRunning && !phys->isFlying) {
       phys->velZ -= phys->gravity * dt;
     }
 
     t->z += phys->velZ * dt;
 
-    // Floor collision & Jump Pads & Lava
-
-    if (t->z < eyeHeight) {
+    // Floor collision
+    if (overFloor && t->z < targetZ) {
       bool wasInAir = !phys->isGrounded && phys->velZ < -1.0f;
-
-      t->z = eyeHeight;
-
+      t->z = targetZ;
       phys->velZ = 0;
-
       phys->isGrounded = true;
-
-      if (wasInAir && m_SfxJump) {
+      if (wasInAir && entity == m_PlayerEntity && m_SfxJump) {
         Mix_PlayChannel(-1, m_SfxJump, 0);
       }
-
-    } else if (t->z > eyeHeight + 0.01f) {
-
+    } else if (t->z > targetZ + 0.05f) {
       phys->isGrounded = false;
     }
 
+    // Wall Run Logic (Player Only)
+    if (entity == m_PlayerEntity && !phys->isGrounded && phys->wallRunTimer > 0.0f) {
+        // ... existing wall run logic ...
+        float checkDist = 1.0f;
+        float leftX = t->x + cos(t->rot - M_PI / 2.0f) * checkDist;
+        float leftY = t->y + sin(t->rot - M_PI / 2.0f) * checkDist;
+        float rightX = t->x + cos(t->rot + M_PI / 2.0f) * checkDist;
+        float rightY = t->y + sin(t->rot + M_PI / 2.0f) * checkDist;
+        bool wallLeft = (m_Map.Get((int)leftX, (int)leftY) == 2);
+        bool wallRight = (m_Map.Get((int)rightX, (int)rightY) == 2);
+        if (wallLeft || wallRight) {
+            float speed = sqrt(phys->velX * phys->velX + phys->velY * phys->velY);
+            if (speed > 0.5f) {
+                phys->isWallRunning = true;
+                phys->wallRunTimer -= dt;
+                phys->velZ = 0.0f;
+                phys->doubleJumpCount = 0;
+            } else phys->isWallRunning = false;
+        } else phys->isWallRunning = false;
+    } else {
+        phys->isWallRunning = false;
+    }
+
     // Kill Plane Check
-
-    if (t->z < -50.0f) {
-
-      // Reset
-
-      t->z = 5.0f;
-
-      phys->velZ = 0;
-    }
-
-    // Horizontal velocity - simple approach
-    float nextX = t->x + phys->velX * dt;
-    float nextY = t->y + phys->velY * dt;
-
-    // Allow movement - don't check map collision for now, let hitboxes handle it
-    t->x = nextX;
-    t->y = nextY;
-    
-    // Check against furniture for platforming (climbable objects only)
-    auto &hitboxes = m_Registry.View<HitboxComponent>();
-    for (auto &pair : hitboxes) {
-      auto *hb = &pair.second;
-      auto *ent = m_Registry.GetComponent<Transform3DComponent>(pair.first);
-      if (!ent || !hb->isClimbable) continue;
-      
-      // Get object bounds
-      float minX, maxX, minY, maxY, minZ, maxZ;
-      hb->GetBounds(ent->x, ent->y, ent->z, minX, maxX, minY, maxY, minZ, maxZ);
-      
-      // Check if player can land on this object
-      float playerRadius = 0.35f;
-      float nextMinX = t->x - playerRadius;
-      float nextMaxX = t->x + playerRadius;
-      float nextMinY = t->y - playerRadius;
-      float nextMaxY = t->y + playerRadius;
-      
-      bool horizontalOverlap = !(nextMaxX < minX || nextMinX > maxX ||
-                                  nextMaxY < minY || nextMinY > maxY);
-      
-      // If player is above the object and falling
-      if (horizontalOverlap && t->z > maxZ - 0.1f && phys->velZ <= 0.0f) {
-        // Land on top of object
-        t->z = maxZ;
-        phys->velZ = 0;
-        phys->isGrounded = true;
-      }
-    }
-    
-    // Check against solid objects for collision blocking
-    for (auto &pair : hitboxes) {
-      auto *hb = &pair.second;
-      if (!hb->isSolid) continue;
-      
-      auto *ent = m_Registry.GetComponent<Transform3DComponent>(pair.first);
-      if (!ent) continue;
-      
-      // Skip doors that are open
-      auto *door = m_Registry.GetComponent<DoorComponent>(pair.first);
-      if (door && door->isOpen && door->currentOpenDistance > 0.5f) {
-        continue;
-      }
-      
-      // Get object bounds
-      float minX, maxX, minY, maxY, minZ, maxZ;
-      hb->GetBounds(ent->x, ent->y, ent->z, minX, maxX, minY, maxY, minZ, maxZ);
-      
-      // Player collision radius
-      float playerRadius = 0.35f;
-      float playerMinX = t->x - playerRadius;
-      float playerMaxX = t->x + playerRadius;
-      float playerMinY = t->y - playerRadius;
-      float playerMaxY = t->y + playerRadius;
-      float playerMinZ = t->z;
-      float playerMaxZ = t->z + 1.5f;
-      
-      // Check AABB collision
-      bool collides = !(playerMaxX < minX || playerMinX > maxX ||
-                        playerMaxY < minY || playerMinY > maxY ||
-                        playerMaxZ < minZ || playerMinZ > maxZ);
-      
-      if (collides) {
-        // Push player out - revert to previous position
-        t->x = nextX > ent->x ? maxX + playerRadius : minX - playerRadius;
-        if (t->y == nextY) {  // Only fix X if we didn't already move in Y
-          t->y = nextY > ent->y ? maxY + playerRadius : minY - playerRadius;
-        }
-        phys->velX = 0;
-        phys->velY = 0;
+    if (t->z < -20.0f) {
+      if (entity == m_PlayerEntity) {
+          t->z = 5.0f; t->x = 12.0f; t->y = 0.0f; // Reset player
+          phys->velX = phys->velY = phys->velZ = 0;
+      } else {
+          m_Registry.DestroyEntity(entity); // Destroy enemies/projectiles that fall
+          continue;
       }
     }
 
-    float currentDrag = phys->isGrounded
-                            ? phys->friction
-                            : 10.0f; // Higher drag in air for tight fly control
-    float drag = 1.0f - (currentDrag * dt);
-    if (drag < 0)
-      drag = 0;
+    // Horizontal velocity
+    t->x += phys->velX * dt;
+    t->y += phys->velY * dt;
+
+    // Drag
+    float dragBase = phys->isGrounded ? phys->friction : (phys->isFlying ? 10.0f : 1.0f);
+    float drag = 1.0f - (dragBase * dt);
+    if (drag < 0) drag = 0;
     phys->velX *= drag;
     phys->velY *= drag;
-    phys->velZ *= drag; // Apply drag to Z as well for fly mode
+    if (phys->isFlying) phys->velZ *= drag;
   }
 }
 

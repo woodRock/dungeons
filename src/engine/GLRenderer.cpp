@@ -78,34 +78,38 @@ void GLRenderer::Init(int width, int height) {
           } else {
               vec4 texColor = texture(ourTexture, TexCoord);
               
-              // Ambient lighting with slight tint for dungeon feel
-              vec3 ambient = 0.35 * vec3(0.95, 0.95, 1.0);
+              // Dungeon-specific ambient lighting: darker, with cool tone
+              vec3 ambient = 0.25 * vec3(0.8, 0.85, 1.0);
               
-              // Diffuse lighting
+              // Enhanced diffuse lighting
               vec3 norm = normalize(Normal);
               vec3 lightDir = normalize(lightPos - FragPos);
               float diff = max(dot(norm, lightDir), 0.0);
-              vec3 diffuse = diff * vec3(1.0, 0.95, 0.9);
+              vec3 diffuse = diff * vec3(1.0, 0.9, 0.8);
               
-              // Specular highlights
+              // Strong specular highlights for dungeon polish
               vec3 viewDir = normalize(viewPos - FragPos);
               vec3 reflectDir = reflect(-lightDir, norm);
-              float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
-              vec3 specular = 0.3 * spec * vec3(1.0);
+              float spec = pow(max(dot(viewDir, reflectDir), 0.0), 40.0);
+              vec3 specular = 0.4 * spec * vec3(1.0, 1.0, 1.0);
               
-              // Rim lighting for silhouette
+              // Enhanced rim lighting for silhouette definition
               float rim = 1.0 - dot(norm, viewDir);
-              rim = pow(rim, 2.0);
-              vec3 rimColor = 0.15 * rim * vec3(1.0, 0.8, 0.6);
+              rim = pow(rim, 2.5);
+              vec3 rimColor = 0.25 * rim * vec3(1.0, 0.7, 0.5);
               
-              // Combine lighting
-              vec3 finalColor = (ambient + diffuse + specular + rimColor) * texColor.rgb;
+              // Shadows: darken backlit surfaces
+              vec3 shadowColor = 0.15 * vec3(0.6, 0.5, 0.7);
+              vec3 litColor = mix(shadowColor, vec3(1.0), diff + 0.3);
+              
+              // Combine lighting with enhanced shadows
+              vec3 finalColor = (ambient + diffuse + specular + rimColor) * texColor.rgb * litColor;
               if (length(texColor.rgb) < 0.01) finalColor = vec3(1.0, 0.0, 1.0);
               
-              // Distance fog
+              // Distance fog - darker dungeon atmosphere
               float fogDist = length(viewPos - FragPos);
-              float fogFactor = clamp(1.0 - fogDist / 100.0, 0.0, 1.0);
-              vec3 fogColor = vec3(0.15, 0.15, 0.2);
+              float fogFactor = clamp(1.0 - fogDist / 80.0, 0.0, 1.0);
+              vec3 fogColor = vec3(0.1, 0.1, 0.15);
               finalColor = mix(fogColor, finalColor, fogFactor);
               
               // Apply flash effect

@@ -37,6 +37,7 @@ public:
 private:
     void LoadLevel(const std::string& levelName);
     void CheckLevelCompletion();
+    void HandleCombat(float dt);
 
     Registry* m_Registry;
     GLRenderer* m_Renderer;
@@ -60,8 +61,11 @@ private:
     Mix_Chunk* m_SfxShoot = nullptr;
     Mix_Chunk* m_SfxHit = nullptr;
     Mix_Chunk* m_SfxDoor = nullptr;
+    Mix_Chunk* m_SfxSwordHit = nullptr;
+    Mix_Chunk* m_SfxSwordMiss = nullptr;
     
     float m_AttackTimer = 0.0f;
+    int m_CurrentWeapon = 2; // 2 = Melee, 3 = Ranged (matches BattleUnit preferredAction)
 };
 
 } // namespace PixelsEngine

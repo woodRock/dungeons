@@ -92,9 +92,9 @@ private:
   Registry* m_Registry;
   Entity m_PlayerEntity;
   
-  float m_Acceleration = 40.0f;
-  float m_Friction = 0.9f;
-  float m_MaxSpeed = 12.0f;
+  float m_Acceleration = 80.0f;   // Moderate acceleration
+  float m_Friction = 0.92f;       // High friction for immediate stopping
+  float m_MaxSpeed = 8.0f;        // Slower, more controlled movement
 };
 
 } // namespace PixelsEngine

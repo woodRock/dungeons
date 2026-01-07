@@ -117,9 +117,9 @@ void ThirdPersonMovementController::HandleInput(float dt) {
 
 TopDownMovementController::TopDownMovementController(Registry* registry, Entity playerEntity)
     : m_Registry(registry), m_PlayerEntity(playerEntity) {
-    m_Acceleration = 100.0f;
-    m_Friction = 0.98f;
-    m_MaxSpeed = 20.0f;
+    m_Acceleration = 80.0f;   // Moderate acceleration
+    m_Friction = 0.92f;       // High friction for immediate stopping
+    m_MaxSpeed = 8.0f;        // Slower, more controlled movement
 }
 
 void TopDownMovementController::HandleInput(float dt) {
@@ -130,17 +130,18 @@ void TopDownMovementController::HandleInput(float dt) {
   
   if (!t || !phys) return;
 
-  // Apply friction (per-frame damping)
-  phys->velX *= m_Friction;
-  phys->velY *= m_Friction;
-
+  // Horizontal movement logic aligned with 180-deg top-down camera (Looking South/+Y)
+  // W: Forward (Up on screen) -> South (+Y)
+  // S: Back (Down on screen) -> North (-Y)
+  // A: Left (Left on screen) -> East (-X)
+  // D: Right (Right on screen) -> West (+X)
   float accel = m_Acceleration * dt;
   float dx = 0, dy = 0;
 
   if (Input::IsKeyDown(m_KeyForward)) dy += 1.0f;
   if (Input::IsKeyDown(m_KeyBack))    dy -= 1.0f;
-  if (Input::IsKeyDown(m_KeyLeft))    dx += 1.0f;
-  if (Input::IsKeyDown(m_KeyRight))   dx -= 1.0f;
+  if (Input::IsKeyDown(m_KeyLeft))    dx -= 1.0f;
+  if (Input::IsKeyDown(m_KeyRight))   dx += 1.0f;
 
   if (dx != 0 || dy != 0) {
     // Normalize and apply acceleration
@@ -152,9 +153,15 @@ void TopDownMovementController::HandleInput(float dt) {
     phys->velY += dy * accel;
 
     // Rotate player to face movement direction
-    // Formula: atan2(dy, dx) + PI/2 correctly maps world-space movement to asset rotation
-    t->rot = atan2(dy, dx) + M_PI/2.0f;
+    // Formula: atan2(dx, dy) + PI correctly maps movement vector to character rotation
+    // W (+Y) -> atan2(0, 1) + PI = PI (Faces South)
+    // A (-X) -> atan2(-1, 0) + PI = PI/2 (Faces East)
+    t->rot = atan2(dx, dy) + M_PI;
   }
+  
+  // Always apply friction for immediate deceleration when keys are released
+  phys->velX *= m_Friction;
+  phys->velY *= m_Friction;
 
   // Clamp velocity
   float speed = sqrt(phys->velX * phys->velX + phys->velY * phys->velY);
