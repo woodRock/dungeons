@@ -5,7 +5,10 @@
 #include "../engine/Components.h"
 #include "../engine/ECS.h"
 #include "../engine/GLRenderer.h"
-#include <SDL2/SDL_mixer.h>
+#include "../engine/AudioManager.h"
+#include "../engine/AssetManager.h"
+#include "../engine/CharacterFactory.h"
+#include "../engine/MapLoader.h"
 #include <memory>
 
 namespace PixelsEngine {
@@ -43,14 +46,13 @@ private:
     float x = 0, y = 0, z = 0;
   } m_Cursor;
 
-  // Audio
+  // Audio manager
+  std::unique_ptr<AudioManager> m_AudioManager;
   Mix_Chunk *m_SfxShoot = nullptr;
   Mix_Chunk *m_SfxHit = nullptr;
   Mix_Chunk *m_SfxSwordHit = nullptr;
   Mix_Chunk *m_SfxSwordMiss = nullptr;
 
-  void LoadMap(const std::string &path);
-  void SpawnPlayer(PixelsEngine::Entity &playerEntity);
   void SpawnEnemy(const std::string &mesh, float x, float y,
                   PixelsEngine::CharacterComponent::Type type);
   void RaycastCursor();

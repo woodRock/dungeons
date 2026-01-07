@@ -51,6 +51,8 @@ public:
   void SetShoulder(float shoulder) { m_Shoulder = shoulder; }
   void SetHeight(float height) { m_Height = height; }
   void SetMouseSensitivity(float sens) { m_MouseSensitivity = sens; }
+  void SetYaw(float yaw) { m_CameraYaw = yaw; }
+  void SetPitch(float pitch) { m_CameraPitch = pitch; }
   
   float GetYaw() const override { return m_CameraYaw; }
   float GetCameraYaw() const { return m_CameraYaw; }

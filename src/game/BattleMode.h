@@ -3,9 +3,13 @@
 #include "../engine/Components.h"
 #include "../engine/ECS.h"
 #include "../engine/GLRenderer.h"
-#include <SDL2/SDL_mixer.h>
+#include "../engine/AudioManager.h"
+#include "../engine/AssetManager.h"
+#include "../engine/CharacterFactory.h"
+#include "../engine/MapLoader.h"
 #include <string>
 #include <vector>
+#include <memory>
 
 namespace PixelsEngine {
 class TextRenderer;
@@ -63,8 +67,8 @@ private:
     float targetX, targetY, targetZ;
   } m_ActiveProjectile;
 
-  // Audio
-  Mix_Music *m_Music = nullptr;
+  // Audio manager
+  std::unique_ptr<AudioManager> m_AudioManager;
   Mix_Chunk *m_SfxJump = nullptr;
   Mix_Chunk *m_SfxShoot = nullptr;
   Mix_Chunk *m_SfxBowHit = nullptr;

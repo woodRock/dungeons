@@ -13,47 +13,36 @@ using namespace PixelsEngine;
 
 SiegeMode::SiegeMode(Registry *registry, GLRenderer *renderer)
     : m_Registry(registry), m_Renderer(renderer) {
-  // Initialize pointers to nullptr for safety
-  m_SfxShoot = nullptr;
-  m_SfxHit = nullptr;
-  m_SfxSwordHit = nullptr;
-  m_SfxSwordMiss = nullptr;
+  // AudioManager will be initialized in Init()
 }
 
 SiegeMode::~SiegeMode() {
-  // FIX: Free audio resources to prevent memory leaks
-  if (m_SfxShoot)
-    Mix_FreeChunk(m_SfxShoot);
-  if (m_SfxHit)
-    Mix_FreeChunk(m_SfxHit);
-  if (m_SfxSwordHit)
-    Mix_FreeChunk(m_SfxSwordHit);
-  if (m_SfxSwordMiss)
-    Mix_FreeChunk(m_SfxSwordMiss);
+  // AudioManager handles cleanup automatically
 }
 
 void SiegeMode::Init(Camera *camera, Entity &playerEntity) {
   m_Camera = camera;
 
-  // 1. Load Audio
-  m_SfxShoot = Mix_LoadWAV("assets/bow_shoot.wav");
-  m_SfxHit = Mix_LoadWAV("assets/bow_hit.wav");
-  m_SfxSwordHit = Mix_LoadWAV("assets/sword_hit.wav");
-  m_SfxSwordMiss = Mix_LoadWAV("assets/sword_miss.wav");
+  // 1. Initialize Audio Manager
+  m_AudioManager = std::make_unique<AudioManager>();
+  m_SfxShoot = m_AudioManager->LoadWAV("assets/bow_shoot.wav");
+  m_SfxHit = m_AudioManager->LoadWAV("assets/bow_hit.wav");
+  m_SfxSwordHit = m_AudioManager->LoadWAV("assets/sword_hit.wav");
+  m_SfxSwordMiss = m_AudioManager->LoadWAV("assets/sword_miss.wav");
 
-  // Check for audio load failures
-  if (!m_SfxShoot)
-    std::cerr << "Failed to load bow_shoot.wav: " << Mix_GetError()
-              << std::endl;
+  // 2. Initialize Asset Manager
+  auto assetManager = std::make_unique<AssetManager>(m_Renderer);
+  assetManager->LoadCharacter("Knight",
+                               "assets/adventurers/Characters/gltf/Knight.glb",
+                               "assets/adventurers/Textures/knight_texture.png");
+  assetManager->LoadCharacter("skel_minion",
+                               "assets/skeletons/characters/gltf/Skeleton_Minion.glb",
+                               "assets/skeletons/texture/skeleton_texture.png");
+  assetManager->LoadCharacter("skel_warrior",
+                               "assets/skeletons/characters/gltf/Skeleton_Warrior.glb",
+                               "assets/skeletons/texture/skeleton_texture.png");
 
-  // 2. Load Assets
-  m_Renderer->LoadTexture("knight_tex",
-                          "assets/adventurers/Textures/knight_texture.png");
-  m_Renderer->LoadTexture("skeleton_tex",
-                          "assets/skeletons/texture/skeleton_texture.png");
-
-  m_Renderer->LoadMesh("Knight",
-                       "assets/adventurers/Characters/gltf/Knight.glb");
+  // Load weapon meshes
   m_Renderer->LoadMesh("Sword",
                        "assets/adventurers/Assets/gltf/sword_1handed.gltf");
   m_Renderer->LoadMesh("Crossbow",
@@ -61,47 +50,13 @@ void SiegeMode::Init(Camera *camera, Entity &playerEntity) {
   m_Renderer->LoadMesh("Arrow",
                        "assets/adventurers/Assets/gltf/arrow_bow.gltf");
 
-  m_Renderer->LoadMesh("skel_minion",
-                       "assets/skeletons/characters/gltf/Skeleton_Minion.glb");
-  m_Renderer->LoadMesh("skel_warrior",
-                       "assets/skeletons/characters/gltf/Skeleton_Warrior.glb");
-
-  // Load and assign skeletal animations
-  auto playerAnims = GLTFLoader::LoadAnimations(
-      "assets/animations/Animations/gltf/Rig_Medium/Rig_Medium_General.glb");
-  auto combatMelee =
-      GLTFLoader::LoadAnimations("assets/animations/Animations/gltf/Rig_Medium/"
-                                 "Rig_Medium_CombatMelee.glb");
-  auto combatRanged =
-      GLTFLoader::LoadAnimations("assets/animations/Animations/gltf/Rig_Medium/"
-                                 "Rig_Medium_CombatRanged.glb");
-  auto movementBasic =
-      GLTFLoader::LoadAnimations("assets/animations/Animations/gltf/Rig_Medium/"
-                                 "Rig_Medium_MovementBasic.glb");
-
-  auto SetupMesh = [&](const std::string &name,
-                       const std::vector<SkeletalAnimation> &baseAnims) {
-    RenderMesh *rm = m_Renderer->GetRenderMesh(name);
-    if (rm) {
-      rm->animations = baseAnims;
-      rm->animations.insert(rm->animations.end(), combatMelee.begin(),
-                            combatMelee.end());
-      rm->animations.insert(rm->animations.end(), combatRanged.begin(),
-                            combatRanged.end());
-      rm->animations.insert(rm->animations.end(), movementBasic.begin(),
-                            movementBasic.end());
-      rm->isSkinned = true;
-    }
-  };
-  SetupMesh("Knight", playerAnims);
-  SetupMesh("skel_minion", playerAnims);
-  SetupMesh("skel_warrior", playerAnims);
-
   // 3. Load Map
-  LoadMap("assets/dungeons/my_dungeon.map");
+  MapLoader::LoadFromFile("assets/dungeons/my_dungeon.map", m_Registry,
+                           m_Renderer);
 
   // 4. Spawn Player
-  SpawnPlayer(playerEntity);
+  playerEntity =
+      CharacterFactory::CreatePlayer(m_Registry, m_Renderer, 12.0f, 0.0f, 0.0f);
 
   // 5. Create camera controller AFTER spawning the player
   m_CameraController = std::make_unique<ThirdPersonCamera>(
@@ -109,7 +64,6 @@ void SiegeMode::Init(Camera *camera, Entity &playerEntity) {
   m_CameraController->SetDistance(3.0f);      // Distance behind player
   m_CameraController->SetShoulder(0.0f);     // Center behind, not on shoulder
   m_CameraController->SetHeight(1.6f);       // Eye level height
-
   // Create movement controller for player input handling
   m_MovementController = std::make_unique<ThirdPersonMovementController>(
       m_Registry, playerEntity);
@@ -120,86 +74,9 @@ void SiegeMode::Init(Camera *camera, Entity &playerEntity) {
   SpawnEnemy("skel_minion", 8.0f, 15.0f, CharacterComponent::SkeletonMinion);
 }
 
-void SiegeMode::LoadMap(const std::string &path) {
-  std::ifstream in(path);
-  if (!in.is_open()) {
-    std::cerr << "Failed to load map: " << path << std::endl;
-    return;
-  }
-  std::string m, t;
-  float x, y, z, r;
-  while (in >> m >> t >> x >> y >> z >> r) {
-    // Only load if not already loaded
-    if (!m_Renderer->GetRenderMesh(m)) {
-      m_Renderer->LoadMesh(m, "assets/dungeons/Assets/obj/" + m + ".obj");
-    }
-    auto e = m_Registry->CreateEntity();
-    m_Registry->AddComponent<Transform3DComponent>(e, {x, y, z, r, 0});
-    m_Registry->AddComponent<MeshComponent>(e, {m, t, 1, 1, 1});
-  }
-}
-
-void SiegeMode::SpawnPlayer(Entity &playerEntity) {
-  playerEntity = m_Registry->CreateEntity();
-  m_Registry->AddComponent<Transform3DComponent>(
-      playerEntity, {12.0f, 0.0f, 0.0f, 0.0f, 0.0f});
-  m_Registry->AddComponent<MeshComponent>(playerEntity,
-                                          {"Knight", "knight_tex", 1, 1, 1});
-  m_Registry->AddComponent<PlayerControlComponent>(playerEntity,
-                                                   {5.0f, 0.003f, 6.0f});
-  m_Registry->AddComponent<PhysicsComponent>(
-      playerEntity, {0, 0, 0, 15.0f, true, false, 0.0f, 1.0f});
-  m_Registry->AddComponent<WeaponComponent>(playerEntity, {0.0f, 0.0f, false});
-  m_Registry->AddComponent<BattleUnitComponent>(
-      playerEntity, {BattleUnitComponent::Player, 100, 100, 15, 0});
-
-  // Find Idle animation
-  int idleIdx = 0;
-  RenderMesh *rm = m_Renderer->GetRenderMesh("Knight");
-  if (rm) {
-    for (size_t i = 0; i < rm->animations.size(); i++) {
-      if (rm->animations[i].name.find("Idle") != std::string::npos) {
-        idleIdx = (int)i;
-        break;
-      }
-    }
-  }
-  m_Registry->AddComponent<SkeletalAnimationComponent>(playerEntity,
-                                                       {idleIdx, 0.0f, 1.0f});
-
-  // Sword by default
-  AttachmentComponent attach;
-  attach.meshName = "Sword";
-  attach.textureName = "knight_tex";
-  attach.boneName = "hand.r";
-  attach.rotX = -7.63f;
-  attach.rotY = 18.148f;
-  attach.rotZ = 1.702f;
-  m_Registry->AddComponent<AttachmentComponent>(playerEntity, attach);
-}
-
 void SiegeMode::SpawnEnemy(const std::string &mesh, float x, float y,
                            CharacterComponent::Type type) {
-  Entity e = m_Registry->CreateEntity();
-  m_Registry->AddComponent<Transform3DComponent>(e, {x, y, 0.0f, 0.0f, 0.0f});
-  m_Registry->AddComponent<MeshComponent>(e, {mesh, "skeleton_tex", 1, 1, 1});
-  m_Registry->AddComponent<EnemyComponent>(e, {50.0f, 2.0f, -1});
-  m_Registry->AddComponent<BattleUnitComponent>(
-      e, {BattleUnitComponent::Enemy, 50, 50, 10, 0});
-  m_Registry->AddComponent<ColliderComponent>(e, {0.5f, 1.8f, true});
-
-  int idleIdx = 0;
-  RenderMesh *rm = m_Renderer->GetRenderMesh(mesh);
-  if (rm) {
-    for (size_t i = 0; i < rm->animations.size(); i++) {
-      if (rm->animations[i].name.find("Idle") != std::string::npos) {
-        idleIdx = (int)i;
-        break;
-      }
-    }
-  }
-  m_Registry->AddComponent<SkeletalAnimationComponent>(
-      e, {idleIdx, (float)(rand() % 100) * 0.01f, 1.0f});
+  CharacterFactory::CreateSkeleton(m_Registry, m_Renderer, mesh, x, y, 0.0f);
 }
 
 void SiegeMode::Update(float dt, Entity playerEntity, float tunerDist,
@@ -220,11 +97,9 @@ void SiegeMode::Update(float dt, Entity playerEntity, float tunerDist,
   // Handle camera input
   m_CameraController->HandleInput(dt);
 
-  // Raycast cursor for targeting
-  RaycastCursor();
-  if (m_Cursor.active) {
-    // Player faces the mouse cursor on the ground
-    t->rot = atan2(t->x - m_Cursor.x, t->y - m_Cursor.y);
+  // Sync player rotation with camera yaw for consistent facing direction
+  if (m_CameraController) {
+    t->rot = -m_CameraController->GetCameraYaw();
   }
 
   // Update camera position (third-person follows player)
@@ -340,7 +215,7 @@ void SiegeMode::Update(float dt, Entity playerEntity, float tunerDist,
         m_Registry->AddComponent<Transform3DComponent>(
             arrow, {t->x, t->y, t->z + 1.2f, t->rot, m_CameraController->GetCameraPitch()});
         m_Registry->AddComponent<MeshComponent>(
-            arrow, {"Arrow", "knight_tex", 1, 1, 1});
+            arrow, {"Arrow", "Knight_tex", 1, 1, 1});
         m_Registry->AddComponent<ProjectileComponent>(
             arrow, {ProjectileComponent::Arrow, 25.0f, true, 5.0f});
 
@@ -377,8 +252,10 @@ void SiegeMode::Update(float dt, Entity playerEntity, float tunerDist,
               eu->flashAmount = 1.0f;
               m_HitmarkerTimer = 0.15f;
               hitSomething = true;
-              if (eu->hp <= 0)
+              if (eu->hp <= 0) {
+                eu->flashAmount = 0.0f;  // Clear red flash when dead
                 deadEnemies.push_back(pair.first);
+              }
               break;
             }
           }
@@ -402,12 +279,37 @@ void SiegeMode::Update(float dt, Entity playerEntity, float tunerDist,
   auto &enemies = m_Registry->View<EnemyComponent>();
   for (auto &pair : enemies) {
     auto *et = m_Registry->GetComponent<Transform3DComponent>(pair.first);
+    auto *ephys = m_Registry->GetComponent<PhysicsComponent>(pair.first);
     auto &enemy = pair.second;
     if (et) {
       float edx = t->x - et->x;
       float edy = t->y - et->y;
       float dist = sqrt(edx * edx + edy * edy);
       if (dist > 1.5f) {
+        // Check collision with other enemies
+        float collisionAvoidX = 0.0f, collisionAvoidY = 0.0f;
+        int nearbyEnemies = 0;
+        auto &allEnemies = m_Registry->View<EnemyComponent>();
+        for (auto &other : allEnemies) {
+          if (other.first == pair.first) continue;
+          auto *oet = m_Registry->GetComponent<Transform3DComponent>(other.first);
+          if (oet) {
+            float dx = et->x - oet->x;
+            float dy = et->y - oet->y;
+            float d = sqrt(dx * dx + dy * dy);
+            if (d < 1.0f && d > 0.01f) {  // Too close to another enemy
+              float pushX = (dx / d) * 0.5f;
+              float pushY = (dy / d) * 0.5f;
+              collisionAvoidX += pushX;
+              collisionAvoidY += pushY;
+              nearbyEnemies++;
+            }
+          }
+        }
+        if (nearbyEnemies > 0) {
+          edx += collisionAvoidX;
+          edy += collisionAvoidY;
+        }
         float angle = atan2(edy, edx);
         et->rot = angle + 1.57f;
         et->x += cos(angle) * enemy.speed * dt;

@@ -46,6 +46,9 @@ void DungeonsGame::OnUpdate(float deltaTime) {
   }
   case GameState::Battle: {
     UpdateBattle(deltaTime);
+    UpdatePhysics(deltaTime);
+    UpdateProjectiles(deltaTime);
+    UpdateAnimations(deltaTime);
     if (Input::IsKeyPressed(SDL_SCANCODE_ESCAPE)) {
       m_State = GameState::Paused;
       m_MenuSelection = 0;

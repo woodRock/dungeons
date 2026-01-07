@@ -396,9 +396,18 @@ void GLRenderer::Render(SDL_Window *win, const Camera &cam, Registry &reg,
       } else
         m_Shader->SetInt("useSkinning", 0);
       glActiveTexture(GL_TEXTURE0);
-      glBindTexture(GL_TEXTURE_2D, (m_Textures.count(mc.textureName))
-                                       ? m_Textures[mc.textureName]
-                                       : m_DefaultTexture);
+      GLuint texID = (m_Textures.count(mc.textureName))
+                         ? m_Textures[mc.textureName]
+                         : m_DefaultTexture;
+      glBindTexture(GL_TEXTURE_2D, texID);
+      static bool loggedOnce = false;
+      if (!loggedOnce && rm.isSkinned) {
+        std::cout << "Rendering skinned mesh: " << mc.meshName 
+                  << " with texture: " << mc.textureName 
+                  << " (ID: " << texID << ", found: " << m_Textures.count(mc.textureName) 
+                  << ")" << std::endl;
+        loggedOnce = true;
+      }
       glBindVertexArray(rm.VAO);
       glDrawElements(GL_TRIANGLES, rm.indexCount, GL_UNSIGNED_INT, 0);
 
@@ -495,10 +504,13 @@ bool GLRenderer::LoadMesh(const std::string &name, const std::string &path) {
 
 bool GLRenderer::LoadTexture(const std::string &name, const std::string &path) {
   SDL_Surface *s = IMG_Load(path.c_str());
-  if (!s)
+  if (!s) {
+    std::cerr << "Failed to load texture image: " << path << std::endl;
     return false;
+  }
   SDL_Surface *opt = SDL_ConvertSurfaceFormat(s, SDL_PIXELFORMAT_ABGR8888, 0);
   if (!opt) {
+    std::cerr << "Failed to convert surface format for: " << path << std::endl;
     SDL_FreeSurface(s);
     return false;
   }
@@ -514,6 +526,7 @@ bool GLRenderer::LoadTexture(const std::string &name, const std::string &path) {
   SDL_FreeSurface(s);
   SDL_FreeSurface(opt);
   m_Textures[name] = t;
+  std::cout << "Loaded texture: " << name << " from " << path << " (ID: " << t << ")" << std::endl;
   return true;
 }
 

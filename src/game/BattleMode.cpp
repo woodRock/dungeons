@@ -18,83 +18,43 @@ BattleMode::BattleMode(Registry *registry, GLRenderer *renderer)
 void BattleMode::Init(Camera *camera, Entity &playerEntity) {
   m_Camera = camera;
 
-  // Load Audio
-  m_Music = Mix_LoadMUS("assets/ambience_flute.mp3");
-  if (m_Music)
-    Mix_PlayMusic(m_Music, -1);
+  // Initialize Audio Manager
+  m_AudioManager = std::make_unique<AudioManager>();
+  auto music = m_AudioManager->LoadMusic("assets/ambience_flute.mp3");
+  if (music)
+    m_AudioManager->PlayMusic(music, -1);
 
-  m_SfxJump = Mix_LoadWAV("assets/jump.wav");
-  m_SfxShoot = Mix_LoadWAV("assets/bow_shoot.wav");
-  m_SfxBowHit = Mix_LoadWAV("assets/bow_hit.wav");
-  m_SfxSwordHit = Mix_LoadWAV("assets/sword_hit.wav");
-  m_SfxSwordMiss = Mix_LoadWAV("assets/sword_miss.wav");
+  m_SfxJump = m_AudioManager->LoadWAV("assets/jump.wav");
+  m_SfxShoot = m_AudioManager->LoadWAV("assets/bow_shoot.wav");
+  m_SfxBowHit = m_AudioManager->LoadWAV("assets/bow_hit.wav");
+  m_SfxSwordHit = m_AudioManager->LoadWAV("assets/sword_hit.wav");
+  m_SfxSwordMiss = m_AudioManager->LoadWAV("assets/sword_miss.wav");
 
-  // 1. Load Assets (Ensure common assets are loaded)
-  // Characters
-  std::vector<std::string> adventurers = {"Knight", "Ranger", "Mage", "Rogue"};
-  std::vector<std::string> skeletons = {"Skeleton_Warrior", "Skeleton_Mage",
-                                        "Skeleton_Minion"};
-
-  // Helper to load if missing
-  auto LoadIfMissing = [&](const std::string &name, const std::string &path,
-                           const std::string &texName,
-                           const std::string &texPath) {
-    if (!m_Renderer->GetRenderMesh(name)) {
-      m_Renderer->LoadMesh(name, path);
-      m_Renderer->LoadTexture(texName, texPath);
-
-      // Load Animations (General + Combat + Movement)
-      std::string rigPath =
-          (name.find("Skeleton") != std::string::npos)
-              ? "assets/skeletons/Animations/gltf/Rig_Medium/"
-              : "assets/adventurers/Animations/gltf/Rig_Medium/";
-
-      std::vector<std::string> animFiles = {
-          "Rig_Medium_General.glb", "Rig_Medium_CombatMelee.glb",
-          "Rig_Medium_CombatRanged.glb", "Rig_Medium_MovementBasic.glb"};
-
-      std::vector<SkeletalAnimation> allAnims;
-      for (const auto &file : animFiles) {
-        std::string fullPath = rigPath + file;
-        // Check if specific file exists, if not use the general animations
-        // folder
-        std::ifstream f(fullPath);
-        if (!f.good()) {
-          fullPath = "assets/animations/Animations/gltf/Rig_Medium/" + file;
-        }
-        f.close();
-
-        auto anims = GLTFLoader::LoadAnimations(fullPath);
-        allAnims.insert(allAnims.end(), anims.begin(), anims.end());
-      }
-
-      RenderMesh *rm = m_Renderer->GetRenderMesh(name);
-      if (rm) {
-        rm->animations = allAnims;
-        rm->isSkinned = true;
-      }
-    }
-  };
-
-  LoadIfMissing("Knight", "assets/adventurers/Characters/gltf/Knight.glb",
-                "knight_tex", "assets/adventurers/Textures/knight_texture.png");
-  LoadIfMissing("Ranger", "assets/adventurers/Characters/gltf/Ranger.glb",
-                "ranger_tex", "assets/adventurers/Textures/ranger_texture.png");
-  LoadIfMissing("Mage", "assets/adventurers/Characters/gltf/Mage.glb",
-                "mage_tex", "assets/adventurers/Textures/mage_texture.png");
-  LoadIfMissing("Rogue", "assets/adventurers/Characters/gltf/Rogue.glb",
-                "rogue_tex", "assets/adventurers/Textures/rogue_texture.png");
-
-  LoadIfMissing("Skeleton_Warrior",
-                "assets/skeletons/characters/gltf/Skeleton_Warrior.glb",
-                "skeleton_tex",
-                "assets/skeletons/texture/skeleton_texture.png");
-  LoadIfMissing(
-      "Skeleton_Mage", "assets/skeletons/characters/gltf/Skeleton_Mage.glb",
-      "skeleton_tex", "assets/skeletons/texture/skeleton_texture.png");
-  LoadIfMissing(
-      "Skeleton_Minion", "assets/skeletons/characters/gltf/Skeleton_Minion.glb",
-      "skeleton_tex", "assets/skeletons/texture/skeleton_texture.png");
+  // Initialize Asset Manager
+  auto assetManager = std::make_unique<AssetManager>(m_Renderer);
+  
+  // Load character assets
+  assetManager->LoadCharacter("Knight",
+                               "assets/adventurers/Characters/gltf/Knight.glb",
+                               "assets/adventurers/Textures/knight_texture.png");
+  assetManager->LoadCharacter("Ranger",
+                               "assets/adventurers/Characters/gltf/Ranger.glb",
+                               "assets/adventurers/Textures/ranger_texture.png");
+  assetManager->LoadCharacter("Mage",
+                               "assets/adventurers/Characters/gltf/Mage.glb",
+                               "assets/adventurers/Textures/mage_texture.png");
+  assetManager->LoadCharacter("Rogue",
+                               "assets/adventurers/Characters/gltf/Rogue.glb",
+                               "assets/adventurers/Textures/rogue_texture.png");
+  assetManager->LoadCharacter("Skeleton_Warrior",
+                               "assets/skeletons/characters/gltf/Skeleton_Warrior.glb",
+                               "assets/skeletons/texture/skeleton_texture.png");
+  assetManager->LoadCharacter("Skeleton_Mage",
+                               "assets/skeletons/characters/gltf/Skeleton_Mage.glb",
+                               "assets/skeletons/texture/skeleton_texture.png");
+  assetManager->LoadCharacter("Skeleton_Minion",
+                               "assets/skeletons/characters/gltf/Skeleton_Minion.glb",
+                               "assets/skeletons/texture/skeleton_texture.png");
 
   // Load Weapons
   m_Renderer->LoadMesh("Sword",
@@ -106,10 +66,11 @@ void BattleMode::Init(Camera *camera, Entity &playerEntity) {
   m_Renderer->LoadMesh("Staff", "assets/adventurers/Assets/gltf/staff.gltf");
   m_Renderer->LoadMesh("Dagger", "assets/adventurers/Assets/gltf/dagger.gltf");
 
-  // 2. Load Map
-  LoadMap("assets/dungeons/my_dungeon.map");
+  // Load Map
+  MapLoader::LoadFromFile("assets/dungeons/my_dungeon.map", m_Registry,
+                           m_Renderer);
 
-  // 3. Spawn Units
+  // Spawn Units
   SpawnCharacter("Knight", 12.0f, -4.0f, BattleUnitComponent::Player);
   SpawnCharacter("Ranger", 14.0f, -5.0f, BattleUnitComponent::Player);
   SpawnCharacter("Mage", 10.0f, -5.0f, BattleUnitComponent::Player);
@@ -176,33 +137,21 @@ bool BattleMode::IsPositionOccupied(float x, float y, Entity ignoreEntity) {
 }
 
 void BattleMode::LoadMap(const std::string &path) {
-  std::ifstream in(path);
-  if (!in.is_open())
-    return;
-  std::string m, t;
-  float x, y, z, r;
-  while (in >> m >> t >> x >> y >> z >> r) {
-    if (!m_Renderer->GetRenderMesh(m)) {
-      m_Renderer->LoadMesh(m, "assets/dungeons/Assets/obj/" + m + ".obj");
-    }
-    auto e = m_Registry->CreateEntity();
-    m_Registry->AddComponent<Transform3DComponent>(e, {x, y, z, r, 0});
-    m_Registry->AddComponent<MeshComponent>(e, {m, t, 1, 1, 1});
-  }
+  MapLoader::LoadFromFile(path, m_Registry, m_Renderer);
 }
 
 void BattleMode::SpawnCharacter(const std::string &mesh, float x, float y,
                                 BattleUnitComponent::Team team) {
   auto e = m_Registry->CreateEntity();
-  std::string tex = "knight_tex";
+  std::string tex = "Knight_tex";
   if (mesh == "Ranger")
-    tex = "ranger_tex";
+    tex = "Ranger_tex";
   if (mesh == "Mage")
-    tex = "mage_tex";
+    tex = "Mage_tex";
   if (mesh == "Rogue")
-    tex = "rogue_tex";
+    tex = "Rogue_tex";
   if (mesh.find("Skeleton") != std::string::npos)
-    tex = "skeleton_tex";
+    tex = mesh + "_tex";  // Use the actual skeleton name with _tex suffix
 
   // Players at -Y face +Y, Enemies at +Y face -Y. Swapping from previous to fix
   // 180 deg issue.
@@ -750,7 +699,7 @@ void BattleMode::ExecuteAction(Entity actor, ActionType action, Entity target,
       m_Registry->AddComponent<Transform3DComponent>(
           arrow, {tActor->x, tActor->y, 1.0f, tActor->rot, 0});
       m_Registry->AddComponent<MeshComponent>(arrow,
-                                              {"Arrow", "knight_tex", 1, 1, 1});
+                                              {"Arrow", "Knight_tex", 1, 1, 1});
 
       m_ActiveProjectile.entity = arrow;
       m_ActiveProjectile.startX = tActor->x;
