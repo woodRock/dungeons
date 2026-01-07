@@ -22,11 +22,11 @@ void DungeonsGame::OnRender() {
     m_GLRenderer.Render(m_Window, *m_Camera, m_Registry, false);
 
     if (m_State == GameState::Battle && m_BattleMode) {
-        m_BattleMode->RenderWorld(&m_GLRenderer);
+      m_BattleMode->RenderWorld(&m_GLRenderer);
     }
 
     if (m_State == GameState::Creative) {
-      m_Editor.Render3D(&m_GLRenderer);
+      m_CreativeMode.RenderWorld(&m_GLRenderer);
     }
   } else {
     // Menu specific clear if different
@@ -38,10 +38,11 @@ void DungeonsGame::OnRender() {
   if (m_State == GameState::MainMenu) {
     RenderMainMenu();
   } else if (m_State == GameState::Creative) {
-    m_Editor.RenderUI(&m_GLRenderer, m_TextRenderer.get(), m_Width, m_Height);
+    m_CreativeMode.RenderUI(&m_GLRenderer, m_TextRenderer.get(), m_Width, m_Height);
   } else if (m_State == GameState::Paused) {
     RenderPauseMenu();
-  } else if (m_State == GameState::Playing || m_State == GameState::Battle) {
+  } else if (m_State == GameState::Playing || m_State == GameState::Battle ||
+             m_State == GameState::Siege) {
     RenderUI();
   }
 

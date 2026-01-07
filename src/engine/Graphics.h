@@ -13,33 +13,33 @@ struct Vertex {
 };
 
 struct Bone {
-    std::string name;
-    int parentIndex = -1;
-    float localMatrix[16];
-    float inverseBindMatrix[16];
+  std::string name;
+  int parentIndex = -1;
+  float localMatrix[16];
+  float inverseBindMatrix[16];
 };
 
 struct Skeleton {
-    std::vector<Bone> bones;
-    std::vector<float> jointMatrices;
+  std::vector<Bone> bones;
+  std::vector<float> jointMatrices;
 };
 
 struct AnimationKeyframe {
-    float time;
-    float value[4];
+  float time;
+  float value[4];
 };
 
 struct AnimationChannel {
-    std::string boneName;
-    enum Path { Translation, Rotation, Scale };
-    Path path;
-    std::vector<AnimationKeyframe> keyframes;
+  std::string boneName;
+  enum Path { Translation, Rotation, Scale };
+  Path path;
+  std::vector<AnimationKeyframe> keyframes;
 };
 
 struct SkeletalAnimation {
-    std::string name;
-    float duration;
-    std::vector<AnimationChannel> channels;
+  std::string name;
+  float duration;
+  std::vector<AnimationChannel> channels;
 };
 
 struct Mesh {

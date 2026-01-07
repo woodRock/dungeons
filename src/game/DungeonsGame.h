@@ -5,10 +5,10 @@
 #include "../engine/Map.h"
 #include "../engine/Raycaster.h"
 #include "../engine/TextRenderer.h"
-#include "DungeonEditor.h"
-#include "SiegeMode.h"
-#include "ExplorationMode.h"
 #include "BattleMode.h"
+#include "CreativeMode.h"
+#include "ExplorationMode.h"
+#include "SiegeMode.h"
 #include <memory>
 
 enum class GameState { MainMenu, Playing, Creative, Siege, Battle, Paused };
@@ -42,6 +42,7 @@ private:
   void RenderPauseMenu();
 
   void HandleInputGameplay(float dt);
+  void HandleInputCreative(float dt);
   void HandleInputMenu();
   void HandleInputPause();
 
@@ -58,7 +59,7 @@ private:
   PixelsEngine::Map m_Map;
   std::unique_ptr<PixelsEngine::TextRenderer> m_TextRenderer;
 
-  PixelsEngine::DungeonEditor m_Editor;
+  PixelsEngine::CreativeMode m_CreativeMode;
   std::unique_ptr<SiegeMode> m_SiegeMode;
   std::unique_ptr<ExplorationMode> m_ExplorationMode;
   std::unique_ptr<BattleMode> m_BattleMode;
@@ -96,6 +97,11 @@ private:
   float m_TimeScale = 1.0f;
   float m_BobTimer = 0.0f;
   float m_SwayTimer = 0.0f;
+
+  // Camera Tuner
+  float m_TunerDist = 2.22f;
+  float m_TunerShoulder = -0.662f;
+  float m_TunerHeight = 1.724f;
 
   // Screenshake
   float m_ShakeIntensity = 0.0f;

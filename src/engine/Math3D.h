@@ -27,34 +27,35 @@ struct Vec3 {
 };
 
 struct Vec4 {
-    float x, y, z, w;
+  float x, y, z, w;
 };
 
 struct Mat4 {
   float m[16]; // Column-major
 
   Mat4() {
-      std::memset(m, 0, 16 * sizeof(float));
-      m[0] = 1.0f; m[5] = 1.0f; m[10] = 1.0f; m[15] = 1.0f;
+    std::memset(m, 0, 16 * sizeof(float));
+    m[0] = 1.0f;
+    m[5] = 1.0f;
+    m[10] = 1.0f;
+    m[15] = 1.0f;
   }
 
-  static Mat4 Identity() {
-    return Mat4();
-  }
+  static Mat4 Identity() { return Mat4(); }
 
-  static Mat4 FromQuaternion(const Vec4& q) {
-      Mat4 res = Identity();
-      float x = q.x, y = q.y, z = q.z, w = q.w;
-      res.m[0] = 1.0f - 2.0f * (y * y + z * z);
-      res.m[1] = 2.0f * (x * y + z * w);
-      res.m[2] = 2.0f * (x * z - y * w);
-      res.m[4] = 2.0f * (x * y - z * w);
-      res.m[5] = 1.0f - 2.0f * (x * x + z * z);
-      res.m[6] = 2.0f * (y * z + x * w);
-      res.m[8] = 2.0f * (x * z + y * w);
-      res.m[9] = 2.0f * (y * z - x * w);
-      res.m[10] = 1.0f - 2.0f * (x * x + y * y);
-      return res;
+  static Mat4 FromQuaternion(const Vec4 &q) {
+    Mat4 res = Identity();
+    float x = q.x, y = q.y, z = q.z, w = q.w;
+    res.m[0] = 1.0f - 2.0f * (y * y + z * z);
+    res.m[1] = 2.0f * (x * y + z * w);
+    res.m[2] = 2.0f * (x * z - y * w);
+    res.m[4] = 2.0f * (x * y - z * w);
+    res.m[5] = 1.0f - 2.0f * (x * x + z * z);
+    res.m[6] = 2.0f * (y * z + x * w);
+    res.m[8] = 2.0f * (x * z + y * w);
+    res.m[9] = 2.0f * (y * z - x * w);
+    res.m[10] = 1.0f - 2.0f * (x * x + y * y);
+    return res;
   }
 
   static Mat4 Translate(const Vec3 &v) {

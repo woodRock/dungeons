@@ -88,152 +88,98 @@ struct WeaponComponent {
 
 struct MeshComponent {
 
-    std::string meshName;
+  std::string meshName;
 
-    std::string textureName;
+  std::string textureName;
 
-    float scaleX = 1.0f;
+  float scaleX = 1.0f;
 
-    float scaleY = 1.0f;
+  float scaleY = 1.0f;
 
-    float scaleZ = 1.0f;
+  float scaleZ = 1.0f;
 
-    float offsetX = 0.0f;
+  float offsetX = 0.0f;
 
-    float offsetY = 0.0f;
+  float offsetY = 0.0f;
 
-    float offsetZ = 0.0f;
-
+  float offsetZ = 0.0f;
 };
-
-
-
-
 
 struct InteractableComponent {
 
+  enum Type { Door, Chest };
 
+  Type type;
 
-
-
-    enum Type { Door, Chest };
-
-
-
-
-
-    Type type;
-
-
-
-
-
-    bool isOpen = false;
-
-
-
-
-
+  bool isOpen = false;
 };
-
-
-
-
-
-
-
-
-
-
 
 struct CharacterComponent {
 
+  enum Type {
+    Knight,
+    Ranger,
+    Mage,
+    Barbarian,
+    SkeletonMinion,
+    SkeletonWarrior,
+    SkeletonMage
+  };
 
-
-
-
-    enum Type { Knight, Ranger, Mage, Barbarian, SkeletonMinion, SkeletonWarrior, SkeletonMage };
-
-
-
-
-
-    Type type;
-
-
-
-
-
+  Type type;
 };
 
-
-
-
-
-
-
-
-
-
-
 struct ProceduralAnimationComponent {
-    float timeOffset = 0.0f;
-    float bobAmount = 0.05f;
-    float bobSpeed = 2.0f;
-    float swayAmount = 0.03f;
-    float swaySpeed = 1.5f;
-    float baseZ = 0.0f;
+  float timeOffset = 0.0f;
+  float bobAmount = 0.05f;
+  float bobSpeed = 2.0f;
+  float swayAmount = 0.03f;
+  float swaySpeed = 1.5f;
+  float baseZ = 0.0f;
 };
 
 struct SkeletalAnimationComponent {
-    int animationIndex = 0;
-    float currentTime = 0.0f;
-    float speed = 1.0f;
+  int animationIndex = 0;
+  float currentTime = 0.0f;
+  float speed = 1.0f;
 };
 
 struct EnemyComponent {
-    float health = 100.0f;
-    float speed = 2.0f;
-    int target = -1; // Use int to avoid circular or early parse dependency on Entity
+  float health = 100.0f;
+  float speed = 2.0f;
+  int target =
+      -1; // Use int to avoid circular or early parse dependency on Entity
 };
 
 struct BattleUnitComponent {
-    enum Team { Player, Enemy };
-    Team team;
-    int maxHp = 20;
-    int hp = 20;
-    int ac = 12; // Armor Class
-    int initiative = 0;
-    
-    // Actions
-    float movement = 6.0f; // Meters
-    float currentMovement = 6.0f;
-    bool hasAction = true;
-    bool hasBonusAction = true;
-    bool isSneaking = false;
-    
-    // UI State
-    bool isSelected = false;
-    bool isTurn = false;
-    float flashAmount = 0.0f;
-    int preferredAction = 2; // Default to Melee (index from ActionType)
+  enum Team { Player, Enemy };
+  Team team;
+  int maxHp = 20;
+  int hp = 20;
+  int ac = 12; // Armor Class
+  int initiative = 0;
+
+  // Actions
+  float movement = 6.0f; // Meters
+  float currentMovement = 6.0f;
+  bool hasAction = true;
+  bool hasBonusAction = true;
+  bool isSneaking = false;
+
+  // UI State
+  bool isSelected = false;
+  bool isTurn = false;
+  float flashAmount = 0.0f;
+  int preferredAction = 2; // Default to Melee (index from ActionType)
 };
 
 struct AttachmentComponent {
-    std::string meshName;
-    std::string textureName;
-    std::string boneName = "hand.R";
-    float scale = 1.0f;
-    float rotX = 0, rotY = 0, rotZ = 0;
-    float offX = 0, offY = 0, offZ = 0;
+  std::string meshName;
+  std::string textureName;
+  std::string boneName = "hand.R";
+  float scale = 1.0f;
+  float rotX = 0, rotY = 0, rotZ = 0;
+  float offX = 0, offY = 0, offZ = 0;
 };
 
 } // namespace PixelsEngine
-
-
-
-
-
-
-
-

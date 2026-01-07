@@ -1,12 +1,12 @@
 #pragma once
 #include "Graphics.h"
+#include <cstdint>
 #include <fstream>
 #include <iostream>
 #include <map>
 #include <sstream>
 #include <string>
 #include <vector>
-#include <cstdint>
 
 namespace PixelsEngine {
 
@@ -14,7 +14,7 @@ class OBJLoader {
 public:
   static bool Load(const std::string &path, Mesh &outMesh) {
     if (path.find(".glb") != std::string::npos) {
-        return LoadGLB(path, outMesh);
+      return LoadGLB(path, outMesh);
     }
     std::ifstream file(path);
     if (!file.is_open()) {
@@ -127,48 +127,54 @@ public:
   }
 
   static bool LoadGLB(const std::string &path, Mesh &outMesh) {
-      std::ifstream file(path, std::ios::binary);
-      if (!file.is_open()) return false;
+    std::ifstream file(path, std::ios::binary);
+    if (!file.is_open())
+      return false;
 
-      // GLB Header
-      uint32_t magic, version, length;
-      file.read((char*)&magic, 4);
-      file.read((char*)&version, 4);
-      file.read((char*)&length, 4);
+    // GLB Header
+    uint32_t magic, version, length;
+    file.read((char *)&magic, 4);
+    file.read((char *)&version, 4);
+    file.read((char *)&length, 4);
 
-      if (magic != 0x46546C67) return false; // "glTF"
+    if (magic != 0x46546C67)
+      return false; // "glTF"
 
-      // For simplicity, we skip JSON and find the BIN chunk
-      // This is a VERY hacky/minimal loader for specific assets
-      while (file.tellg() < length) {
-          uint32_t chunkLength, chunkType;
-          file.read((char*)&chunkLength, 4);
-          file.read((char*)&chunkType, 4);
+    // For simplicity, we skip JSON and find the BIN chunk
+    // This is a VERY hacky/minimal loader for specific assets
+    while (file.tellg() < length) {
+      uint32_t chunkLength, chunkType;
+      file.read((char *)&chunkLength, 4);
+      file.read((char *)&chunkType, 4);
 
-          if (chunkType == 0x004E4F53) { // JSON
-              file.seekg(chunkLength, std::ios::cur);
-          } else if (chunkType == 0x004E4942) { // BIN
-              // We assume specific layout for these KayKit assets or just fail gracefully
-              // Actually, without a JSON parser, loading arbitrary GLB is hard.
-              // I'll try to find a simpler way or fallback to spheres for characters if needed.
-              // But let's try to extract SOME data.
-              
-              // Instead of full GLB parsing, let's look for known OBJ versions or use a simplified mesh.
-              break;
-          } else {
-              file.seekg(chunkLength, std::ios::cur);
-          }
+      if (chunkType == 0x004E4F53) { // JSON
+        file.seekg(chunkLength, std::ios::cur);
+      } else if (chunkType == 0x004E4942) { // BIN
+        // We assume specific layout for these KayKit assets or just fail
+        // gracefully Actually, without a JSON parser, loading arbitrary GLB is
+        // hard. I'll try to find a simpler way or fallback to spheres for
+        // characters if needed. But let's try to extract SOME data.
+
+        // Instead of full GLB parsing, let's look for known OBJ versions or use
+        // a simplified mesh.
+        break;
+      } else {
+        file.seekg(chunkLength, std::ios::cur);
       }
-      
-      // Fallback: If GLB loading fails, just create a dummy "character" cube/mesh
-      std::cout << "GLB loading not fully implemented, using dummy mesh for: " << path << std::endl;
-      outMesh.vertices = {
-          {-0.5, 0, -0.5, 0, 0, 0, 1, 0}, {0.5, 0, -0.5, 1, 0, 0, 1, 0}, {0.5, 2, -0.5, 1, 1, 0, 1, 0}, {-0.5, 2, -0.5, 0, 1, 0, 1, 0},
-          {-0.5, 0, 0.5, 0, 0, 0, 1, 0}, {0.5, 0, 0.5, 1, 0, 0, 1, 0}, {0.5, 2, 0.5, 1, 1, 0, 1, 0}, {-0.5, 2, 0.5, 0, 1, 0, 1, 0}
-      };
-      outMesh.indices = { 0, 1, 2, 2, 3, 0,  4, 5, 6, 6, 7, 4,  0, 1, 5, 5, 4, 0,  2, 3, 7, 7, 6, 2,  1, 2, 6, 6, 5, 1,  0, 3, 7, 7, 4, 0 };
-      
-      return true;
+    }
+
+    // Fallback: If GLB loading fails, just create a dummy "character" cube/mesh
+    std::cout << "GLB loading not fully implemented, using dummy mesh for: "
+              << path << std::endl;
+    outMesh.vertices = {
+        {-0.5, 0, -0.5, 0, 0, 0, 1, 0}, {0.5, 0, -0.5, 1, 0, 0, 1, 0},
+        {0.5, 2, -0.5, 1, 1, 0, 1, 0},  {-0.5, 2, -0.5, 0, 1, 0, 1, 0},
+        {-0.5, 0, 0.5, 0, 0, 0, 1, 0},  {0.5, 0, 0.5, 1, 0, 0, 1, 0},
+        {0.5, 2, 0.5, 1, 1, 0, 1, 0},   {-0.5, 2, 0.5, 0, 1, 0, 1, 0}};
+    outMesh.indices = {0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4, 0, 1, 5, 5, 4, 0,
+                       2, 3, 7, 7, 6, 2, 1, 2, 6, 6, 5, 1, 0, 3, 7, 7, 4, 0};
+
+    return true;
   }
 };
 

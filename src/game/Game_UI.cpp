@@ -5,7 +5,7 @@
 using namespace PixelsEngine;
 
 void DungeonsGame::DrawButton(int x, int y, int w, int h,
-                               const std::string &text, bool selected) {
+                              const std::string &text, bool selected) {
   SDL_Color color =
       selected ? SDL_Color{200, 50, 50, 200} : SDL_Color{50, 50, 50, 200};
 
@@ -97,10 +97,15 @@ void DungeonsGame::RenderPauseMenu() {
 void DungeonsGame::RenderUI() {
   int w = m_Width;
   int h = m_Height;
-  
+
   if (m_State == GameState::Battle && m_BattleMode) {
-      m_BattleMode->RenderUI(&m_GLRenderer, m_TextRenderer.get(), w, h);
-      return;
+    m_BattleMode->RenderUI(&m_GLRenderer, m_TextRenderer.get(), w, h);
+    return;
+  }
+
+  if (m_State == GameState::Siege && m_SiegeMode) {
+    m_SiegeMode->RenderUI(&m_GLRenderer, m_TextRenderer.get(), w, h);
+    return;
   }
 
   auto *t = m_Registry.GetComponent<Transform3DComponent>(m_PlayerEntity);

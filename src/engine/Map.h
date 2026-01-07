@@ -10,7 +10,7 @@ struct Map {
   static const int HEIGHT = 24;
 
   // 0 = empty, >0 = wall texture ID
-  int tiles[WIDTH * HEIGHT];
+  int tiles[WIDTH * HEIGHT] = {};  // Initialize to 0 (empty)
 
   int Get(int x, int y) const {
     if (x < 0 || x >= WIDTH || y < 0 || y >= HEIGHT)

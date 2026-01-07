@@ -7,7 +7,8 @@ using namespace PixelsEngine;
 
 void DungeonsGame::UpdatePhysics(float dt) {
 
-  if (m_State != GameState::Playing && m_State != GameState::Creative && m_State != GameState::Siege)
+  if (m_State != GameState::Playing && m_State != GameState::Creative &&
+      m_State != GameState::Siege)
     return;
 
   auto *phys = m_Registry.GetComponent<PhysicsComponent>(m_PlayerEntity);
@@ -24,13 +25,15 @@ void DungeonsGame::UpdatePhysics(float dt) {
     }
 
     // Sliding height and friction
-
     float eyeHeight = phys->isSliding ? 0.75f : 1.5f;
+    if (m_State == GameState::Siege)
+      eyeHeight = 0.0f; // Character feet on ground
 
     float currentFriction =
         phys->isGrounded ? phys->friction : phys->friction * 0.2f;
-    
-    if (phys->isFlying) currentFriction = 10.0f;
+
+    if (phys->isFlying)
+      currentFriction = 10.0f;
 
     if (phys->isSliding)
       currentFriction *= 0.1f; // Much less friction while sliding
@@ -115,91 +118,68 @@ void DungeonsGame::UpdatePhysics(float dt) {
         phys->isWallRunning = false;
       }
 
-            } else {
+    } else {
 
-    
-
-                phys->isWallRunning = false;
-
-    
-
-            }
-
-    
-
-        if (!phys->isGrounded && !phys->isWallRunning && !phys->isFlying) {
-
-          phys->velZ -= phys->gravity * dt;
-
-        }
-
-    
-
-            t->z += phys->velZ * dt;
-
-    
-
-        
-
-    
-
-            // Floor collision & Jump Pads & Lava
-
-    
-
-            if (t->z < eyeHeight) {
-          bool wasInAir = !phys->isGrounded && phys->velZ < -1.0f;
-
-          t->z = eyeHeight;
-
-          phys->velZ = 0;
-
-          phys->isGrounded = true;
-          
-          if (wasInAir && m_SfxJump) {
-              Mix_PlayChannel(-1, m_SfxJump, 0);
-          }
-
-        } else if (t->z > eyeHeight + 0.01f) {
-
-          phys->isGrounded = false;
-
-        }
-
-    
-
-        // Kill Plane Check
-
-        if (t->z < -50.0f) {
-
-            // Reset
-
-            t->z = 5.0f;
-
-            phys->velZ = 0;
-
-        }
-
-    
-
-    // Horizontal velocity (Axis-Separate for sliding)
-
-    // X Axis
-    t->x += phys->velX * dt;
-    /*
-    int tileX = m_Map.Get((int)t->x, (int)t->y);
-    if (tileX == 1 || tileX == 2) {
-        t->x -= phys->velX * dt;
-        if (tileX == 2 && !phys->isGrounded) {
-             phys->velX = 0; // Slide along wall
-        } else {
-             phys->velX *= -0.5f;
-        }
+      phys->isWallRunning = false;
     }
-    */
 
-    // Y Axis
-    t->y += phys->velY * dt;
+    if (!phys->isGrounded && !phys->isWallRunning && !phys->isFlying) {
+
+      phys->velZ -= phys->gravity * dt;
+    }
+
+    t->z += phys->velZ * dt;
+
+    // Floor collision & Jump Pads & Lava
+
+    if (t->z < eyeHeight) {
+      bool wasInAir = !phys->isGrounded && phys->velZ < -1.0f;
+
+      t->z = eyeHeight;
+
+      phys->velZ = 0;
+
+      phys->isGrounded = true;
+
+      if (wasInAir && m_SfxJump) {
+        Mix_PlayChannel(-1, m_SfxJump, 0);
+      }
+
+    } else if (t->z > eyeHeight + 0.01f) {
+
+      phys->isGrounded = false;
+    }
+
+    // Kill Plane Check
+
+    if (t->z < -50.0f) {
+
+      // Reset
+
+      t->z = 5.0f;
+
+      phys->velZ = 0;
+    }
+
+    // Horizontal velocity
+    float nextX = t->x + phys->velX * dt;
+    float nextY = t->y + phys->velY * dt;
+
+    // Wall/Door Collision (simplified grid check)
+    int collisionX = m_Map.Get((int)nextX, (int)t->y);
+    int collisionY = m_Map.Get((int)t->x, (int)nextY);
+    
+    if (collisionX == 0) {
+      t->x = nextX;
+    } else {
+      phys->velX = 0;
+    }
+
+    if (collisionY == 0) {
+      t->y = nextY;
+    } else {
+      phys->velY = 0;
+    }
 
     float currentDrag = phys->isGrounded
                             ? phys->friction
@@ -250,50 +230,55 @@ void DungeonsGame::UpdateProjectiles(float dt) {
     bool hitFloor = t->z < 0;
 
     // Enemy Collision (Siege Mode)
-    auto& enemies = m_Registry.View<EnemyComponent>();
+    auto &enemies = m_Registry.View<EnemyComponent>();
     bool hitEnemy = false;
-    for (auto& ePair : enemies) {
-        Entity enemyEnt = ePair.first;
-        auto& enemyComp = ePair.second;
-        auto* et = m_Registry.GetComponent<Transform3DComponent>(enemyEnt);
-        
-        if (et) {
-            float dx = t->x - et->x;
-            float dy = t->y - et->y;
-            float dz = t->z - (et->z + 1.0f); // Skeletons are tall
-            float dist = sqrt(dx*dx + dy*dy + dz*dz);
-            
-            if (dist < 1.0f) {
-                enemyComp.health -= p->damage;
-                hitEnemy = true;
-                m_HitmarkerTimer = 0.15f;
-                if (m_SfxHit) Mix_PlayChannel(-1, m_SfxHit, 0);
-                
-                if (enemyComp.health <= 0) {
-                    // Death particles
-                    for (int i = 0; i < 10; i++) {
-                        auto frag = m_Registry.CreateEntity();
-                        m_Registry.AddComponent<Transform3DComponent>(frag, {et->x, et->y, et->z + 1.0f, 0, 0});
-                        m_Registry.AddComponent<ParticleComponent>(frag, {
-                            ((rand()%100)/50.0f - 1.0f)*3.0f,
-                            ((rand()%100)/50.0f - 1.0f)*3.0f,
-                            ((rand()%100)/50.0f)*3.0f,
-                            1.0f, 1.0f, {255, 0, 0, 255}, 2.0f
-                        });
-                    }
-                    m_Registry.DestroyEntity(enemyEnt);
-                }
-                break;
+    for (auto &ePair : enemies) {
+      Entity enemyEnt = ePair.first;
+      auto &enemyComp = ePair.second;
+      auto *et = m_Registry.GetComponent<Transform3DComponent>(enemyEnt);
+
+      if (et) {
+        float dx = t->x - et->x;
+        float dy = t->y - et->y;
+        float dz = t->z - (et->z + 1.0f); // Skeletons are tall
+        float dist = sqrt(dx * dx + dy * dy + dz * dz);
+
+        if (dist < 1.0f) {
+          enemyComp.health -= p->damage;
+          hitEnemy = true;
+          m_HitmarkerTimer = 0.15f;
+          if (m_SfxHit)
+            Mix_PlayChannel(-1, m_SfxHit, 0);
+
+          if (enemyComp.health <= 0) {
+            // Death particles
+            for (int i = 0; i < 10; i++) {
+              auto frag = m_Registry.CreateEntity();
+              m_Registry.AddComponent<Transform3DComponent>(
+                  frag, {et->x, et->y, et->z + 1.0f, 0, 0});
+              m_Registry.AddComponent<ParticleComponent>(
+                  frag, {((rand() % 100) / 50.0f - 1.0f) * 3.0f,
+                         ((rand() % 100) / 50.0f - 1.0f) * 3.0f,
+                         ((rand() % 100) / 50.0f) * 3.0f,
+                         1.0f,
+                         1.0f,
+                         {255, 0, 0, 255},
+                         2.0f});
             }
+            m_Registry.DestroyEntity(enemyEnt);
+          }
+          break;
         }
+      }
     }
 
     if (hitEnemy) {
-        toDestroy.push_back(entity);
-        continue;
+      toDestroy.push_back(entity);
+      continue;
     }
 
-    // Target Collision (Check BEFORE wall collision so we can hit targets on walls/pillars)
+    // Target Collision (Check BEFORE wall collision so we can hit targets on
+    // walls/pillars)
     auto &targets = m_Registry.View<TargetComponent>();
     bool hitTarget = false;
     for (auto &tPair : targets) {

@@ -48,27 +48,33 @@ public:
 
   void SetMat4(const std::string &name, const float *mat) const {
     GLint loc = glGetUniformLocation(ID, name.c_str());
-    if (loc != -1) glUniformMatrix4fv(loc, 1, GL_FALSE, mat);
+    if (loc != -1)
+      glUniformMatrix4fv(loc, 1, GL_FALSE, mat);
   }
 
   void SetInt(const std::string &name, int value) const {
     GLint loc = glGetUniformLocation(ID, name.c_str());
-    if (loc != -1) glUniform1i(loc, value);
+    if (loc != -1)
+      glUniform1i(loc, value);
   }
 
   void SetVec3(const std::string &name, float x, float y, float z) const {
     GLint loc = glGetUniformLocation(ID, name.c_str());
-    if (loc != -1) glUniform3f(loc, x, y, z);
+    if (loc != -1)
+      glUniform3f(loc, x, y, z);
   }
 
   void SetFloat(const std::string &name, float value) const {
     GLint loc = glGetUniformLocation(ID, name.c_str());
-    if (loc != -1) glUniform1f(loc, value);
+    if (loc != -1)
+      glUniform1f(loc, value);
   }
 
-  void SetVec4(const std::string &name, float x, float y, float z, float w) const {
+  void SetVec4(const std::string &name, float x, float y, float z,
+               float w) const {
     GLint loc = glGetUniformLocation(ID, name.c_str());
-    if (loc != -1) glUniform4f(loc, x, y, z, w);
+    if (loc != -1)
+      glUniform4f(loc, x, y, z, w);
   }
 
 private:
@@ -79,13 +85,15 @@ private:
       glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
       if (!success) {
         glGetShaderInfoLog(shader, 1024, NULL, infoLog);
-        std::cout << "ERROR::SHADER_COMPILATION_ERROR: " << type << "\n" << infoLog << std::endl;
+        std::cout << "ERROR::SHADER_COMPILATION_ERROR: " << type << "\n"
+                  << infoLog << std::endl;
       }
     } else {
       glGetProgramiv(shader, GL_LINK_STATUS, &success);
       if (!success) {
         glGetProgramInfoLog(shader, 1024, NULL, infoLog);
-        std::cout << "ERROR::PROGRAM_LINKING_ERROR: " << type << "\n" << infoLog << std::endl;
+        std::cout << "ERROR::PROGRAM_LINKING_ERROR: " << type << "\n"
+                  << infoLog << std::endl;
       }
     }
   }

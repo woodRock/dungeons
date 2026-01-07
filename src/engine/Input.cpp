@@ -1,5 +1,6 @@
 #include "Input.h"
 #include <cstring>
+#include <iostream>
 
 namespace PixelsEngine {
 
@@ -42,9 +43,27 @@ void Input::BeginFrame() {
 
 void Input::ProcessEvent(const SDL_Event &e) {
   if (e.type == SDL_KEYDOWN) {
-    m_KeyboardState[e.key.keysym.scancode] = 1;
+    if (e.key.keysym.scancode < SDL_NUM_SCANCODES) {
+      m_KeyboardState[e.key.keysym.scancode] = 1;
+      // Debug output
+      if (e.key.keysym.scancode == SDL_SCANCODE_W ||
+          e.key.keysym.scancode == SDL_SCANCODE_A ||
+          e.key.keysym.scancode == SDL_SCANCODE_S ||
+          e.key.keysym.scancode == SDL_SCANCODE_D) {
+        std::cout << "Key DOWN: " << SDL_GetScancodeName(e.key.keysym.scancode) << std::endl;
+      }
+    }
   } else if (e.type == SDL_KEYUP) {
-    m_KeyboardState[e.key.keysym.scancode] = 0;
+    if (e.key.keysym.scancode < SDL_NUM_SCANCODES) {
+      m_KeyboardState[e.key.keysym.scancode] = 0;
+      // Debug output
+      if (e.key.keysym.scancode == SDL_SCANCODE_W ||
+          e.key.keysym.scancode == SDL_SCANCODE_A ||
+          e.key.keysym.scancode == SDL_SCANCODE_S ||
+          e.key.keysym.scancode == SDL_SCANCODE_D) {
+        std::cout << "Key UP: " << SDL_GetScancodeName(e.key.keysym.scancode) << std::endl;
+      }
+    }
   } else if (e.type == SDL_MOUSEBUTTONDOWN) {
     m_MouseState |= SDL_BUTTON(e.button.button);
     m_MouseX = e.button.x;

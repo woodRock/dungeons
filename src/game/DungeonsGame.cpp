@@ -8,153 +8,78 @@ void DungeonsGame::OnUpdate(float deltaTime) {
   if (m_State == GameState::MainMenu) {
     m_MenuCamAngle += 0.2f * deltaTime;
     HandleInputMenu();
+    return;
   }
-  else if (m_State == GameState::Playing) {
-    if (!m_GameFinished)
-      m_RunTimer += deltaTime;
 
-    auto *phys = m_Registry.GetComponent<PhysicsComponent>(m_PlayerEntity);
-    auto *weapon = m_Registry.GetComponent<WeaponComponent>(m_PlayerEntity);
-
-    m_TimeScale = 1.0f;
-    if (phys && !phys->isGrounded && weapon && weapon->isDrawing) {
-      m_TimeScale = 0.3f;
-    }
-
-    float dt = deltaTime * m_TimeScale;
-    HandleInputGameplay(dt);
-    UpdatePhysics(dt);
-    UpdateProjectiles(dt);
-    UpdateAnimations(dt);
-
-    if (m_HitmarkerTimer > 0)
-      m_HitmarkerTimer -= deltaTime;
-
-    float targetRoll = 0.0f;
-    if (phys) {
-      if (Input::IsKeyDown(SDL_SCANCODE_A)) targetRoll = -2.0f;
-      if (Input::IsKeyDown(SDL_SCANCODE_D)) targetRoll = 2.0f;
-    }
-    m_CameraRoll = m_CameraRoll * 0.9f + targetRoll * 0.1f;
-
-    if (!m_GameFinished && m_TargetsDestroyed >= m_TotalTargets && m_TotalTargets > 0) {
-      m_GameFinished = true;
-    }
-
-    if (m_ShakeTimer > 0) {
-      m_ShakeTimer -= deltaTime;
-      if (m_ShakeTimer < 0) m_ShakeTimer = 0;
-    } else {
-      m_ShakeIntensity = 0;
-    }
-
-    // Particle System
-    auto &particles = m_Registry.View<ParticleComponent>();
-    std::vector<Entity> deadParticles;
-    for (auto &pair : particles) {
-      Entity e = pair.first;
-      auto &p = pair.second;
-      auto *t = m_Registry.GetComponent<Transform3DComponent>(e);
-      if (t) {
-        t->x += p.vx * dt;
-        t->y += p.vy * dt;
-        t->z += p.vz * dt;
-        p.vz -= 9.8f * dt;
-        p.life -= dt;
-        if (p.life <= 0) deadParticles.push_back(e);
-      }
-    }
-    for (auto e : deadParticles) m_Registry.DestroyEntity(e);
-
-    // Camera Sync
-    auto *t = m_Registry.GetComponent<Transform3DComponent>(m_PlayerEntity);
-    if (t) {
-      m_Camera->x = t->x;
-      m_Camera->y = t->y;
-      m_Camera->z = t->z;
-      m_Camera->yaw = t->rot;
-      m_Camera->pitch = t->pitch;
-    }
+  if (m_State == GameState::Paused) {
+    HandleInputPause();
+    return;
   }
-  else if (m_State == GameState::Creative) {
-    float dt = deltaTime;
-    bool inventoryOpen = m_Editor.IsInventoryOpen();
 
-    if (!inventoryOpen) {
-      HandleInputGameplay(dt);
-      UpdatePhysics(dt);
-      if (Input::IsKeyPressed(SDL_SCANCODE_ESCAPE)) {
-          m_State = GameState::Paused;
-          SDL_SetRelativeMouseMode(SDL_FALSE);
-          m_MenuSelection = 0;
-      }
-    }
-    
-    UpdateAnimations(dt);
-    ActionResult res = m_Editor.Update(dt, *m_Camera);
-    if (res != ActionResult::None) {
-        if (res == ActionResult::Placed || res == ActionResult::Broken) {
-            if (m_SfxHit) Mix_PlayChannel(-1, m_SfxHit, 0);
-        } else if (res == ActionResult::InteractedDoor) {
-            if (m_SfxDoor) Mix_PlayChannel(-1, m_SfxDoor, 0);
-        } else if (res == ActionResult::InteractedChest) {
-            if (m_SfxChestOpen) Mix_PlayChannel(-1, m_SfxChestOpen, 0);
-        }
-    }
-
-    auto *t = m_Registry.GetComponent<Transform3DComponent>(m_PlayerEntity);
-    if (t) {
-      m_Camera->x = t->x; m_Camera->y = t->y; m_Camera->z = t->z;
-      m_Camera->yaw = t->rot; m_Camera->pitch = t->pitch;
-    }
-  }
-  else if (m_State == GameState::Siege) {
-    float dt = deltaTime;
-    HandleInputGameplay(dt);
-    UpdatePhysics(dt);
-    UpdateSiege(dt);
-    UpdateAnimations(dt);
-
-    auto *t = m_Registry.GetComponent<Transform3DComponent>(m_PlayerEntity);
-    if (t) {
-      m_Camera->x = t->x; m_Camera->y = t->y; m_Camera->z = t->z;
-      m_Camera->yaw = t->rot; m_Camera->pitch = t->pitch;
-    }
-
+  // From here on, delegate to mode-specific update functions.
+  switch (m_State) {
+  case GameState::Creative: {
+    // Handle Creative camera movement with WASD and mouse look
+    HandleInputCreative(deltaTime);
+    // Let the creative mode/editor own its loop for placement/UI
+    m_CreativeMode.Update(deltaTime, m_PlayerEntity);
     if (Input::IsKeyPressed(SDL_SCANCODE_ESCAPE)) {
       m_State = GameState::Paused;
       SDL_SetRelativeMouseMode(SDL_FALSE);
       m_MenuSelection = 0;
     }
+    break;
   }
-  else if (m_State == GameState::Battle) {
-      UpdateBattle(deltaTime);
-      if (Input::IsKeyPressed(SDL_SCANCODE_ESCAPE)) {
-          m_State = GameState::Paused;
-          m_MenuSelection = 0;
-      }
+  case GameState::Siege: {
+    if (m_SiegeMode)
+      m_SiegeMode->Update(deltaTime, m_PlayerEntity, m_TunerDist,
+                          m_TunerShoulder, m_TunerHeight);
+    UpdatePhysics(deltaTime);
+    UpdateProjectiles(deltaTime);
+    UpdateAnimations(deltaTime);
+    if (Input::IsKeyPressed(SDL_SCANCODE_ESCAPE)) {
+      m_State = GameState::Paused;
+      SDL_SetRelativeMouseMode(SDL_FALSE);
+      m_MenuSelection = 0;
+    }
+    break;
   }
-  else if (m_State == GameState::Paused) {
-    HandleInputPause();
+  case GameState::Battle: {
+    UpdateBattle(deltaTime);
+    if (Input::IsKeyPressed(SDL_SCANCODE_ESCAPE)) {
+      m_State = GameState::Paused;
+      m_MenuSelection = 0;
+    }
+    break;
+  }
+  case GameState::Playing: {
+    // Core playing loop is now expected to live inside a mode; no-op here.
+    break;
+  }
+  default:
+    break;
   }
 }
 
 void DungeonsGame::UpdateBattle(float dt) {
-    if (m_BattleMode) {
-        m_BattleMode->Update(dt, m_PlayerEntity);
-    }
+  if (m_BattleMode) {
+    m_BattleMode->Update(dt, m_PlayerEntity);
+  }
 }
 
 void DungeonsGame::UpdateSiege(float dt) {
-    if (m_SiegeMode) {
-        m_SiegeMode->Update(dt, m_PlayerEntity);
-    }
+  if (m_SiegeMode) {
+    m_SiegeMode->Update(dt, m_PlayerEntity, m_TunerDist, m_TunerShoulder,
+                        m_TunerHeight);
+  }
 }
 
 void DungeonsGame::PlaySpatialSfx(Mix_Chunk *chunk, float x, float y, float z) {
-  if (!chunk || !m_Camera) return;
+  if (!chunk || !m_Camera)
+    return;
   int channel = Mix_PlayChannel(-1, chunk, 0);
-  if (channel == -1) return;
+  if (channel == -1)
+    return;
 
   float dx = x - m_Camera->x;
   float dy = y - m_Camera->y;
@@ -194,77 +119,32 @@ void DungeonsGame::UpdateAnimations(float dt) {
       // Subtle sway (Pitch)
 
       t->pitch = sin(anim.timeOffset * anim.swaySpeed) * anim.swayAmount;
-
     }
-
   }
 
+  // 2. Skeletal Animations
 
+  auto &skeletalView = m_Registry.View<SkeletalAnimationComponent>();
 
-      // 2. Skeletal Animations
+  for (auto &pair : skeletalView) {
 
+    Entity e = pair.first;
 
+    auto &anim = pair.second;
 
-      auto &skeletalView = m_Registry.View<SkeletalAnimationComponent>();
+    auto *mesh = m_Registry.GetComponent<MeshComponent>(e);
 
+    if (mesh) {
 
+      RenderMesh *rm = m_GLRenderer.GetRenderMesh(mesh->meshName);
 
-      for (auto &pair : skeletalView) {
+      if (rm && rm->isSkinned) {
 
+        anim.currentTime += dt * anim.speed;
 
-
-          Entity e = pair.first;
-
-
-
-          auto &anim = pair.second;
-
-
-
-          auto *mesh = m_Registry.GetComponent<MeshComponent>(e);
-
-
-
-          if (mesh) {
-
-
-
-              RenderMesh* rm = m_GLRenderer.GetRenderMesh(mesh->meshName);
-
-
-
-                        if (rm && rm->isSkinned) {
-
-
-
-                            anim.currentTime += dt * anim.speed;
-
-
-
-                            m_GLRenderer.UpdateSkinnedMesh(*rm, anim.animationIndex, anim.currentTime);
-
-
-
-                        }
-
-
-
-              
-
-
-
-          }
-
-
-
+        m_GLRenderer.UpdateSkinnedMesh(*rm, anim.animationIndex,
+                                       anim.currentTime);
       }
-
-
-
-    
-
-
-
-  
-
+    }
+  }
 }
