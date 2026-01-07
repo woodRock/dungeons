@@ -12,7 +12,7 @@ using namespace PixelsEngine;
 
 BattleMode::BattleMode(Registry* registry, GLRenderer* renderer)
     : m_Registry(registry), m_Renderer(renderer) {
-    m_SelectedAction = Move;
+    m_SelectedAction = Melee;
 }
 
 void BattleMode::Init(Camera* camera, Entity& playerEntity) {
@@ -265,7 +265,7 @@ void BattleMode::NextTurn() {
         std::cout << "Turn: Enemy Unit " << current << std::endl;
     }
     m_Cursor.active = false;
-    m_SelectedAction = Move;
+    m_SelectedAction = Melee;
 }
 
 void BattleMode::Update(float dt, Entity playerEntity) {
@@ -504,16 +504,19 @@ void BattleMode::HandlePlayerInput() {
                 float dist = sqrt(pow(t->x - m_Registry->GetComponent<Transform3DComponent>(m_Cursor.hoveredEntity)->x, 2) + 
                                   pow(t->y - m_Registry->GetComponent<Transform3DComponent>(m_Cursor.hoveredEntity)->y, 2));
                 
-                // Default to ranged if far, melee if close
-                ActionType quickAction = (dist > 3.0f) ? Ranged : Melee;
+                // Default to melee unless we are explicitly in ranged mode
+                ActionType quickAction = (m_SelectedAction == Ranged) ? Ranged : Melee;
                 float range = (quickAction == Melee) ? 2.0f : 15.0f;
-                if (dist <= range) ExecuteAction(current, quickAction, m_Cursor.hoveredEntity, 0, 0);
+                if (dist <= range) {
+                    ExecuteAction(current, quickAction, m_Cursor.hoveredEntity, 0, 0);
+                    m_SelectedAction = Melee;
+                }
                 return;
             }
         }
 
-        // ONLY allow movement if Move or Jump is selected
-        if (m_SelectedAction == Move || m_SelectedAction == Jump) {
+        // Allow movement if Move, Jump, or Melee is selected
+        if (m_SelectedAction == Move || m_SelectedAction == Jump || m_SelectedAction == Melee) {
             if (m_Cursor.hoveredEntity == -1 && !IsPositionOccupied(m_Cursor.x, m_Cursor.y, current)) {
                 float dist = sqrt(pow(m_Cursor.x - t->x, 2) + pow(m_Cursor.y - t->y, 2));
                 float maxRange = (m_SelectedAction == Jump) ? 5.0f : unit->currentMovement;
@@ -527,7 +530,7 @@ void BattleMode::HandlePlayerInput() {
                     m_AnimState.duration = dist / 5.0f;
                     m_AnimState.timer = 0.0f;
                     m_State = Moving;
-                    t->rot = atan2(m_Cursor.y - t->y, m_Cursor.x - t->x);
+                    t->rot = atan2(t->x - m_Cursor.x, t->y - m_Cursor.y); 
                     
                     // Set Run Animation
                     auto* animComp = m_Registry->GetComponent<SkeletalAnimationComponent>(current);
@@ -556,11 +559,11 @@ void BattleMode::HandlePlayerInput() {
                                   pow(t->y - m_Registry->GetComponent<Transform3DComponent>(m_Cursor.hoveredEntity)->y, 2));
                 
                 if (m_SelectedAction == Melee) {
-                    if (dist < 2.0f) { ExecuteAction(current, Melee, m_Cursor.hoveredEntity, 0, 0); m_SelectedAction = Move; }
+                    if (dist < 2.0f) { ExecuteAction(current, Melee, m_Cursor.hoveredEntity, 0, 0); m_SelectedAction = Melee; }
                 } else if (m_SelectedAction == Ranged) {
-                    if (dist < 15.0f) { ExecuteAction(current, Ranged, m_Cursor.hoveredEntity, 0, 0); m_SelectedAction = Move; }
+                    if (dist < 15.0f) { ExecuteAction(current, Ranged, m_Cursor.hoveredEntity, 0, 0); m_SelectedAction = Melee; }
                 } else if (m_SelectedAction == Shove) {
-                    if (dist < 2.0f) { ExecuteAction(current, Shove, m_Cursor.hoveredEntity, 0, 0); m_SelectedAction = Move; }
+                    if (dist < 2.0f) { ExecuteAction(current, Shove, m_Cursor.hoveredEntity, 0, 0); m_SelectedAction = Melee; }
                 }
             }
         }
