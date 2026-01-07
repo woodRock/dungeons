@@ -276,7 +276,7 @@ void GLRenderer::Render(SDL_Window *win, const Camera &cam, Registry &reg, bool 
         if (m_Meshes.count(mc.meshName)) {
             RenderMesh &rm = m_Meshes[mc.meshName];
             Mat4 model = Mat4::Translate({t?t->x:0, t?t->z:0, t?-t->y:0});
-            if (t) model = model * Mat4::RotateY(1.57f - t->rot);
+            if (t) model = model * Mat4::RotateY(-t->rot);
             model = model * Mat4::Scale({mc.scaleX, mc.scaleZ, mc.scaleY});
             m_Shader->SetMat4("model", model.m);
             

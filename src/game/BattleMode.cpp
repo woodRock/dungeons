@@ -79,7 +79,8 @@ void BattleMode::Init(Camera* camera, Entity& playerEntity) {
 
     // Load Weapons
     m_Renderer->LoadMesh("Sword", "assets/adventurers/Assets/gltf/sword_1handed.gltf");
-    m_Renderer->LoadMesh("Arrow_Bow", "assets/adventurers/Assets/gltf/arrow_bow_bundle.gltf");
+    m_Renderer->LoadMesh("Crossbow", "assets/adventurers/Assets/gltf/crossbow_1handed.gltf");
+    m_Renderer->LoadMesh("Arrow", "assets/adventurers/Assets/gltf/arrow_bow.gltf");
     m_Renderer->LoadMesh("Staff", "assets/adventurers/Assets/gltf/staff.gltf");
     m_Renderer->LoadMesh("Dagger", "assets/adventurers/Assets/gltf/dagger.gltf");
 
@@ -148,8 +149,8 @@ void BattleMode::SpawnCharacter(const std::string& mesh, float x, float y, Battl
     if (mesh == "Rogue") tex = "rogue_tex";
     if (mesh.find("Skeleton") != std::string::npos) tex = "skeleton_tex";
     
-    // Players at -Y face +Y (1.57), Enemies at +Y face -Y (-1.57)
-    float initialRot = (team == BattleUnitComponent::Player) ? 1.57f : -1.57f;
+    // Players at -Y face +Y (1.57), rotate 90 CW to 0.0. Enemies at +Y face -Y (-1.57), rotate 90 CW to 3.14.
+    float initialRot = (team == BattleUnitComponent::Player) ? 0.0f : 3.14f;
     m_Registry->AddComponent<Transform3DComponent>(e, {x, y, 0.0f, initialRot, 0.0f});
     m_Registry->AddComponent<MeshComponent>(e, {mesh, tex, 1.0f, 1.0f, 1.0f});
     
@@ -178,19 +179,25 @@ void BattleMode::SpawnCharacter(const std::string& mesh, float x, float y, Battl
     attach.textureName = tex;
     attach.scale = 1.0f;
     attach.boneName = "hand.r";
+    attach.rotX = -7.63f;
+    attach.rotY = 18.148f;
+    attach.rotZ = 1.702f;
     
     if (mesh == "Knight" || mesh == "Skeleton_Warrior") {
         attach.meshName = "Sword";
-        attach.rotY = 3.14f; // Rotate 180 degrees
+        attach.rotX = -7.63f; attach.rotY = 18.148f; attach.rotZ = 1.702f;
         m_Registry->AddComponent<AttachmentComponent>(e, attach);
     } else if (mesh == "Ranger") {
-        attach.meshName = "Arrow_Bow";
+        attach.meshName = "Crossbow";
+        attach.rotX = -16.896f; attach.rotY = 30.052f; attach.rotZ = 11.404f;
         m_Registry->AddComponent<AttachmentComponent>(e, attach);
     } else if (mesh == "Mage" || mesh == "Skeleton_Mage") {
         attach.meshName = "Staff";
+        attach.rotX = -7.63f; attach.rotY = 18.148f; attach.rotZ = 1.702f;
         m_Registry->AddComponent<AttachmentComponent>(e, attach);
     } else if (mesh == "Rogue" || mesh == "Skeleton_Minion") {
         attach.meshName = "Dagger";
+        attach.rotX = -7.63f; attach.rotY = 18.148f; attach.rotZ = 1.702f;
         m_Registry->AddComponent<AttachmentComponent>(e, attach);
     }
 }
@@ -293,7 +300,25 @@ void BattleMode::Update(float dt, Entity playerEntity) {
         }
     } else if (m_State == Attacking) {
         m_AnimState.timer += dt;
+        float p = std::min(1.0f, m_AnimState.timer / m_AnimState.duration);
+
+        // Update Projectile
+        if (m_ActiveProjectile.entity != -1) {
+            auto* pt = m_Registry->GetComponent<Transform3DComponent>(m_ActiveProjectile.entity);
+            if (pt) {
+                pt->x = m_ActiveProjectile.startX + (m_ActiveProjectile.targetX - m_ActiveProjectile.startX) * p;
+                pt->y = m_ActiveProjectile.startY + (m_ActiveProjectile.targetY - m_ActiveProjectile.startY) * p;
+                pt->z = m_ActiveProjectile.startZ + (m_ActiveProjectile.targetZ - m_ActiveProjectile.startZ) * p;
+            }
+        }
+
         if (m_AnimState.timer >= m_AnimState.duration) {
+            // Cleanup Projectile
+            if (m_ActiveProjectile.entity != -1) {
+                m_Registry->DestroyEntity(m_ActiveProjectile.entity);
+                m_ActiveProjectile.entity = -1;
+            }
+            
             // Revert to Idle
             auto* animComp = m_Registry->GetComponent<SkeletalAnimationComponent>(m_AnimState.actor);
             auto* mesh = m_Registry->GetComponent<MeshComponent>(m_AnimState.actor);
@@ -320,8 +345,13 @@ void BattleMode::Update(float dt, Entity playerEntity) {
         Entity current = m_TurnOrder[m_CurrentTurnIndex];
         auto* attach = m_Registry->GetComponent<AttachmentComponent>(current);
         if (attach) {
-            if (m_SelectedAction == Ranged) attach->meshName = "Arrow_Bow";
-            else if (m_SelectedAction == Melee) attach->meshName = "Sword";
+            if (m_SelectedAction == Ranged) {
+                attach->meshName = "Crossbow";
+                attach->rotX = -16.896f; attach->rotY = 30.052f; attach->rotZ = 11.404f;
+            } else if (m_SelectedAction == Melee) {
+                attach->meshName = "Sword";
+                attach->rotX = -7.63f; attach->rotY = 18.148f; attach->rotZ = 1.702f;
+            }
         }
     } else if (m_State == EnemyTurn) {
         UpdateAI(dt);
@@ -529,6 +559,17 @@ void BattleMode::ExecuteAction(Entity actor, ActionType action, Entity target, f
 
     if (action == Ranged) {
         if (m_SfxShoot) Mix_PlayChannel(-1, m_SfxShoot, 0);
+        
+        // Spawn Arrow Projectile
+        if (tActor && tTarget) {
+            auto arrow = m_Registry->CreateEntity();
+            m_Registry->AddComponent<Transform3DComponent>(arrow, {tActor->x, tActor->y, 1.0f, tActor->rot, 0});
+            m_Registry->AddComponent<MeshComponent>(arrow, {"Arrow", "knight_tex", 1, 1, 1});
+            
+            m_ActiveProjectile.entity = arrow;
+            m_ActiveProjectile.startX = tActor->x; m_ActiveProjectile.startY = tActor->y; m_ActiveProjectile.startZ = 1.0f;
+            m_ActiveProjectile.targetX = tTarget->x; m_ActiveProjectile.targetY = tTarget->y; m_ActiveProjectile.targetZ = 1.0f;
+        }
     }
 
     // Animation Trigger
@@ -569,7 +610,8 @@ void BattleMode::ExecuteAction(Entity actor, ActionType action, Entity target, f
                     m_State = Attacking;
                     m_AnimState.actor = actor;
                     m_AnimState.timer = 0.0f;
-                    m_AnimState.duration = rm->animations[bestIdx].duration;
+                    // Speed up ranged attacks (fixed 0.4s travel time)
+                    m_AnimState.duration = (action == Ranged) ? 0.4f : rm->animations[bestIdx].duration;
                     if (m_AnimState.duration <= 0) m_AnimState.duration = 1.0f;
                 }
             }

@@ -45,6 +45,12 @@ private:
         float duration = 0.0f;
     } m_AnimState;
 
+    struct {
+        PixelsEngine::Entity entity = -1;
+        float startX, startY, startZ;
+        float targetX, targetY, targetZ;
+    } m_ActiveProjectile;
+
     // Audio
     Mix_Music* m_Music = nullptr;
     Mix_Chunk* m_SfxJump = nullptr;

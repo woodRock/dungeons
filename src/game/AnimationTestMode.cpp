@@ -19,7 +19,7 @@ void AnimationTestMode::Init(Camera* camera) {
     m_Renderer->LoadMesh("Knight", "assets/adventurers/Characters/gltf/Knight.glb");
     m_Renderer->LoadTexture("knight_tex", "assets/adventurers/Textures/knight_texture.png");
     m_Renderer->LoadMesh("Sword", "assets/adventurers/Assets/gltf/sword_1handed.gltf");
-    m_Renderer->LoadMesh("Bow", "assets/adventurers/Assets/gltf/arrow_bow_bundle.gltf");
+    m_Renderer->LoadMesh("Bow", "assets/adventurers/Assets/gltf/crossbow_1handed.gltf");
 
     auto anims = GLTFLoader::LoadAnimations("assets/animations/Animations/gltf/Rig_Medium/Rig_Medium_General.glb");
     RenderMesh* rm = m_Renderer->GetRenderMesh("Knight");
@@ -51,7 +51,9 @@ void AnimationTestMode::Init(Camera* camera) {
     attach.textureName = "knight_tex";
     attach.boneName = "hand.r"; // Corrected from logs
     attach.scale = 1.0f;
-    attach.rotY = 3.14f; // Rotate 180 degrees
+    attach.rotX = -7.63f;
+    attach.rotY = 18.148f;
+    attach.rotZ = 1.702f;
     m_Registry->AddComponent<AttachmentComponent>(m_TestEntity, attach);
 }
 
@@ -67,7 +69,15 @@ void AnimationTestMode::Update(float dt) {
 
     if (Input::IsKeyPressed(SDL_SCANCODE_SPACE)) {
         m_ShowBow = !m_ShowBow;
-        if (attach) attach->meshName = m_ShowBow ? "Bow" : "Sword";
+        if (attach) {
+            if (m_ShowBow) {
+                attach->meshName = "Bow";
+                attach->rotX = -16.896f; attach->rotY = 30.052f; attach->rotZ = 11.404f;
+            } else {
+                attach->meshName = "Sword";
+                attach->rotX = -7.63f; attach->rotY = 18.148f; attach->rotZ = 1.702f;
+            }
+        }
     }
     
     // Real-time rotation tuning for attachments
