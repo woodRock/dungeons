@@ -368,7 +368,8 @@ void SiegeMode::RaycastCursor() {
   }
 }
 
-void SiegeMode::RenderUI(GLRenderer *ren, TextRenderer *tr, int w, int h) {
+void SiegeMode::RenderUI(PixelsEngine::GLRenderer *ren, PixelsEngine::TextRenderer *tr,
+                int w, int h, PixelsEngine::Entity playerEntity) {
   // Crosshair
   ren->DrawRect2D(w / 2 - 1, h / 2 - 10, 2, 20, {255, 255, 255, 150});
   ren->DrawRect2D(w / 2 - 10, h / 2 - 1, 20, 2, {255, 255, 255, 150});
@@ -401,7 +402,31 @@ void SiegeMode::RenderUI(GLRenderer *ren, TextRenderer *tr, int w, int h) {
     }
   }
 
-  tr->RenderText(ren, "SIEGE MODE: 1 - SWORD, 2 - CROSSBOW", 20, 20,
+  // Show nearby doors and interactions
+  if (auto *playerTransform = m_Registry->GetComponent<Transform3DComponent>(playerEntity)) {
+    auto &doors = m_Registry->View<DoorComponent>();
+    
+    int doorCount = 0;
+    for (auto &pair : doors) {
+      auto *door = &pair.second;
+      auto *doorTransform = m_Registry->GetComponent<Transform3DComponent>(pair.first);
+      if (!doorTransform) continue;
+      
+      float dx = playerTransform->x - doorTransform->x;
+      float dy = playerTransform->y - doorTransform->y;
+      float dist = sqrt(dx * dx + dy * dy);
+      
+      if (dist < 3.5f) {
+        std::string doorStatus = door->isOpen ? "OPEN" : "CLOSED";
+        tr->RenderText(ren, "Door: " + doorStatus + " (Distance: " + std::to_string((int)dist) + "m)",
+                       20, 60 + (doorCount * 25),
+                       door->isOpen ? SDL_Color{100, 255, 100, 255} : SDL_Color{255, 100, 100, 255});
+        doorCount++;
+      }
+    }
+  }
+
+  tr->RenderText(ren, "SIEGE MODE: 1 - SWORD, 2 - CROSSBOW | WASD - MOVE | SPACE - JUMP", 20, 20,
                  {255, 255, 255, 255});
 }
 

@@ -59,6 +59,57 @@ struct ColliderComponent {
   bool isSolid = true;
 };
 
+// AABB (Axis-Aligned Bounding Box) for object collisions
+struct HitboxComponent {
+  // Dimensions
+  float width = 1.0f;   // X axis
+  float depth = 1.0f;   // Y axis
+  float height = 1.0f;  // Z axis
+  
+  // Offset from transform position
+  float offsetX = 0.0f;
+  float offsetY = 0.0f;
+  float offsetZ = 0.0f;
+  
+  // Physics
+  bool isSolid = true;      // Blocks movement
+  bool isClimbable = false; // Can jump on it
+  float climbHeight = 0.5f; // Maximum step height
+  
+  // Get actual bounds (min and max)
+  void GetBounds(float posX, float posY, float posZ,
+                 float &minX, float &maxX,
+                 float &minY, float &maxY,
+                 float &minZ, float &maxZ) const {
+    minX = posX + offsetX - width / 2.0f;
+    maxX = posX + offsetX + width / 2.0f;
+    minY = posY + offsetY - depth / 2.0f;
+    maxY = posY + offsetY + depth / 2.0f;
+    minZ = posZ + offsetZ;
+    maxZ = posZ + offsetZ + height;
+  }
+};
+
+struct DoorComponent {
+  bool isOpen = false;
+  float openSpeed = 2.0f;  // Units per second
+  float maxOpenDistance = 1.5f;  // How far door opens
+  float currentOpenDistance = 0.0f;
+  
+  // Door swings on this axis
+  enum Axis { X, Y, Z };
+  Axis swingAxis = Y;
+  
+  // Original position before opening
+  float originalX = 0.0f;
+  float originalY = 0.0f;
+  float originalZ = 0.0f;
+  
+  // Hinge offset from door center (negative = left hinge, positive = right hinge)
+  float hingeOffsetX = 0.0f;
+  float hingeOffsetY = 0.0f;
+};
+
 struct ProjectileComponent {
   enum Type { Arrow, Grapple };
   Type type = Arrow;

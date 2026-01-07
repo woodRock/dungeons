@@ -47,6 +47,7 @@ private:
   void HandleInputPause();
 
   void UpdatePhysics(float dt);
+  void UpdateDoors(float dt);
   void UpdateProjectiles(float dt);
   void UpdateAnimations(float dt);
 

@@ -26,7 +26,7 @@ public:
               float tunerDist = 3.5f, float tunerShoulder = 0.8f,
               float tunerHeight = 1.8f);
   void RenderUI(PixelsEngine::GLRenderer *ren, PixelsEngine::TextRenderer *tr,
-                int w, int h);
+                int w, int h, PixelsEngine::Entity playerEntity);
   
   // Getters
   float GetCameraYaw() const;
@@ -35,6 +35,7 @@ private:
   PixelsEngine::Registry *m_Registry;
   PixelsEngine::GLRenderer *m_Renderer;
   PixelsEngine::Camera *m_Camera = nullptr;
+  PixelsEngine::Entity m_PlayerEntity;
   std::unique_ptr<PixelsEngine::ThirdPersonCamera> m_CameraController;
   std::unique_ptr<PixelsEngine::ThirdPersonMovementController> m_MovementController;
 

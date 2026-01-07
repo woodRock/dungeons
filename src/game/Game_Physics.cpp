@@ -161,24 +161,85 @@ void DungeonsGame::UpdatePhysics(float dt) {
       phys->velZ = 0;
     }
 
-    // Horizontal velocity
+    // Horizontal velocity - simple approach
     float nextX = t->x + phys->velX * dt;
     float nextY = t->y + phys->velY * dt;
 
-    // Wall/Door Collision (simplified grid check)
-    int collisionX = m_Map.Get((int)nextX, (int)t->y);
-    int collisionY = m_Map.Get((int)t->x, (int)nextY);
+    // Allow movement - don't check map collision for now, let hitboxes handle it
+    t->x = nextX;
+    t->y = nextY;
     
-    if (collisionX == 0) {
-      t->x = nextX;
-    } else {
-      phys->velX = 0;
+    // Check against furniture for platforming (climbable objects only)
+    auto &hitboxes = m_Registry.View<HitboxComponent>();
+    for (auto &pair : hitboxes) {
+      auto *hb = &pair.second;
+      auto *ent = m_Registry.GetComponent<Transform3DComponent>(pair.first);
+      if (!ent || !hb->isClimbable) continue;
+      
+      // Get object bounds
+      float minX, maxX, minY, maxY, minZ, maxZ;
+      hb->GetBounds(ent->x, ent->y, ent->z, minX, maxX, minY, maxY, minZ, maxZ);
+      
+      // Check if player can land on this object
+      float playerRadius = 0.35f;
+      float nextMinX = t->x - playerRadius;
+      float nextMaxX = t->x + playerRadius;
+      float nextMinY = t->y - playerRadius;
+      float nextMaxY = t->y + playerRadius;
+      
+      bool horizontalOverlap = !(nextMaxX < minX || nextMinX > maxX ||
+                                  nextMaxY < minY || nextMinY > maxY);
+      
+      // If player is above the object and falling
+      if (horizontalOverlap && t->z > maxZ - 0.1f && phys->velZ <= 0.0f) {
+        // Land on top of object
+        t->z = maxZ;
+        phys->velZ = 0;
+        phys->isGrounded = true;
+      }
     }
-
-    if (collisionY == 0) {
-      t->y = nextY;
-    } else {
-      phys->velY = 0;
+    
+    // Check against solid objects for collision blocking
+    for (auto &pair : hitboxes) {
+      auto *hb = &pair.second;
+      if (!hb->isSolid) continue;
+      
+      auto *ent = m_Registry.GetComponent<Transform3DComponent>(pair.first);
+      if (!ent) continue;
+      
+      // Skip doors that are open
+      auto *door = m_Registry.GetComponent<DoorComponent>(pair.first);
+      if (door && door->isOpen && door->currentOpenDistance > 0.5f) {
+        continue;
+      }
+      
+      // Get object bounds
+      float minX, maxX, minY, maxY, minZ, maxZ;
+      hb->GetBounds(ent->x, ent->y, ent->z, minX, maxX, minY, maxY, minZ, maxZ);
+      
+      // Player collision radius
+      float playerRadius = 0.35f;
+      float playerMinX = t->x - playerRadius;
+      float playerMaxX = t->x + playerRadius;
+      float playerMinY = t->y - playerRadius;
+      float playerMaxY = t->y + playerRadius;
+      float playerMinZ = t->z;
+      float playerMaxZ = t->z + 1.5f;
+      
+      // Check AABB collision
+      bool collides = !(playerMaxX < minX || playerMinX > maxX ||
+                        playerMaxY < minY || playerMinY > maxY ||
+                        playerMaxZ < minZ || playerMinZ > maxZ);
+      
+      if (collides) {
+        // Push player out - revert to previous position
+        t->x = nextX > ent->x ? maxX + playerRadius : minX - playerRadius;
+        if (t->y == nextY) {  // Only fix X if we didn't already move in Y
+          t->y = nextY > ent->y ? maxY + playerRadius : minY - playerRadius;
+        }
+        phys->velX = 0;
+        phys->velY = 0;
+      }
     }
 
     float currentDrag = phys->isGrounded
@@ -190,6 +251,69 @@ void DungeonsGame::UpdatePhysics(float dt) {
     phys->velX *= drag;
     phys->velY *= drag;
     phys->velZ *= drag; // Apply drag to Z as well for fly mode
+  }
+}
+
+void DungeonsGame::UpdateDoors(float dt) {
+  auto *playerTransform = m_Registry.GetComponent<Transform3DComponent>(m_PlayerEntity);
+  if (!playerTransform) return;
+  
+  auto &doors = m_Registry.View<DoorComponent>();
+  for (auto &pair : doors) {
+    auto *door = &pair.second;
+    auto *doorTransform = m_Registry.GetComponent<Transform3DComponent>(pair.first);
+    if (!doorTransform) continue;
+    
+    // Check if player is close to door (interaction range)
+    float dx = playerTransform->x - doorTransform->x;
+    float dy = playerTransform->y - doorTransform->y;
+    float dist = sqrt(dx * dx + dy * dy);
+    
+    const float DOOR_INTERACT_RANGE = 2.5f;
+    
+    if (dist < DOOR_INTERACT_RANGE) {
+      // Player is close, check if they want to interact (standing in front)
+      // For now, auto-open doors when player is near
+      if (!door->isOpen) {
+        door->isOpen = true;
+      }
+    } else if (dist > 4.0f && door->isOpen) {
+      // Player moved away, close door
+      door->isOpen = false;
+    }
+    
+    // Animate door opening/closing
+    float targetOpenDistance = door->isOpen ? door->maxOpenDistance : 0.0f;
+    float openSpeed = door->openSpeed * dt;
+    
+    if (door->currentOpenDistance < targetOpenDistance) {
+      door->currentOpenDistance += openSpeed;
+      if (door->currentOpenDistance > targetOpenDistance) {
+        door->currentOpenDistance = targetOpenDistance;
+      }
+    } else if (door->currentOpenDistance > targetOpenDistance) {
+      door->currentOpenDistance -= openSpeed;
+      if (door->currentOpenDistance < targetOpenDistance) {
+        door->currentOpenDistance = targetOpenDistance;
+      }
+    }
+    
+    // Update door position based on swing axis with hinge offset
+    // For a left-hand hinge door, it swings outward from the hinge point
+    switch (door->swingAxis) {
+      case DoorComponent::X:
+        // Door swings left/right from hinge on left side (hingeOffsetX < 0)
+        doorTransform->x = door->originalX + door->hingeOffsetX + door->currentOpenDistance;
+        break;
+      case DoorComponent::Y:
+        // Door swings forward/back from hinge
+        doorTransform->y = door->originalY + door->hingeOffsetY + door->currentOpenDistance;
+        break;
+      case DoorComponent::Z:
+        // Door swings up/down (unlikely but supported)
+        doorTransform->z = door->originalZ + door->currentOpenDistance;
+        break;
+    }
   }
 }
 

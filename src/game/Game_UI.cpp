@@ -104,7 +104,7 @@ void DungeonsGame::RenderUI() {
   }
 
   if (m_State == GameState::Siege && m_SiegeMode) {
-    m_SiegeMode->RenderUI(&m_GLRenderer, m_TextRenderer.get(), w, h);
+    m_SiegeMode->RenderUI(&m_GLRenderer, m_TextRenderer.get(), w, h, m_PlayerEntity);
     return;
   }
 

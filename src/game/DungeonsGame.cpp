@@ -35,6 +35,7 @@ void DungeonsGame::OnUpdate(float deltaTime) {
       m_SiegeMode->Update(deltaTime, m_PlayerEntity, m_TunerDist,
                           m_TunerShoulder, m_TunerHeight);
     UpdatePhysics(deltaTime);
+    UpdateDoors(deltaTime);
     UpdateProjectiles(deltaTime);
     UpdateAnimations(deltaTime);
     if (Input::IsKeyPressed(SDL_SCANCODE_ESCAPE)) {
@@ -47,6 +48,7 @@ void DungeonsGame::OnUpdate(float deltaTime) {
   case GameState::Battle: {
     UpdateBattle(deltaTime);
     UpdatePhysics(deltaTime);
+    UpdateDoors(deltaTime);
     UpdateProjectiles(deltaTime);
     UpdateAnimations(deltaTime);
     if (Input::IsKeyPressed(SDL_SCANCODE_ESCAPE)) {
