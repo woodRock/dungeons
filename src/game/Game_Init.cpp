@@ -78,13 +78,3 @@ void DungeonsGame::InitBattle() {
     }
     m_BattleMode->Init(m_Camera.get(), m_PlayerEntity);
 }
-
-void DungeonsGame::InitAnimationTest() {
-    m_Registry = Registry();
-    m_State = GameState::AnimationTest;
-    SDL_SetRelativeMouseMode(SDL_FALSE);
-    if (!m_AnimationTestMode) {
-        m_AnimationTestMode = std::make_unique<AnimationTestMode>(&m_Registry, &m_GLRenderer);
-    }
-    m_AnimationTestMode->Init(m_Camera.get());
-}

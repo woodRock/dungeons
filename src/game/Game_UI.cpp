@@ -44,12 +44,10 @@ void DungeonsGame::RenderMainMenu() {
                m_MenuSelection == 2);
     DrawButton(w / 2 - btnW / 2, startY + gap * 3, btnW, btnH, "BATTLE MODE",
                m_MenuSelection == 3);
-    DrawButton(w / 2 - btnW / 2, startY + gap * 4, btnW, btnH, "ANIMATION TEST",
+    DrawButton(w / 2 - btnW / 2, startY + gap * 4, btnW, btnH, "OPTIONS",
                m_MenuSelection == 4);
-    DrawButton(w / 2 - btnW / 2, startY + gap * 5, btnW, btnH, "OPTIONS",
+    DrawButton(w / 2 - btnW / 2, startY + gap * 5, btnW, btnH, "QUIT",
                m_MenuSelection == 5);
-    DrawButton(w / 2 - btnW / 2, startY + gap * 6, btnW, btnH, "QUIT",
-               m_MenuSelection == 6);
   } else {
     bool isFullscreen =
         SDL_GetWindowFlags(m_Window) & SDL_WINDOW_FULLSCREEN_DESKTOP;
@@ -102,11 +100,6 @@ void DungeonsGame::RenderUI() {
   
   if (m_State == GameState::Battle && m_BattleMode) {
       m_BattleMode->RenderUI(&m_GLRenderer, m_TextRenderer.get(), w, h);
-      return;
-  }
-
-  if (m_State == GameState::AnimationTest && m_AnimationTestMode) {
-      m_AnimationTestMode->RenderUI(&m_GLRenderer, w, h);
       return;
   }
 
