@@ -48,21 +48,45 @@ void DungeonMode::Init(Camera* camera, Entity& playerEntity) {
     m_Renderer->LoadMesh("Crossbow", "assets/adventurers/Assets/gltf/crossbow_1handed.gltf");
     m_Renderer->LoadMesh("Arrow", "assets/adventurers/Assets/gltf/arrow_bow.gltf");
 
-    // Load animation files for death and special animations
-    m_Renderer->LoadMesh("CharacterAnimations", "assets/animations/Animations/gltf/Rig_Medium/Rig_Medium_General.glb");
+    // Load all animation files for the player character
+    m_Renderer->LoadMesh("CharacterAnimations_General", "assets/animations/Animations/gltf/Rig_Medium/Rig_Medium_General.glb");
+    m_Renderer->LoadMesh("CharacterAnimations_Movement", "assets/animations/Animations/gltf/Rig_Medium/Rig_Medium_MovementBasic.glb");
+    m_Renderer->LoadMesh("CharacterAnimations_Combat", "assets/animations/Animations/gltf/Rig_Medium/Rig_Medium_CombatMelee.glb");
+    m_Renderer->LoadMesh("CharacterAnimations_Advanced", "assets/animations/Animations/gltf/Rig_Medium/Rig_Medium_MovementAdvanced.glb");
     m_Renderer->LoadMesh("SkeletonAnimations", "assets/animations/Animations/gltf/Rig_Medium/Rig_Medium_Special.glb");
 
     // Copy animations from loaded animation files to character and skeleton meshes
-    RenderMesh* charAnimMesh = m_Renderer->GetRenderMesh("CharacterAnimations");
-    RenderMesh* skelAnimMesh = m_Renderer->GetRenderMesh("SkeletonAnimations");
-    
-    if (charAnimMesh) {
-      RenderMesh* knightMesh = m_Renderer->GetRenderMesh("Knight");
-      if (knightMesh) {
-        knightMesh->animations = charAnimMesh->animations;
+    RenderMesh* knightMesh = m_Renderer->GetRenderMesh("Knight");
+    if (knightMesh) {
+      // Merge all animation files into the knight mesh
+      RenderMesh* generalAnims = m_Renderer->GetRenderMesh("CharacterAnimations_General");
+      RenderMesh* movementAnims = m_Renderer->GetRenderMesh("CharacterAnimations_Movement");
+      RenderMesh* combatAnims = m_Renderer->GetRenderMesh("CharacterAnimations_Combat");
+      RenderMesh* advancedAnims = m_Renderer->GetRenderMesh("CharacterAnimations_Advanced");
+      
+      if (generalAnims) {
+        knightMesh->animations.insert(knightMesh->animations.end(), 
+                                      generalAnims->animations.begin(), 
+                                      generalAnims->animations.end());
+      }
+      if (movementAnims) {
+        knightMesh->animations.insert(knightMesh->animations.end(), 
+                                      movementAnims->animations.begin(), 
+                                      movementAnims->animations.end());
+      }
+      if (combatAnims) {
+        knightMesh->animations.insert(knightMesh->animations.end(), 
+                                      combatAnims->animations.begin(), 
+                                      combatAnims->animations.end());
+      }
+      if (advancedAnims) {
+        knightMesh->animations.insert(knightMesh->animations.end(), 
+                                      advancedAnims->animations.begin(), 
+                                      advancedAnims->animations.end());
       }
     }
     
+    RenderMesh* skelAnimMesh = m_Renderer->GetRenderMesh("SkeletonAnimations");
     if (skelAnimMesh) {
       RenderMesh* skelWarriorMesh = m_Renderer->GetRenderMesh("Skeleton_Warrior");
       RenderMesh* skelMinionMesh = m_Renderer->GetRenderMesh("Skeleton_Minion");
@@ -291,13 +315,33 @@ void DungeonMode::Update(float dt, Entity& playerEntity) {
             // Death animation takes priority
             if (unit && unit->hp <= 0) {
                 targetAnim = "Death_A";
+                anim->loop = false;  // Death animation should not loop
             } else if (m_AttackTimer > 0) {
-                if (Input::IsKeyDown(SDL_SCANCODE_F)) targetAnim = "Interact";
-                else targetAnim = (m_CurrentWeapon == 3) ? "Ranged_Bow_Shoot" : "Melee_1H_Attack_Chop";
+                // Attack animation takes priority
+                if (m_CurrentWeapon == 3) {
+                    // Crossbow/ranged attack
+                    targetAnim = "Melee_1H_Attack_Stab";  // Use as placeholder for ranged
+                } else {
+                    // Melee attack
+                    targetAnim = "Melee_1H_Attack_Chop";
+                }
+                anim->loop = false;  // Attack animations should not loop
+            } else if (!phys || !phys->isGrounded) {
+                // Jumping or falling
+                targetAnim = "Jump_Full_Long";
+                anim->loop = false;
             } else if (m_IsSneaking) {
-                targetAnim = "Idle_A"; // Use idle for sneak (could be extended with crouch animation if available)
-            } else if (phys && (abs(phys->velX) > 0.1f || abs(phys->velY) > 0.1f)) {
+                // Sneaking animation
+                targetAnim = "Sneaking";
+                anim->loop = true;
+            } else if (phys && (fabs(phys->velX) > 0.1f || fabs(phys->velY) > 0.1f)) {
+                // Walking animation
                 targetAnim = "Walking_A";
+                anim->loop = true;
+            } else {
+                // Idle animation
+                targetAnim = "Idle_A";
+                anim->loop = true;
             }
 
             int bestIdx = -1;
@@ -320,7 +364,6 @@ void DungeonMode::Update(float dt, Entity& playerEntity) {
             if (bestIdx != -1 && anim->animationIndex != bestIdx) {
                 anim->animationIndex = bestIdx;
                 anim->currentTime = 0.0f;
-                anim->loop = true; // Ensure looping animations loop by default
             }
         }
     }
