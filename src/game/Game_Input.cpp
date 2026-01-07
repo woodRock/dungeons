@@ -319,8 +319,8 @@ void DungeonsGame::HandleInputMenu() {
       case 2:
         // Dungeon Mode - Scan for dungeon campaigns
         m_AvailableMaps.clear();
-        if (std::filesystem::exists("assets/dungeons/")) {
-            for (const auto & entry : std::filesystem::directory_iterator("assets/dungeons/")) {
+        if (std::filesystem::exists("assets/saves/")) {
+            for (const auto & entry : std::filesystem::directory_iterator("assets/saves/")) {
                 if (entry.path().extension() == ".dungeon") {
                     m_AvailableMaps.push_back(entry.path().stem().string());
                 }

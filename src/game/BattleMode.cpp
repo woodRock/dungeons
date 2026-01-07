@@ -66,8 +66,38 @@ void BattleMode::Init(Camera *camera, Entity &playerEntity) {
   m_Renderer->LoadMesh("Staff", "assets/adventurers/Assets/gltf/staff.gltf");
   m_Renderer->LoadMesh("Dagger", "assets/adventurers/Assets/gltf/dagger.gltf");
 
+  // Load animation files for death and special animations
+  m_Renderer->LoadMesh("CharacterAnimations", "assets/animations/Animations/gltf/Rig_Medium/Rig_Medium_General.glb");
+  m_Renderer->LoadMesh("SkeletonAnimations", "assets/animations/Animations/gltf/Rig_Medium/Rig_Medium_Special.glb");
+
+  // Copy animations from loaded animation files to character and skeleton meshes
+  RenderMesh* charAnimMesh = m_Renderer->GetRenderMesh("CharacterAnimations");
+  RenderMesh* skelAnimMesh = m_Renderer->GetRenderMesh("SkeletonAnimations");
+  
+  if (charAnimMesh) {
+    RenderMesh* knightMesh = m_Renderer->GetRenderMesh("Knight");
+    RenderMesh* rangerMesh = m_Renderer->GetRenderMesh("Ranger");
+    RenderMesh* mageMesh = m_Renderer->GetRenderMesh("Mage");
+    RenderMesh* rogueMesh = m_Renderer->GetRenderMesh("Rogue");
+    
+    if (knightMesh) knightMesh->animations = charAnimMesh->animations;
+    if (rangerMesh) rangerMesh->animations = charAnimMesh->animations;
+    if (mageMesh) mageMesh->animations = charAnimMesh->animations;
+    if (rogueMesh) rogueMesh->animations = charAnimMesh->animations;
+  }
+  
+  if (skelAnimMesh) {
+    RenderMesh* skelWarriorMesh = m_Renderer->GetRenderMesh("Skeleton_Warrior");
+    RenderMesh* skelMinionMesh = m_Renderer->GetRenderMesh("Skeleton_Minion");
+    RenderMesh* skelMageMesh = m_Renderer->GetRenderMesh("Skeleton_Mage");
+    
+    if (skelWarriorMesh) skelWarriorMesh->animations = skelAnimMesh->animations;
+    if (skelMinionMesh) skelMinionMesh->animations = skelAnimMesh->animations;
+    if (skelMageMesh) skelMageMesh->animations = skelAnimMesh->animations;
+  }
+
   // Load Map
-  MapLoader::LoadFromFile("assets/dungeons/my_dungeon.map", m_Registry,
+  MapLoader::LoadFromFile("assets/saves/my_dungeon.map", m_Registry,
                            m_Renderer);
 
   // Spawn Units
@@ -723,6 +753,8 @@ void BattleMode::ExecuteAction(Entity actor, ActionType action, Entity target,
         animName = "Ranged_Bow_Shoot";
       else if (action == Shove)
         animName = "Melee_Unarmed_Attack_Kick";
+      else if (action == Sneak)
+        animName = "Idle_A"; // Could use crouch or stealth animation if available
 
       // Search for best match
       int bestIdx = -1;
@@ -786,7 +818,23 @@ void BattleMode::ExecuteAction(Entity actor, ActionType action, Entity target,
 
       std::cout << "Hit! Damage: " << dmg << std::endl;
       if (uTarget->hp <= 0) {
-        m_Registry->DestroyEntity(target);
+        // Play death animation instead of immediately destroying
+        auto *targetMesh = m_Registry->GetComponent<MeshComponent>(target);
+        auto *targetAnim = m_Registry->GetComponent<SkeletalAnimationComponent>(target);
+        if (targetMesh && targetAnim) {
+          RenderMesh *trm = m_Renderer->GetRenderMesh(targetMesh->meshName);
+          if (trm) {
+            std::string deathAnim = (targetMesh->meshName.find("Skeleton") != std::string::npos) ? "Skeletons_Death" : "Death_A";
+            for (size_t i = 0; i < trm->animations.size(); i++) {
+              if (trm->animations[i].name.find(deathAnim) != std::string::npos) {
+                targetAnim->animationIndex = (int)i;
+                targetAnim->currentTime = 0.0f;
+                targetAnim->loop = false; // Don't loop death animation
+                break;
+              }
+            }
+          }
+        }
       }
     } else {
       if (action == Melee) {
@@ -1004,7 +1052,7 @@ void BattleMode::UpdateAI(float dt) {
 
   auto view = m_Registry->View<BattleUnitComponent>();
   for (auto &pair : view) {
-    if (pair.second.team == BattleUnitComponent::Player) {
+    if (pair.second.team == BattleUnitComponent::Player && pair.second.hp > 0) {
       auto *t2 = m_Registry->GetComponent<Transform3DComponent>(pair.first);
       float d = sqrt(pow(t1->x - t2->x, 2) + pow(t1->y - t2->y, 2));
       if (d < minDist) {

@@ -161,7 +161,7 @@ void DungeonsGame::HandleInputMapSelect() {
                 // Trigger the select logic
                 m_SelectedDungeonFile = m_AvailableMaps[m_MapSelectIdx];
                 m_AvailableFloors.clear();
-                std::ifstream in("assets/dungeons/" + m_SelectedDungeonFile + ".dungeon");
+                std::ifstream in("assets/saves/" + m_SelectedDungeonFile + ".dungeon");
                 if (in.is_open()) {
                     std::string floor;
                     while (in >> floor) if (!floor.empty()) m_AvailableFloors.push_back(floor);
@@ -221,6 +221,7 @@ void DungeonsGame::HandleInputFloorSelect() {
             m_FloorSelectIdx = (int)i;
             if (clicked) {
                 m_DungeonMode = std::make_unique<DungeonMode>(&m_Registry, &m_GLRenderer);
+                m_DungeonMode->SetMap(&m_Map);  // Pass map for collision detection
                 std::vector<std::string> floors;
                 for (size_t j = m_FloorSelectIdx; j < m_AvailableFloors.size(); ++j) {
                     floors.push_back(m_AvailableFloors[j]);
@@ -242,6 +243,7 @@ void DungeonsGame::HandleInputFloorSelect() {
     }
     if (Input::IsKeyPressed(SDL_SCANCODE_RETURN) && !m_AvailableFloors.empty()) {
         m_DungeonMode = std::make_unique<DungeonMode>(&m_Registry, &m_GLRenderer);
+        m_DungeonMode->SetMap(&m_Map);  // Pass map for collision detection
         
         std::vector<std::string> floors;
         for (size_t i = m_FloorSelectIdx; i < m_AvailableFloors.size(); ++i) {
@@ -299,7 +301,18 @@ void DungeonsGame::UpdateAnimations(float dt) {
     if (mesh) {
       RenderMesh *rm = m_GLRenderer.GetRenderMesh(mesh->meshName);
       if (rm && rm->isSkinned) {
-        anim.currentTime += dt * anim.speed;
+        // Only advance animation time if looping is enabled or if animation hasn't finished
+        if (anim.loop || anim.animationIndex < 0 || anim.animationIndex >= (int)rm->animations.size()) {
+          anim.currentTime += dt * anim.speed;
+        } else {
+          float animDuration = rm->animations[anim.animationIndex].duration;
+          if (anim.currentTime < animDuration) {
+            anim.currentTime += dt * anim.speed;
+            if (anim.currentTime > animDuration) {
+              anim.currentTime = animDuration;
+            }
+          }
+        }
         m_GLRenderer.UpdateSkinnedMesh(*rm, anim.animationIndex,
                                        anim.currentTime);
       }

@@ -193,6 +193,7 @@ struct SkeletalAnimationComponent {
   int animationIndex = 0;
   float currentTime = 0.0f;
   float speed = 1.0f;
+  bool loop = true; // Whether animation should loop
 };
 
 struct EnemyComponent {
@@ -231,6 +232,13 @@ struct AttachmentComponent {
   float scale = 1.0f;
   float rotX = 0, rotY = 0, rotZ = 0;
   float offX = 0, offY = 0, offZ = 0;
+};
+
+struct SkyboxComponent {
+  float colorR = 0.53f;
+  float colorG = 0.81f;
+  float colorB = 0.92f;
+  float colorA = 1.0f;
 };
 
 } // namespace PixelsEngine

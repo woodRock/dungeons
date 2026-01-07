@@ -202,7 +202,7 @@ void DungeonsGame::UpdateDoors(float dt) {
 
 void DungeonsGame::UpdateProjectiles(float dt) {
 
-  if (m_State != GameState::Playing && m_State != GameState::Siege)
+  if (m_State != GameState::Playing && m_State != GameState::Siege && m_State != GameState::Dungeon)
     return;
 
   auto &projectiles = m_Registry.View<ProjectileComponent>();

@@ -242,11 +242,11 @@ ActionResult CreativeMode::Update(float dt, Entity /*playerEntity*/) {
     if (Input::IsKeyPressed(SDL_SCANCODE_RETURN)) {
       if (m_MenuState == EditorMenuState::Dungeons) {
           if (m_FocusedInput == ActiveInput::MapName && !m_MapInputBuffer.empty()) {
-              SaveDungeon("assets/dungeons/" + m_MapInputBuffer + ".map");
+              SaveDungeon("assets/saves/" + m_MapInputBuffer + ".map");
               m_CurrentMapName = m_MapInputBuffer;
               ScanSavedMaps();
           } else if (m_FocusedInput == ActiveInput::DungeonName && !m_DungeonInputBuffer.empty()) {
-              std::ofstream out("assets/dungeons/" + m_DungeonInputBuffer + ".dungeon");
+              std::ofstream out("assets/saves/" + m_DungeonInputBuffer + ".dungeon");
               out.close();
               ScanDungeons();
               m_DungeonInputBuffer = "";
@@ -774,7 +774,7 @@ void CreativeMode::RenderUI(GLRenderer *ren, TextRenderer *tr, int w, int h) {
 
 void CreativeMode::ScanSavedMaps() {
     m_SavedMaps.clear();
-    std::string path = "assets/dungeons/";
+    std::string path = "assets/saves/";
     if (fs::exists(path)) {
         for (const auto &entry : fs::directory_iterator(path)) {
             if (entry.path().extension() == ".map") {
@@ -786,7 +786,7 @@ void CreativeMode::ScanSavedMaps() {
 
 void CreativeMode::ScanDungeons() {
     m_SavedDungeons.clear();
-    std::string path = "assets/dungeons/";
+    std::string path = "assets/saves/";
     if (fs::exists(path)) {
         for (const auto &entry : fs::directory_iterator(path)) {
             if (entry.path().extension() == ".dungeon") {
@@ -798,7 +798,7 @@ void CreativeMode::ScanDungeons() {
 
 void CreativeMode::LoadDungeonLevels(const std::string& dungeonName) {
     m_CurrentDungeonLevels.clear();
-    std::ifstream in("assets/dungeons/" + dungeonName + ".dungeon");
+    std::ifstream in("assets/saves/" + dungeonName + ".dungeon");
     if (in.is_open()) {
         std::string level;
         while (in >> level) {
@@ -809,7 +809,7 @@ void CreativeMode::LoadDungeonLevels(const std::string& dungeonName) {
 }
 
 void CreativeMode::SaveDungeonLevels(const std::string& dungeonName) {
-    std::ofstream out("assets/dungeons/" + dungeonName + ".dungeon");
+    std::ofstream out("assets/saves/" + dungeonName + ".dungeon");
     if (out.is_open()) {
         for (const auto& level : m_CurrentDungeonLevels) {
             out << level << "\n";
@@ -849,7 +849,7 @@ void CreativeMode::DrawSaveMenu(GLRenderer *ren, TextRenderer *tr, int w, int h)
         ren->DrawRect2D(x + boxW - 130, y + 90, 110, 40, hoverSave ? SDL_Color{100, 100, 200, 255} : SDL_Color{50, 50, 150, 255});
         tr->RenderText(ren, "SAVE MAP", (int)x + boxW - 120, (int)y + 100, {255, 255, 255, 255});
         if (hoverSave && clicked && !m_MapInputBuffer.empty()) {
-            SaveDungeon("assets/dungeons/" + m_MapInputBuffer + ".map");
+            SaveDungeon("assets/saves/" + m_MapInputBuffer + ".map");
             m_CurrentMapName = m_MapInputBuffer;
             ScanSavedMaps();
         }
@@ -869,7 +869,7 @@ void CreativeMode::DrawSaveMenu(GLRenderer *ren, TextRenderer *tr, int w, int h)
         ren->DrawRect2D(x + boxW - 130, y + 180, 110, 40, hoverCreate ? SDL_Color{100, 200, 100, 255} : SDL_Color{50, 150, 50, 255});
         tr->RenderText(ren, "CREATE DGN", (int)x + boxW - 125, (int)y + 190, {255, 255, 255, 255});
         if (hoverCreate && clicked && !m_DungeonInputBuffer.empty()) {
-            std::ofstream out("assets/dungeons/" + m_DungeonInputBuffer + ".dungeon");
+            std::ofstream out("assets/saves/" + m_DungeonInputBuffer + ".dungeon");
             out.close();
             m_DungeonInputBuffer = "";
             ScanDungeons();
@@ -892,7 +892,7 @@ void CreativeMode::DrawSaveMenu(GLRenderer *ren, TextRenderer *tr, int w, int h)
             ren->DrawRect2D(x + boxW - 90, itemY, 70, 35, hoverDel ? SDL_Color{200, 50, 50, 255} : SDL_Color{100, 30, 30, 255});
             tr->RenderText(ren, "DEL", (int)x + boxW - 75, (int)itemY + 10, {255, 255, 255, 255});
             if (hoverDel && clicked) {
-                fs::remove("assets/dungeons/" + dgn + ".dungeon");
+                fs::remove("assets/saves/" + dgn + ".dungeon");
                 ScanDungeons();
                 break;
             }
@@ -940,7 +940,7 @@ void CreativeMode::DrawSaveMenu(GLRenderer *ren, TextRenderer *tr, int w, int h)
             tr->RenderText(ren, std::to_string(idx+1) + ". " + *it, (int)x + 30, (int)itemY + 10, {255, 255, 255, 255});
             if (hover && clicked) {
                 m_CurrentMapName = *it;
-                LoadDungeon("assets/dungeons/" + *it + ".map");
+                LoadDungeon("assets/saves/" + *it + ".map");
             }
 
             bool hoverRem = (mx >= x + boxW - 90 && mx <= x + boxW - 20 && my >= itemY && my <= itemY + 35);

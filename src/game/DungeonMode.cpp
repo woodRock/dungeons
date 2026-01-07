@@ -9,7 +9,7 @@
 namespace PixelsEngine {
 
 DungeonMode::DungeonMode(Registry* registry, GLRenderer* renderer)
-    : m_Registry(registry), m_Renderer(renderer) {}
+    : m_Registry(registry), m_Renderer(renderer), m_Skybox(std::make_unique<Skybox>()) {}
 
 DungeonMode::~DungeonMode() {}
 
@@ -21,6 +21,12 @@ void DungeonMode::Init(Camera* camera, Entity& playerEntity) {
     m_SfxDoor = m_AudioManager->LoadWAV("assets/door.wav");
     m_SfxSwordHit = m_AudioManager->LoadWAV("assets/sword_hit.wav");
     m_SfxSwordMiss = m_AudioManager->LoadWAV("assets/sword_miss.wav");
+    
+    // Load ambient flute music
+    m_AmbienceMusic = m_AudioManager->LoadMusic("assets/ambience_flute.mp3");
+    
+    // Set dungeon skybox to black
+    m_Skybox->SetColor(0.0f, 0.0f, 0.0f, 1.0f);
 
     // Pre-load character assets
     auto assetManager = std::make_unique<AssetManager>(m_Renderer);
@@ -37,9 +43,35 @@ void DungeonMode::Init(Camera* camera, Entity& playerEntity) {
                                  "assets/skeletons/characters/gltf/Skeleton_Mage.glb",
                                  "assets/skeletons/texture/skeleton_texture.png");
 
-    // Load weapon meshes for skeleton attachments
-    m_Renderer->LoadMesh("Sword", "assets/adventurers/Assets/gltf/sword.gltf");
+    // Load weapon meshes
+    m_Renderer->LoadMesh("Sword", "assets/adventurers/Assets/gltf/sword_1handed.gltf");
+    m_Renderer->LoadMesh("Crossbow", "assets/adventurers/Assets/gltf/crossbow_1handed.gltf");
     m_Renderer->LoadMesh("Arrow", "assets/adventurers/Assets/gltf/arrow_bow.gltf");
+
+    // Load animation files for death and special animations
+    m_Renderer->LoadMesh("CharacterAnimations", "assets/animations/Animations/gltf/Rig_Medium/Rig_Medium_General.glb");
+    m_Renderer->LoadMesh("SkeletonAnimations", "assets/animations/Animations/gltf/Rig_Medium/Rig_Medium_Special.glb");
+
+    // Copy animations from loaded animation files to character and skeleton meshes
+    RenderMesh* charAnimMesh = m_Renderer->GetRenderMesh("CharacterAnimations");
+    RenderMesh* skelAnimMesh = m_Renderer->GetRenderMesh("SkeletonAnimations");
+    
+    if (charAnimMesh) {
+      RenderMesh* knightMesh = m_Renderer->GetRenderMesh("Knight");
+      if (knightMesh) {
+        knightMesh->animations = charAnimMesh->animations;
+      }
+    }
+    
+    if (skelAnimMesh) {
+      RenderMesh* skelWarriorMesh = m_Renderer->GetRenderMesh("Skeleton_Warrior");
+      RenderMesh* skelMinionMesh = m_Renderer->GetRenderMesh("Skeleton_Minion");
+      RenderMesh* skelMageMesh = m_Renderer->GetRenderMesh("Skeleton_Mage");
+      
+      if (skelWarriorMesh) skelWarriorMesh->animations = skelAnimMesh->animations;
+      if (skelMinionMesh) skelMinionMesh->animations = skelAnimMesh->animations;
+      if (skelMageMesh) skelMageMesh->animations = skelAnimMesh->animations;
+    }
 
     // Start with a default level list if none provided
     if (m_LevelList.empty()) {
@@ -48,6 +80,11 @@ void DungeonMode::Init(Camera* camera, Entity& playerEntity) {
     
     m_CurrentLevelIdx = 0;
     LoadLevel(m_LevelList[m_CurrentLevelIdx]);
+    
+    // Start ambient music on loop
+    if (m_AmbienceMusic) {
+        Mix_PlayMusic(m_AmbienceMusic, -1);  // -1 = infinite loop
+    }
     
     playerEntity = m_PlayerEntity;
 }
@@ -89,7 +126,7 @@ void DungeonMode::LoadLevel(const std::string& levelName) {
     for (auto e : toKill) m_Registry->DestroyEntity(e);
     
     // Load map
-    std::string path = "assets/dungeons/" + levelName + ".map";
+    std::string path = "assets/saves/" + levelName + ".map";
     MapLoader::LoadFromFile(path, m_Registry, m_Renderer);
     
     // Find spawn point: Priority 1: player_spawn, Priority 2: stairs
@@ -141,6 +178,11 @@ void DungeonMode::LoadLevel(const std::string& levelName) {
         spawnX = 12.0f; spawnY = 0.0f; spawnZ = 0.0f;
     }
 
+    // Store spawn coordinates for respawn
+    m_SpawnX = spawnX;
+    m_SpawnY = spawnY;
+    m_SpawnZ = spawnZ;
+
     // Remove the spawn marker if it exists
     if (spawnMarker != PixelsEngine::INVALID_ENTITY) {
         m_Registry->DestroyEntity(spawnMarker);
@@ -159,6 +201,7 @@ void DungeonMode::LoadLevel(const std::string& levelName) {
     m_MovementController->SetAcceleration(80.0f);   // Moderate acceleration
     m_MovementController->SetFriction(0.92f);       // High friction for immediate stop
     m_MovementController->SetMaxSpeed(8.0f);        // Slower for dungeon feel
+    m_MovementController->SetMap(m_Map);            // Set map for wall collision detection
     
     // Spawn skeleton enemies at skeleton spawn points
     auto skeletonView = m_Registry->View<MeshComponent>();
@@ -225,9 +268,10 @@ void DungeonMode::Update(float dt, Entity& playerEntity) {
         }
     }
 
-    // 1. Weapon Swapping & Jumping
+    // 1. Weapon Swapping & Jumping & Sneaking
     if (Input::IsKeyPressed(SDL_SCANCODE_1)) m_CurrentWeapon = 2; // Sword
     if (Input::IsKeyPressed(SDL_SCANCODE_2)) m_CurrentWeapon = 3; // Bow
+    m_IsSneaking = Input::IsKeyDown(SDL_SCANCODE_LSHIFT) || Input::IsKeyDown(SDL_SCANCODE_RSHIFT);
     
     if (Input::IsKeyPressed(SDL_SCANCODE_SPACE) && phys && phys->isGrounded) {
         phys->velZ = 8.0f; // Jump force (approx 1 tile height)
@@ -241,24 +285,42 @@ void DungeonMode::Update(float dt, Entity& playerEntity) {
     if (anim && m_PlayerEntity != PixelsEngine::INVALID_ENTITY) {
         RenderMesh* rm = m_Renderer->GetRenderMesh("Knight");
         if (rm) {
+            auto* unit = m_Registry->GetComponent<BattleUnitComponent>(m_PlayerEntity);
             std::string targetAnim = "Idle_A";
-            if (m_AttackTimer > 0) {
+            
+            // Death animation takes priority
+            if (unit && unit->hp <= 0) {
+                targetAnim = "Death_A";
+            } else if (m_AttackTimer > 0) {
                 if (Input::IsKeyDown(SDL_SCANCODE_F)) targetAnim = "Interact";
                 else targetAnim = (m_CurrentWeapon == 3) ? "Ranged_Bow_Shoot" : "Melee_1H_Attack_Chop";
+            } else if (m_IsSneaking) {
+                targetAnim = "Idle_A"; // Use idle for sneak (could be extended with crouch animation if available)
             } else if (phys && (abs(phys->velX) > 0.1f || abs(phys->velY) > 0.1f)) {
                 targetAnim = "Walking_A";
             }
 
             int bestIdx = -1;
+            // First try exact match
             for (size_t i = 0; i < rm->animations.size(); i++) {
-                if (rm->animations[i].name.find(targetAnim) != std::string::npos) {
+                if (rm->animations[i].name == targetAnim) {
                     bestIdx = (int)i;
                     break;
+                }
+            }
+            // If no exact match, try substring match
+            if (bestIdx == -1) {
+                for (size_t i = 0; i < rm->animations.size(); i++) {
+                    if (rm->animations[i].name.find(targetAnim) != std::string::npos) {
+                        bestIdx = (int)i;
+                        break;
+                    }
                 }
             }
             if (bestIdx != -1 && anim->animationIndex != bestIdx) {
                 anim->animationIndex = bestIdx;
                 anim->currentTime = 0.0f;
+                anim->loop = true; // Ensure looping animations loop by default
             }
         }
     }
@@ -268,25 +330,66 @@ void DungeonMode::Update(float dt, Entity& playerEntity) {
     for (auto& pair : enemiesView) {
         auto* eAnim = m_Registry->GetComponent<SkeletalAnimationComponent>(pair.first);
         auto* eMesh = m_Registry->GetComponent<MeshComponent>(pair.first);
+        auto* eUnit = m_Registry->GetComponent<BattleUnitComponent>(pair.first);
         if (eAnim && eMesh) {
             RenderMesh* rm = m_Renderer->GetRenderMesh(eMesh->meshName);
             if (rm) {
-                int idleIdx = -1;
+                std::string targetAnim = "Idle";
+                
+                // Death animation for skeletons
+                if (eUnit && eUnit->hp <= 0) {
+                    if (eMesh->meshName.find("Skeleton") != std::string::npos) {
+                        targetAnim = "Skeletons_Death";
+                    } else {
+                        targetAnim = "Death_A";
+                    }
+                } else if (eMesh->meshName.find("Skeleton") != std::string::npos) {
+                    targetAnim = "Skeletons_Idle";
+                } else {
+                    targetAnim = "Idle";
+                }
+                
+                int bestIdx = -1;
+                // First try exact match
                 for (size_t i = 0; i < rm->animations.size(); i++) {
-                    if (rm->animations[i].name.find("Idle") != std::string::npos) {
-                        idleIdx = (int)i;
+                    if (rm->animations[i].name == targetAnim) {
+                        bestIdx = (int)i;
                         break;
                     }
                 }
-                if (idleIdx != -1 && eAnim->animationIndex != idleIdx) {
-                    eAnim->animationIndex = idleIdx;
+                // If no exact match, try substring match
+                if (bestIdx == -1) {
+                    for (size_t i = 0; i < rm->animations.size(); i++) {
+                        if (rm->animations[i].name.find(targetAnim) != std::string::npos) {
+                            bestIdx = (int)i;
+                            break;
+                        }
+                    }
+                }
+                if (bestIdx != -1 && eAnim->animationIndex != bestIdx) {
+                    eAnim->animationIndex = bestIdx;
                     eAnim->currentTime = 0.0f;
+                    // Non-death animations should loop
+                    if (eUnit && eUnit->hp > 0) {
+                        eAnim->loop = true;
+                    }
                 }
             }
         }
     }
 
-    // 5. Update Weapon Visuals
+    // 5. Update Flash Effects (decrease over time)
+    auto& allUnits = m_Registry->View<BattleUnitComponent>();
+    for (auto& pair : allUnits) {
+        if (pair.second.flashAmount > 0.0f) {
+            pair.second.flashAmount -= dt * 5.0f;
+            if (pair.second.flashAmount < 0.0f) {
+                pair.second.flashAmount = 0.0f;
+            }
+        }
+    }
+
+    // 6. Update Weapon Visuals
     auto* attach = m_Registry->GetComponent<AttachmentComponent>(m_PlayerEntity);
     if (attach) {
         if (m_CurrentWeapon == 3) {
@@ -295,6 +398,40 @@ void DungeonMode::Update(float dt, Entity& playerEntity) {
         } else {
             attach->meshName = "Sword";
             attach->rotX = -7.63f; attach->rotY = 18.148f; attach->rotZ = 1.702f;
+        }
+    }
+
+    // 7. Check for player death and respawn
+    auto* playerUnit = m_Registry->GetComponent<BattleUnitComponent>(m_PlayerEntity);
+    if (playerUnit && playerUnit->hp <= 0) {
+        // Respawn player at spawn point (using stored coordinates)
+        auto* playerTransform = m_Registry->GetComponent<Transform3DComponent>(m_PlayerEntity);
+        auto* playerPhys = m_Registry->GetComponent<PhysicsComponent>(m_PlayerEntity);
+        if (playerTransform && playerPhys) {
+            // Set position to stored spawn point
+            playerTransform->x = m_SpawnX;
+            playerTransform->y = m_SpawnY;
+            playerTransform->z = m_SpawnZ;
+            playerTransform->rot = 0.0f;
+            playerTransform->pitch = 0.0f;
+            
+            // Reset physics
+            playerPhys->velX = 0.0f;
+            playerPhys->velY = 0.0f;
+            playerPhys->velZ = 0.0f;
+            playerPhys->isGrounded = true;
+            
+            // Restore health
+            playerUnit->hp = playerUnit->maxHp;
+            playerUnit->flashAmount = 0.0f;
+            
+            // Reset animation
+            auto* playerAnim = m_Registry->GetComponent<SkeletalAnimationComponent>(m_PlayerEntity);
+            if (playerAnim) {
+                playerAnim->animationIndex = 0;
+                playerAnim->currentTime = 0.0f;
+                playerAnim->loop = true;
+            }
         }
     }
 

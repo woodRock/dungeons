@@ -28,6 +28,7 @@ public:
   ~GLRenderer();
 
   void Init(int width, int height);
+  void SetClearColor(float r, float g, float b, float a = 1.0f);
   void Render(SDL_Window *window, const Camera &cam, Registry &registry,
               bool swap = true);
 
@@ -71,6 +72,12 @@ private:
   std::unordered_map<std::string, unsigned int> m_Textures;
 
   unsigned int m_DefaultTexture;
+  
+  // Clear color
+  float m_ClearColorR = 0.53f;
+  float m_ClearColorG = 0.81f;
+  float m_ClearColorB = 0.92f;
+  float m_ClearColorA = 1.0f;
 
   // UI Resources
   std::unique_ptr<Shader> m_UIShader;

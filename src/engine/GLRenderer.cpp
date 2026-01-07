@@ -11,6 +11,13 @@ namespace PixelsEngine {
 GLRenderer::GLRenderer() : m_Width(800), m_Height(600), m_DefaultTexture(0) {}
 GLRenderer::~GLRenderer() {}
 
+void GLRenderer::SetClearColor(float r, float g, float b, float a) {
+  m_ClearColorR = r;
+  m_ClearColorG = g;
+  m_ClearColorB = b;
+  m_ClearColorA = a;
+}
+
 void GLRenderer::Init(int width, int height) {
   m_Width = width;
   m_Height = height;
@@ -78,8 +85,8 @@ void GLRenderer::Init(int width, int height) {
           } else {
               vec4 texColor = texture(ourTexture, TexCoord);
               
-              // Dungeon-specific ambient lighting: darker, with cool tone
-              vec3 ambient = 0.25 * vec3(0.8, 0.85, 1.0);
+              // Dungeon-specific ambient lighting: very dark with cool tone
+              vec3 ambient = 0.15 * vec3(0.7, 0.75, 0.9);
               
               // Enhanced diffuse lighting
               vec3 norm = normalize(Normal);
@@ -108,9 +115,15 @@ void GLRenderer::Init(int width, int height) {
               
               // Distance fog - darker dungeon atmosphere
               float fogDist = length(viewPos - FragPos);
-              float fogFactor = clamp(1.0 - fogDist / 80.0, 0.0, 1.0);
-              vec3 fogColor = vec3(0.1, 0.1, 0.15);
+              float fogFactor = clamp(1.0 - fogDist / 60.0, 0.0, 1.0);
+              vec3 fogColor = vec3(0.05, 0.05, 0.1);
               finalColor = mix(fogColor, finalColor, fogFactor);
+              
+              // Vignette effect for atmospheric depth
+              float vignette = length(TexCoord - vec2(0.5, 0.5)) * 1.5;
+              vignette = 1.0 - smoothstep(0.0, 0.8, vignette);
+              vignette = mix(1.0, vignette, 0.4);  // 40% vignette strength
+              finalColor *= vignette;
               
               // Apply flash effect
               finalColor = mix(finalColor, flashColor, flashAmount);
@@ -289,7 +302,10 @@ void GLRenderer::UpdateSkinnedMesh(RenderMesh &rm, int animIdx, float time) {
   // 2. Override Locals with Animation Data
   if (animIdx >= 0 && animIdx < (int)rm.animations.size()) {
     auto &anim = rm.animations[animIdx];
-    float animTime = (anim.duration > 0) ? fmod(time, anim.duration) : 0;
+    float animTime = (anim.duration > 0) ? time : 0;
+    // Only loop if time hasn't exceeded duration (caller should handle looping control)
+    if (animTime > anim.duration)
+      animTime = anim.duration;
 
     // Group channels by bone to compose T/R/S correctly
     struct BoneTransform {
@@ -418,7 +434,7 @@ void GLRenderer::Render(SDL_Window *win, const Camera &cam, Registry &reg,
   int dw, dh;
   SDL_GL_GetDrawableSize(win, &dw, &dh);
   glViewport(0, 0, dw, dh);
-  glClearColor(0.53f, 0.81f, 0.92f, 1.0f);
+  glClearColor(m_ClearColorR, m_ClearColorG, m_ClearColorB, m_ClearColorA);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   m_Shader->Use();
   Vec3 glEye = {cam.x, cam.z, -cam.y};

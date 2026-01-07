@@ -8,6 +8,7 @@
 #include "../engine/AudioManager.h"
 #include "../engine/AssetManager.h"
 #include "../engine/CharacterFactory.h"
+#include "../engine/Skybox.h"
 #include <SDL2/SDL.h>
 #include <memory>
 #include <string>
@@ -29,6 +30,7 @@ public:
     void StartDungeon(const std::vector<std::string>& levels);
     void LoadDungeonFile(const std::string& filename);
     void NextLevel();
+    void SetMap(Map* map) { m_Map = map; }
     
     bool IsActive() const { return m_Active; }
     void SetActive(bool active) { m_Active = active; }
@@ -43,10 +45,12 @@ private:
     GLRenderer* m_Renderer;
     Camera* m_Camera = nullptr;
     Entity m_PlayerEntity = PixelsEngine::INVALID_ENTITY;
+    Map* m_Map = nullptr;
     
     std::unique_ptr<TopDownCamera> m_CameraController;
     std::unique_ptr<TopDownMovementController> m_MovementController;
     std::unique_ptr<AudioManager> m_AudioManager;
+    std::unique_ptr<Skybox> m_Skybox;
     
     bool m_Active = false;
     bool m_LevelComplete = false;
@@ -63,9 +67,16 @@ private:
     Mix_Chunk* m_SfxDoor = nullptr;
     Mix_Chunk* m_SfxSwordHit = nullptr;
     Mix_Chunk* m_SfxSwordMiss = nullptr;
+    Mix_Music* m_AmbienceMusic = nullptr;
     
     float m_AttackTimer = 0.0f;
     int m_CurrentWeapon = 2; // 2 = Melee, 3 = Ranged (matches BattleUnit preferredAction)
+    bool m_IsSneaking = false; // Sneak mode state
+    
+    // Spawn point for respawning on death
+    float m_SpawnX = 0.0f;
+    float m_SpawnY = 0.0f;
+    float m_SpawnZ = 0.0f;
 };
 
 } // namespace PixelsEngine

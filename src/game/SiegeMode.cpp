@@ -52,8 +52,29 @@ void SiegeMode::Init(Camera *camera, Entity &playerEntity) {
   m_Renderer->LoadMesh("Dagger",
                        "assets/adventurers/Assets/gltf/dagger.gltf");
 
+  // Load animation files for death and special animations
+  m_Renderer->LoadMesh("CharacterAnimations", "assets/animations/Animations/gltf/Rig_Medium/Rig_Medium_General.glb");
+  m_Renderer->LoadMesh("SkeletonAnimations", "assets/animations/Animations/gltf/Rig_Medium/Rig_Medium_Special.glb");
+
+  // Copy animations from loaded animation files to character and skeleton meshes
+  RenderMesh* charAnimMesh = m_Renderer->GetRenderMesh("CharacterAnimations");
+  RenderMesh* skelAnimMesh = m_Renderer->GetRenderMesh("SkeletonAnimations");
+  
+  if (charAnimMesh) {
+    RenderMesh* knightMesh = m_Renderer->GetRenderMesh("Knight");
+    if (knightMesh) knightMesh->animations = charAnimMesh->animations;
+  }
+  
+  if (skelAnimMesh) {
+    RenderMesh* skelWarriorMesh = m_Renderer->GetRenderMesh("skel_warrior");
+    RenderMesh* skelMinionMesh = m_Renderer->GetRenderMesh("skel_minion");
+    
+    if (skelWarriorMesh) skelWarriorMesh->animations = skelAnimMesh->animations;
+    if (skelMinionMesh) skelMinionMesh->animations = skelAnimMesh->animations;
+  }
+
   // 3. Load Map
-  MapLoader::LoadFromFile("assets/dungeons/my_dungeon.map", m_Registry,
+  MapLoader::LoadFromFile("assets/saves/my_dungeon.map", m_Registry,
                            m_Renderer);
 
   // 4. Spawn Player
@@ -316,19 +337,20 @@ void SiegeMode::Update(float dt, Entity playerEntity, float tunerDist,
     
     // Check if enemy is dead
     if (eu && eu->hp <= 0) {
-      // Play death/idle animation
+      // Play death animation
       if (anim && mesh) {
         RenderMesh *rm = m_Renderer->GetRenderMesh(mesh->meshName);
         if (rm) {
-          int idleIdx = -1;
+          std::string deathAnim = (mesh->meshName.find("Skeleton") != std::string::npos) ? "Skeletons_Death" : "Death_A";
+          int deathIdx = -1;
           for (size_t i = 0; i < rm->animations.size(); i++) {
-            if (rm->animations[i].name.find("Idle") != std::string::npos) {
-              idleIdx = (int)i;
+            if (rm->animations[i].name.find(deathAnim) != std::string::npos) {
+              deathIdx = (int)i;
               break;
             }
           }
-          if (idleIdx != -1 && anim->animationIndex != idleIdx) {
-            anim->animationIndex = idleIdx;
+          if (deathIdx != -1 && anim->animationIndex != deathIdx) {
+            anim->animationIndex = deathIdx;
             anim->currentTime = 0.0f;
           }
         }

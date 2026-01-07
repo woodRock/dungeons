@@ -5,14 +5,22 @@
 using namespace PixelsEngine;
 
 void DungeonsGame::OnRender() {
-  // 1. Setup Viewport and Clear (Crucial for HighDPI and avoiding artifacts)
+  // 1. Setup clear color based on game state
+  if (m_State == GameState::Dungeon && m_DungeonMode) {
+    // Dungeon uses black skybox
+    m_GLRenderer.SetClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+  } else if (m_State == GameState::MainMenu || m_State == GameState::MapSelect || m_State == GameState::FloorSelect) {
+    // Menu or MapSelect specific clear
+    m_GLRenderer.SetClearColor(0.1f, 0.1f, 0.2f, 1.0f);
+  } else {
+    // Default clear color (sky blue)
+    m_GLRenderer.SetClearColor(0.53f, 0.81f, 0.92f, 1.0f);
+  }
+
+  // 2. Setup Viewport (crucial for HighDPI and avoiding artifacts)
   int dw, dh;
   SDL_GL_GetDrawableSize(m_Window, &dw, &dh);
   glViewport(0, 0, dw, dh);
-
-  // Default clear color (sky blue)
-  glClearColor(0.53f, 0.81f, 0.92f, 1.0f);
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
   // 2. Render 3D Scene (OpenGL), don't swap yet if we have UI
   if (m_State != GameState::MainMenu && m_State != GameState::MapSelect && m_State != GameState::FloorSelect) {
@@ -28,10 +36,6 @@ void DungeonsGame::OnRender() {
     if (m_State == GameState::Creative) {
       m_CreativeMode.RenderWorld(&m_GLRenderer);
     }
-  } else {
-    // Menu or MapSelect specific clear
-    glClearColor(0.1f, 0.1f, 0.2f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   }
 
   // 2. Render UI (using GLRenderer 2D methods)

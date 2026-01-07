@@ -87,14 +87,17 @@ public:
   void SetAcceleration(float accel) { m_Acceleration = accel; }
   void SetFriction(float friction) { m_Friction = friction; }
   void SetMaxSpeed(float maxSpeed) { m_MaxSpeed = maxSpeed; }
+  void SetMap(class Map* map) { m_Map = map; }
 
 private:
   Registry* m_Registry;
   Entity m_PlayerEntity;
+  class Map* m_Map = nullptr;
   
   float m_Acceleration = 80.0f;   // Moderate acceleration
   float m_Friction = 0.92f;       // High friction for immediate stopping
   float m_MaxSpeed = 8.0f;        // Slower, more controlled movement
+  float m_CollisionRadius = 0.3f; // Collision detection radius
 };
 
 } // namespace PixelsEngine

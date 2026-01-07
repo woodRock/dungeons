@@ -1,8 +1,15 @@
 #include "InputController.h"
 #include "Input.h"
+#include "Map.h"
 #include <cmath>
+#include <algorithm>
 
 namespace PixelsEngine {
+
+// Helper to check if a tile is walkable (0 = empty, 3 = stairs, >0 but not 3 = wall)
+inline bool IsWalkable(int tileValue) {
+  return tileValue == 0 || tileValue == 3;  // Empty tiles or stairs
+}
 
 // ============================================================================
 // FirstPersonMovementController Implementation
@@ -149,8 +156,29 @@ void TopDownMovementController::HandleInput(float dt) {
     dx /= len;
     dy /= len;
 
-    phys->velX += dx * accel;
-    phys->velY += dy * accel;
+    // Calculate new velocity
+    float newVelX = phys->velX + dx * accel;
+    float newVelY = phys->velY + dy * accel;
+    
+    // Clamp velocity first
+    float speed = sqrt(newVelX * newVelX + newVelY * newVelY);
+    if (speed > m_MaxSpeed) {
+      float scale = m_MaxSpeed / speed;
+      newVelX *= scale;
+      newVelY *= scale;
+    }
+    
+    // Check collision with walls before applying velocity
+    // TEMPORARILY DISABLED - collision system needs rethinking
+    if (m_Map) {
+      // For now, apply velocity directly without collision checking
+      phys->velX = newVelX;
+      phys->velY = newVelY;
+    } else {
+      // No map provided, apply movement directly
+      phys->velX = newVelX;
+      phys->velY = newVelY;
+    }
 
     // Rotate player to face movement direction
     // Formula: atan2(dx, dy) + PI correctly maps movement vector to character rotation
@@ -162,14 +190,6 @@ void TopDownMovementController::HandleInput(float dt) {
   // Always apply friction for immediate deceleration when keys are released
   phys->velX *= m_Friction;
   phys->velY *= m_Friction;
-
-  // Clamp velocity
-  float speed = sqrt(phys->velX * phys->velX + phys->velY * phys->velY);
-  if (speed > m_MaxSpeed) {
-    float scale = m_MaxSpeed / speed;
-    phys->velX *= scale;
-    phys->velY *= scale;
-  }
 }
 
 } // namespace PixelsEngine
