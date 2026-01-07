@@ -64,6 +64,7 @@ void SiegeMode::Init(Camera *camera, Entity &playerEntity) {
   m_CameraController->SetDistance(3.0f);      // Distance behind player
   m_CameraController->SetShoulder(0.0f);     // Center behind, not on shoulder
   m_CameraController->SetHeight(1.6f);       // Eye level height
+  m_CameraController->SetYaw(-M_PI / 2);  // Rotate 180 degrees to look from behind
   // Create movement controller for player input handling
   m_MovementController = std::make_unique<ThirdPersonMovementController>(
       m_Registry, playerEntity);
@@ -99,7 +100,8 @@ void SiegeMode::Update(float dt, Entity playerEntity, float tunerDist,
 
   // Sync player rotation with camera yaw for consistent facing direction
   if (m_CameraController) {
-    t->rot = -m_CameraController->GetCameraYaw();
+    float player_rot_offset = -M_PI / 2; // Adjust for model facing direction
+    t->rot = -m_CameraController->GetCameraYaw() + player_rot_offset;
   }
 
   // Update camera position (third-person follows player)
