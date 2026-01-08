@@ -8,7 +8,6 @@
 #include "../engine/TextRenderer.h"
 #include "BattleMode.h"
 #include "CreativeMode.h"
-#include "ExplorationMode.h"
 #include "SiegeMode.h"
 #include "DungeonMode.h"
 #include "SidescrollerMode.h"
@@ -37,7 +36,6 @@ protected:
 
 private:
   // Modular systems
-  void InitGame();
   void InitSiege();
   void InitBattle();
   void InitDungeon();
@@ -93,7 +91,6 @@ private:
 
   PixelsEngine::CreativeMode m_CreativeMode;
   std::unique_ptr<SiegeMode> m_SiegeMode;
-  std::unique_ptr<ExplorationMode> m_ExplorationMode;
   std::unique_ptr<BattleMode> m_BattleMode;
   std::unique_ptr<PixelsEngine::DungeonMode> m_DungeonMode;
   std::unique_ptr<PixelsEngine::SidescrollerMode> m_SidescrollerMode;

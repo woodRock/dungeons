@@ -149,12 +149,6 @@ void DungeonsGame::UpdatePhysics(float dt) {
         }
     }
 
-      // Sidescroller safety net: if no walkable surface was detected, snap to z=0
-      if (m_State == GameState::Sidescroller && !overFloor) {
-        currentFloorHeight = 0.0f;
-        overFloor = true;
-      }
-
     // Base eye height adjustment
     float eyeOffset = 0.0f;
       if (entity == m_PlayerEntity && m_State == GameState::Sidescroller) {

@@ -20,17 +20,11 @@ void DungeonsGame::HandleInputGameplay(float dt) {
   }
 
   if (m_GameFinished) {
-    if (Input::IsKeyPressed(SDL_SCANCODE_SPACE)) {
-      // Next Level
-      m_CurrentLevel++;
-      if (m_CurrentLevel > 3)
-        m_CurrentLevel = 1;
-      InitGame();
-      return;
-    }
-    if (Input::IsKeyPressed(SDL_SCANCODE_R)) {
-      // Retry
-      InitGame();
+    // Game finished - return to main menu
+    if (Input::IsKeyPressed(SDL_SCANCODE_SPACE) || Input::IsKeyPressed(SDL_SCANCODE_R)) {
+      m_State = GameState::MainMenu;
+      SDL_SetRelativeMouseMode(SDL_FALSE);
+      m_MenuSelection = 0;
       return;
     }
     return;
@@ -246,7 +240,7 @@ void DungeonsGame::HandleInputMenu() {
   int gap = 70;
   int startX = w / 2 - btnW / 2;
   bool action = false;
-  int numButtons = m_InOptions ? 2 : 8;
+  int numButtons = m_InOptions ? 2 : 7;
 
   // Mouse
   for (int i = 0; i < numButtons; i++) {
@@ -284,44 +278,41 @@ void DungeonsGame::HandleInputMenu() {
     if (!m_InOptions) {
       switch (m_MenuSelection) {
       case 0:
-        InitGame();
-        m_State = GameState::Playing;
-        SDL_SetRelativeMouseMode(SDL_TRUE);
-        break;
-      case 1:
-        InitGame();
+        m_Registry = Registry();
+        m_GameFinished = false;
         m_State = GameState::Creative;
         m_CreativeMode.ToggleEditorMode();
         SDL_SetRelativeMouseMode(SDL_TRUE);
         break;
-      case 2:
+      case 1:
         // Dungeon Mode - Go to Character Selection
         m_State = GameState::CharacterSelect;
         m_CharacterSelection = 0;
         SDL_SetRelativeMouseMode(SDL_FALSE);
         break;
-      case 3:
-        InitGame();
+      case 2:
+        m_Registry = Registry();
+        m_GameFinished = false;
         m_SidescrollerMode = std::make_unique<SidescrollerMode>(&m_Registry, &m_GLRenderer);
         m_SidescrollerMode->Init(m_Camera.get(), m_PlayerEntity);
         m_State = GameState::Sidescroller;
         SDL_SetRelativeMouseMode(SDL_TRUE);
         break;
-      case 4:
+      case 3:
         InitSiege();
         m_State = GameState::Siege;
         SDL_SetRelativeMouseMode(SDL_TRUE);
         break;
-      case 5:
+      case 4:
         InitBattle();
         m_State = GameState::Battle;
         SDL_SetRelativeMouseMode(SDL_FALSE);
         break;
-      case 6:
+      case 5:
         m_InOptions = true;
         m_MenuSelection = 0;
         break;
-      case 7:
+      case 6:
         m_IsRunning = false;
         break;
       }

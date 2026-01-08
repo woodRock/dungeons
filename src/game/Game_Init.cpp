@@ -42,21 +42,7 @@ void DungeonsGame::InitMainMenu() {
   m_MenuSelection = 0;
 }
 
-void DungeonsGame::InitGame() {
-  m_Registry = Registry();
 
-  m_GameFinished = false;
-  m_RunTimer = 0.0f;
-  m_TargetsDestroyed = 0;
-
-  if (!m_ExplorationMode) {
-    m_ExplorationMode = std::make_unique<ExplorationMode>(
-        &m_Registry, &m_GLRenderer, &m_CreativeMode);
-  }
-  m_ExplorationMode->Init(m_Camera.get(), m_PlayerEntity);
-
-  m_State = GameState::Playing;
-}
 
 void DungeonsGame::InitSiege() {
   m_Registry = Registry();
