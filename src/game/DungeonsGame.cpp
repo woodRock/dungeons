@@ -336,18 +336,27 @@ void DungeonsGame::UpdateAnimations(float dt) {
     if (mesh) {
       RenderMesh *rm = m_GLRenderer.GetRenderMesh(mesh->meshName);
       if (rm && rm->isSkinned) {
-        // Only advance animation time if looping is enabled or if animation hasn't finished
-        if (anim.loop || anim.animationIndex < 0 || anim.animationIndex >= (int)rm->animations.size()) {
-          anim.currentTime += dt * anim.speed;
-        } else {
+        // Advance animation time
+        anim.currentTime += dt * anim.speed;
+        
+        // Handle looping and clamping based on animation settings
+        if (anim.animationIndex >= 0 && anim.animationIndex < (int)rm->animations.size()) {
           float animDuration = rm->animations[anim.animationIndex].duration;
-          if (anim.currentTime < animDuration) {
-            anim.currentTime += dt * anim.speed;
-            if (anim.currentTime > animDuration) {
-              anim.currentTime = animDuration;
+          if (animDuration > 0) {
+            if (anim.loop) {
+              // Wrap time for looping animations
+              while (anim.currentTime >= animDuration) {
+                anim.currentTime -= animDuration;
+              }
+            } else {
+              // Clamp time for non-looping animations
+              if (anim.currentTime > animDuration) {
+                anim.currentTime = animDuration;
+              }
             }
           }
         }
+        
         m_GLRenderer.UpdateSkinnedMesh(*rm, anim.animationIndex,
                                        anim.currentTime);
       }

@@ -66,6 +66,21 @@ void BattleMode::Init(Camera *camera, Entity &playerEntity) {
   m_Renderer->LoadMesh("Staff", "assets/adventurers/Assets/gltf/staff.gltf");
   m_Renderer->LoadMesh("Dagger", "assets/adventurers/Assets/gltf/dagger.gltf");
 
+  // Load skeleton special animations (includes Skeletons_Death)
+  m_Renderer->LoadMesh("SkeletonAnimations", "assets/animations/Animations/gltf/Rig_Medium/Rig_Medium_Special.glb");
+  
+  // Copy special skeleton animations to skeleton meshes
+  RenderMesh* skelAnimMesh = m_Renderer->GetRenderMesh("SkeletonAnimations");
+  if (skelAnimMesh) {
+    RenderMesh* skelWarriorMesh = m_Renderer->GetRenderMesh("Skeleton_Warrior");
+    RenderMesh* skelMinionMesh = m_Renderer->GetRenderMesh("Skeleton_Minion");
+    RenderMesh* skelMageMesh = m_Renderer->GetRenderMesh("Skeleton_Mage");
+    
+    if (skelWarriorMesh) skelWarriorMesh->animations = skelAnimMesh->animations;
+    if (skelMinionMesh) skelMinionMesh->animations = skelAnimMesh->animations;
+    if (skelMageMesh) skelMageMesh->animations = skelAnimMesh->animations;
+  }
+
   // Load Map
   MapLoader::LoadFromFile("assets/saves/my_dungeon.map", m_Registry,
                            m_Renderer);
@@ -601,7 +616,7 @@ void BattleMode::HandlePlayerInput() {
       auto *target =
           m_Registry->GetComponent<BattleUnitComponent>(m_Cursor.hoveredEntity);
       if (target && target->team == BattleUnitComponent::Enemy &&
-          unit->hasAction) {
+          target->hp > 0 && unit->hasAction) {
         float dist = sqrt(pow(t->x - m_Registry
                                          ->GetComponent<Transform3DComponent>(
                                              m_Cursor.hoveredEntity)
@@ -674,7 +689,7 @@ void BattleMode::HandlePlayerInput() {
     if (m_Cursor.hoveredEntity != -1 && unit->hasAction) {
       auto *target =
           m_Registry->GetComponent<BattleUnitComponent>(m_Cursor.hoveredEntity);
-      if (target && target->team == BattleUnitComponent::Enemy) {
+      if (target && target->team == BattleUnitComponent::Enemy && target->hp > 0) {
         float dist = sqrt(pow(t->x - m_Registry
                                          ->GetComponent<Transform3DComponent>(
                                              m_Cursor.hoveredEntity)
@@ -845,12 +860,14 @@ void BattleMode::ExecuteAction(Entity actor, ActionType action, Entity target,
         if (targetMesh && targetAnim) {
           RenderMesh *trm = m_Renderer->GetRenderMesh(targetMesh->meshName);
           if (trm) {
+            // Skeletons have special death animation where legs fall off
             std::string deathAnim = (targetMesh->meshName.find("Skeleton") != std::string::npos) ? "Skeletons_Death" : "Death_A";
             for (size_t i = 0; i < trm->animations.size(); i++) {
               if (trm->animations[i].name.find(deathAnim) != std::string::npos) {
                 targetAnim->animationIndex = (int)i;
                 targetAnim->currentTime = 0.0f;
                 targetAnim->loop = false; // Don't loop death animation
+                targetAnim->speed = 1.0f; // Ensure speed is set
                 break;
               }
             }
@@ -1195,7 +1212,8 @@ void BattleMode::RaycastCursor() {
       for (auto &pair : view) {
         auto *trans =
             m_Registry->GetComponent<Transform3DComponent>(pair.first);
-        if (trans) {
+        auto *unit = m_Registry->GetComponent<BattleUnitComponent>(pair.first);
+        if (trans && (!unit || unit->hp > 0)) {  // Only target alive entities
           float dist = sqrt(pow(m_Cursor.x - trans->x, 2) +
                             pow(m_Cursor.y - trans->y, 2));
           if (dist < 1.0f) {
