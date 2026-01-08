@@ -83,7 +83,7 @@ Entity CharacterFactory::CreateCharacter(Registry* registry,
   if (isPlayer) {
     // Player components
     registry->AddComponent<PlayerControlComponent>(e,
-                                                    {5.0f, 0.003f, 6.0f});
+                                                    {5.0f, 0.003f, 10.0f});
     registry->AddComponent<WeaponComponent>(e, {0.0f, 0.0f, false});
 
     // Default sword attachment

@@ -246,7 +246,7 @@ void DungeonsGame::HandleInputMenu() {
   int gap = 70;
   int startX = w / 2 - btnW / 2;
   bool action = false;
-  int numButtons = m_InOptions ? 2 : 7;
+  int numButtons = m_InOptions ? 2 : 8;
 
   // Mouse
   for (int i = 0; i < numButtons; i++) {
@@ -301,20 +301,27 @@ void DungeonsGame::HandleInputMenu() {
         SDL_SetRelativeMouseMode(SDL_FALSE);
         break;
       case 3:
+        InitGame();
+        m_SidescrollerMode = std::make_unique<SidescrollerMode>(&m_Registry, &m_GLRenderer);
+        m_SidescrollerMode->Init(m_Camera.get(), m_PlayerEntity);
+        m_State = GameState::Sidescroller;
+        SDL_SetRelativeMouseMode(SDL_TRUE);
+        break;
+      case 4:
         InitSiege();
         m_State = GameState::Siege;
         SDL_SetRelativeMouseMode(SDL_TRUE);
         break;
-      case 4:
+      case 5:
         InitBattle();
         m_State = GameState::Battle;
         SDL_SetRelativeMouseMode(SDL_FALSE);
         break;
-      case 5:
+      case 6:
         m_InOptions = true;
         m_MenuSelection = 0;
         break;
-      case 6:
+      case 7:
         m_IsRunning = false;
         break;
       }

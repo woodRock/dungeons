@@ -4,6 +4,7 @@
 #include "../engine/TextRenderer.h"
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <iostream>
 
 namespace PixelsEngine {
@@ -47,6 +48,18 @@ void DungeonMode::Init(Camera* camera, Entity& playerEntity) {
     m_Renderer->LoadMesh("Sword", "assets/adventurers/Assets/gltf/sword_1handed.gltf");
     m_Renderer->LoadMesh("Crossbow", "assets/adventurers/Assets/gltf/crossbow_1handed.gltf");
     m_Renderer->LoadMesh("Arrow", "assets/adventurers/Assets/gltf/arrow_bow.gltf");
+
+    // Load forest assets
+    m_Renderer->LoadTexture("forest_tex", "assets/forests/Assets/gltf/forest_texture.png");
+    std::string forestPath = "assets/forests/Assets/gltf/";
+    if (std::filesystem::exists(forestPath)) {
+      for (const auto& entry : std::filesystem::directory_iterator(forestPath)) {
+        if (entry.path().extension() == ".gltf") {
+          std::string meshName = entry.path().stem().string();
+          m_Renderer->LoadMesh(meshName, entry.path().string());
+        }
+      }
+    }
 
     // Load all animation files for the player character
     m_Renderer->LoadMesh("CharacterAnimations_General", "assets/animations/Animations/gltf/Rig_Medium/Rig_Medium_General.glb");

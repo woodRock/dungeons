@@ -147,6 +147,25 @@ void CreativeMode::ScanAssets() {
     }
   }
 
+  // 4. Forests (GLTF)
+  std::string forestPath = "assets/forests/Assets/gltf/";
+  if (fs::exists(forestPath)) {
+    // Load forest texture once
+    if (m_Renderer) {
+      m_Renderer->LoadTexture("forest_tex",
+                              "assets/forests/Assets/gltf/forest_texture.png");
+    }
+    for (const auto &entry : fs::directory_iterator(forestPath)) {
+      if (entry.path().extension() == ".gltf") {
+        std::string meshName = entry.path().stem().string();
+        if (m_Renderer) {
+          m_Renderer->LoadMesh(meshName, entry.path().string());
+        }
+        m_Assets.push_back({meshName, meshName, "forest_tex"});
+      }
+    }
+  }
+
   // Sort alphabetically
   std::sort(m_Assets.begin(), m_Assets.end(),
             [](const EditorAsset &a, const EditorAsset &b) {
@@ -435,6 +454,7 @@ void CreativeMode::UpdateCursor() {
     bool isDoor = false;
     bool isScaffoldDoor = false;
     bool isCorner = false;
+    bool isStairs = false;
 
     if (m_SelectedSlot >= 0 && m_SelectedSlot < m_Hotbar.size()) {
       std::string name = m_Hotbar[m_SelectedSlot].meshName;
@@ -442,18 +462,27 @@ void CreativeMode::UpdateCursor() {
       isDoor = (name == "wall_doorway_door");
       isScaffoldDoor = (name == "wall_doorway_scaffold_door");
       isCorner = (name.find("corner") != std::string::npos);
+      isStairs = (name == "stairs");
       if (name.find("small") != std::string::npos && !isCorner) {
         snapSize = m_GridSize / 4.0f;
       }
     }
 
-    m_Highlight.x = round(prevX / snapSize) * snapSize;
-    m_Highlight.y = round(prevY / snapSize) * snapSize;
-
-    // Fix sinking: Ensure Z is snapped to full grid (not quarter-grid for corners)
-    m_Highlight.z = round(prevZ / m_GridSize) * m_GridSize;
-    if (m_Highlight.z < 0)
-      m_Highlight.z = 0;
+    // Stairs always snap to full grid in X and Y (occupy one tile space)
+    if (isStairs) {
+      m_Highlight.x = round(prevX / m_GridSize) * m_GridSize;
+      m_Highlight.y = round(prevY / m_GridSize) * m_GridSize;
+      m_Highlight.z = round(prevZ / m_GridSize) * m_GridSize;  // Allow 3D placement
+      if (m_Highlight.z < 0)
+        m_Highlight.z = 0;
+    } else {
+      m_Highlight.x = round(prevX / snapSize) * snapSize;
+      m_Highlight.y = round(prevY / snapSize) * snapSize;
+      // Fix sinking: Ensure Z is snapped to full grid (not quarter-grid for corners)
+      m_Highlight.z = round(prevZ / m_GridSize) * m_GridSize;
+      if (m_Highlight.z < 0)
+        m_Highlight.z = 0;
+    }
 
     // Calculate Rotation: Map to 4 cardinal directions (Face Player)
     float yaw = m_Camera->yaw;
@@ -728,6 +757,10 @@ void CreativeMode::RenderWorld(GLRenderer *ren) {
           ox = -quarterGrid;
           oy = quarterGrid;
         }
+      } else if (ln == "stairs") {
+        // Stairs have no offset - always centered on tile
+        ox = 0;
+        oy = 0;
       }
 
       ren->RenderMeshPreview(asset.meshName, asset.textureName, m_Highlight.x,
@@ -965,7 +998,7 @@ void CreativeMode::DrawHotbar(GLRenderer *ren, TextRenderer *tr, int w,
                       {255, 255, 255, 255});
     }
 
-    ren->DrawRect2D(x, y, slotSize, slotSize, {100, 100, 100, 200});
+    ren->DrawRect2D(x, y, slotSize, slotSize, {140, 140, 140, 220});
 
     if (!m_Hotbar[i].name.empty()) {
       ren->RenderThumbnail(m_Hotbar[i].meshName, m_Hotbar[i].textureName, x + 5,
@@ -982,11 +1015,11 @@ void CreativeMode::DrawHotbar(GLRenderer *ren, TextRenderer *tr, int w,
 
 void CreativeMode::DrawInventory(GLRenderer *ren, TextRenderer *tr, int w,
                                   int h) {
-  // Dim background
-  ren->DrawRect2D(0, 0, w, h, {0, 0, 0, 200});
+  // Brighter background for better visibility
+  ren->DrawRect2D(0, 0, w, h, {30, 30, 30, 220});
 
   // Search Box
-  ren->DrawRect2D(w / 2 - 200, 50, 400, 40, {50, 50, 50, 255});
+  ren->DrawRect2D(w / 2 - 200, 50, 400, 40, {70, 70, 70, 255});
   tr->RenderText(ren, "Search: " + m_SearchQuery + "_", w / 2 - 190, 60,
                  {255, 255, 255, 255});
 
@@ -1020,9 +1053,9 @@ void CreativeMode::DrawInventory(GLRenderer *ren, TextRenderer *tr, int w,
 
     bool hover = (mx >= x && mx <= x + btnW && my >= y && my <= y + btnH);
 
-    SDL_Color c = {100, 100, 100, 255};
+    SDL_Color c = {130, 130, 130, 255};
     if (hover) {
-      c = {150, 150, 150, 255};
+      c = {170, 170, 170, 255};
       tooltip = m_Assets[assetIdx].name;
 
       if (Input::IsKeyPressed(SDL_SCANCODE_1))
@@ -1066,7 +1099,7 @@ void CreativeMode::DrawInventory(GLRenderer *ren, TextRenderer *tr, int w,
 
   if (!tooltip.empty()) {
     ren->DrawRect2D(mx + 15, my + 15, (int)tooltip.length() * 12, 30,
-                    {20, 20, 20, 230});
+                    {40, 40, 40, 230});
     tr->RenderText(ren, tooltip, mx + 20, my + 20, {255, 255, 100, 255});
   }
 }

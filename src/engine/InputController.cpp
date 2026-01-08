@@ -134,6 +134,7 @@ void TopDownMovementController::HandleInput(float dt) {
 
   auto *t = m_Registry->GetComponent<Transform3DComponent>(m_PlayerEntity);
   auto *phys = m_Registry->GetComponent<PhysicsComponent>(m_PlayerEntity);
+  auto *ctrl = m_Registry->GetComponent<PlayerControlComponent>(m_PlayerEntity);
   
   if (!t || !phys) return;
 
@@ -185,6 +186,22 @@ void TopDownMovementController::HandleInput(float dt) {
     // W (+Y) -> atan2(0, 1) + PI = PI (Faces South)
     // A (-X) -> atan2(-1, 0) + PI = PI/2 (Faces East)
     t->rot = atan2(dx, dy) + M_PI;
+  }
+
+  // Jump handling with double jump support (uses PlayerControlComponent jumpForce if available)
+  if (Input::IsKeyPressed(m_KeyJump)) {
+    float jumpForce = ctrl ? ctrl->jumpForce : 10.0f;
+    
+    if (phys->isGrounded) {
+      // Ground jump
+      phys->velZ = jumpForce;
+      phys->isGrounded = false;
+      phys->doubleJumpCount = 0;
+    } else if (phys->doubleJumpCount < phys->maxDoubleJumps) {
+      // Double jump
+      phys->velZ = jumpForce * 0.9f; // Slightly lower force for double jump
+      phys->doubleJumpCount++;
+    }
   }
   
   // Always apply friction for immediate deceleration when keys are released

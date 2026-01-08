@@ -777,7 +777,8 @@ void GLRenderer::RenderThumbnail(const std::string &meshName,
   glEnable(GL_SCISSOR_TEST);
   glScissor(scaledX, scaledHeight - (scaledY + scaledSize), scaledSize,
             scaledSize);
-  glClear(GL_DEPTH_BUFFER_BIT);
+  glClearColor(0.3f, 0.3f, 0.3f, 1.0f);  // Brighter background for thumbnails
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   glDisable(GL_SCISSOR_TEST);
 
   glEnable(GL_DEPTH_TEST);
@@ -786,7 +787,8 @@ void GLRenderer::RenderThumbnail(const std::string &meshName,
   m_Shader->SetFloat("alpha", 1.0f);
   m_Shader->SetInt("useFlatColor", 0);
 
-  Vec3 eye = {0.0f, 1.5f, 2.5f};
+  // Better positioned light for thumbnails - more overhead and closer
+  Vec3 eye = {2.0f, 2.0f, 2.5f};
   Mat4 view = Mat4::LookAt(eye, {0, 0.5f, 0}, {0, 1, 0});
   Mat4 proj = Mat4::Perspective(0.8f, 1.0f, 0.1f, 100.0f);
 

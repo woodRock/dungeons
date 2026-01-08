@@ -98,6 +98,47 @@ void SetHitboxFromMeshName(const std::string& meshName, HitboxComponent& hitbox)
     hitbox.climbHeight = 0.5f;
     return;
   }
+
+  // Forest assets - trees, bushes, grass, rocks (mostly non-solid decoration)
+  if (meshName.find("Tree") != std::string::npos) {
+    hitbox.width = 0.8f;
+    hitbox.depth = 0.8f;
+    hitbox.height = 3.0f;
+    hitbox.offsetZ = 1.5f;
+    hitbox.isSolid = false;  // Decorative, not solid
+    hitbox.isClimbable = false;
+    return;
+  }
+
+  if (meshName.find("Bush") != std::string::npos) {
+    hitbox.width = 0.6f;
+    hitbox.depth = 0.6f;
+    hitbox.height = 1.0f;
+    hitbox.offsetZ = 0.5f;
+    hitbox.isSolid = false;  // Decorative
+    hitbox.isClimbable = false;
+    return;
+  }
+
+  if (meshName.find("Grass") != std::string::npos) {
+    hitbox.width = 0.5f;
+    hitbox.depth = 0.5f;
+    hitbox.height = 0.3f;
+    hitbox.offsetZ = 0.15f;
+    hitbox.isSolid = false;  // Ground decoration
+    hitbox.isClimbable = false;
+    return;
+  }
+
+  if (meshName.find("Rock") != std::string::npos) {
+    hitbox.width = 0.7f;
+    hitbox.depth = 0.7f;
+    hitbox.height = 0.6f;
+    hitbox.offsetZ = 0.3f;
+    hitbox.isSolid = false;  // Decorative
+    hitbox.isClimbable = false;
+    return;
+  }
   
   // Default for unknown objects - small non-solid
   hitbox.width = 0.5f;
@@ -155,6 +196,17 @@ int MapLoader::LoadFromFileWithPath(const std::string& path, Registry* registry,
           
           auto am = std::make_unique<AssetManager>(renderer);
           am->LoadCharacter(actualMeshToLoad, meshPath, texPath);
+      } else if (actualMeshToLoad.find("Tree") != std::string::npos || 
+                 actualMeshToLoad.find("Bush") != std::string::npos ||
+                 actualMeshToLoad.find("Grass") != std::string::npos ||
+                 actualMeshToLoad.find("Rock") != std::string::npos) {
+          // Forest assets
+          std::string fullPath = "assets/forests/Assets/gltf/" + actualMeshToLoad + ".gltf";
+          if (!renderer->LoadMesh(actualMeshToLoad, fullPath)) {
+            std::cerr << "MapLoader: Failed to load forest mesh: " << actualMeshToLoad
+                      << " from " << fullPath << std::endl;
+            continue;
+          }
       } else {
           std::string fullPath = assetBasePath + actualMeshToLoad + ".obj";
           if (!renderer->LoadMesh(actualMeshToLoad, fullPath)) {

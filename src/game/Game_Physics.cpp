@@ -65,7 +65,8 @@ namespace {
 
 void DungeonsGame::UpdatePhysics(float dt) {
   if (m_State != GameState::Playing && m_State != GameState::Creative &&
-      m_State != GameState::Siege && m_State != GameState::Dungeon)
+      m_State != GameState::Siege && m_State != GameState::Dungeon &&
+      m_State != GameState::Sidescroller)
     return;
 
   auto &physicsView = m_Registry.View<PhysicsComponent>();
@@ -148,9 +149,17 @@ void DungeonsGame::UpdatePhysics(float dt) {
         }
     }
 
+      // Sidescroller safety net: if no walkable surface was detected, snap to z=0
+      if (m_State == GameState::Sidescroller && !overFloor) {
+        currentFloorHeight = 0.0f;
+        overFloor = true;
+      }
+
     // Base eye height adjustment
     float eyeOffset = 0.0f;
-    if (entity == m_PlayerEntity && m_State != GameState::Siege && m_State != GameState::Dungeon) {
+      if (entity == m_PlayerEntity && m_State == GameState::Sidescroller) {
+        eyeOffset = 0.0f; // Keep the player feet on the platform in sidescroller
+      } else if (entity == m_PlayerEntity && m_State != GameState::Siege && m_State != GameState::Dungeon) {
         eyeOffset = phys->isSliding ? 0.75f : 1.5f;
     }
     

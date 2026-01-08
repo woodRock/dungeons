@@ -9,6 +9,9 @@ void DungeonsGame::OnRender() {
   if (m_State == GameState::Dungeon && m_DungeonMode) {
     // Dungeon uses black skybox
     m_GLRenderer.SetClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+  } else if (m_State == GameState::Sidescroller && m_SidescrollerMode) {
+    // Sidescroller uses black skybox
+    m_GLRenderer.SetClearColor(0.0f, 0.0f, 0.0f, 1.0f);
   } else if (m_State == GameState::MainMenu || m_State == GameState::MapSelect || m_State == GameState::FloorSelect) {
     // Menu or MapSelect specific clear
     m_GLRenderer.SetClearColor(0.1f, 0.1f, 0.2f, 1.0f);
@@ -62,9 +65,11 @@ void DungeonsGame::OnRender() {
   } else if (m_State == GameState::CharacterSelect) {
     RenderCharacterSelect();
   } else if (m_State == GameState::Playing || m_State == GameState::Battle ||
-             m_State == GameState::Siege || m_State == GameState::Dungeon) {
+             m_State == GameState::Siege || m_State == GameState::Dungeon || m_State == GameState::Sidescroller) {
     if (m_State == GameState::Dungeon && m_DungeonMode) {
         m_DungeonMode->RenderUI(&m_GLRenderer, m_TextRenderer.get(), m_Width, m_Height);
+    } else if (m_State == GameState::Sidescroller && m_SidescrollerMode) {
+        m_SidescrollerMode->RenderUI(&m_GLRenderer, m_TextRenderer.get(), m_Width, m_Height);
     }
     RenderUI();
   }

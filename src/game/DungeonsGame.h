@@ -11,6 +11,7 @@
 #include "ExplorationMode.h"
 #include "SiegeMode.h"
 #include "DungeonMode.h"
+#include "SidescrollerMode.h"
 #include "GameSettings.h"
 #include <memory>
 
@@ -22,7 +23,7 @@ struct DungeonStats {
   int playerHealth = 100;
 };
 
-enum class GameState { MainMenu, Playing, Creative, Siege, Battle, Dungeon, Paused, MapSelect, FloorSelect, Settings, GameOver, CharacterSelect };
+enum class GameState { MainMenu, Playing, Creative, Siege, Battle, Dungeon, Sidescroller, Paused, MapSelect, FloorSelect, Settings, GameOver, CharacterSelect };
 
 class DungeonsGame : public PixelsEngine::Application {
 public:
@@ -95,6 +96,7 @@ private:
   std::unique_ptr<ExplorationMode> m_ExplorationMode;
   std::unique_ptr<BattleMode> m_BattleMode;
   std::unique_ptr<PixelsEngine::DungeonMode> m_DungeonMode;
+  std::unique_ptr<PixelsEngine::SidescrollerMode> m_SidescrollerMode;
 
   std::shared_ptr<PixelsEngine::Texture> m_BowIdle;
   std::shared_ptr<PixelsEngine::Texture> m_BowDraw;
