@@ -66,36 +66,6 @@ void BattleMode::Init(Camera *camera, Entity &playerEntity) {
   m_Renderer->LoadMesh("Staff", "assets/adventurers/Assets/gltf/staff.gltf");
   m_Renderer->LoadMesh("Dagger", "assets/adventurers/Assets/gltf/dagger.gltf");
 
-  // Load animation files for death and special animations
-  m_Renderer->LoadMesh("CharacterAnimations", "assets/animations/Animations/gltf/Rig_Medium/Rig_Medium_General.glb");
-  m_Renderer->LoadMesh("SkeletonAnimations", "assets/animations/Animations/gltf/Rig_Medium/Rig_Medium_Special.glb");
-
-  // Copy animations from loaded animation files to character and skeleton meshes
-  RenderMesh* charAnimMesh = m_Renderer->GetRenderMesh("CharacterAnimations");
-  RenderMesh* skelAnimMesh = m_Renderer->GetRenderMesh("SkeletonAnimations");
-  
-  if (charAnimMesh) {
-    RenderMesh* knightMesh = m_Renderer->GetRenderMesh("Knight");
-    RenderMesh* rangerMesh = m_Renderer->GetRenderMesh("Ranger");
-    RenderMesh* mageMesh = m_Renderer->GetRenderMesh("Mage");
-    RenderMesh* rogueMesh = m_Renderer->GetRenderMesh("Rogue");
-    
-    if (knightMesh) knightMesh->animations = charAnimMesh->animations;
-    if (rangerMesh) rangerMesh->animations = charAnimMesh->animations;
-    if (mageMesh) mageMesh->animations = charAnimMesh->animations;
-    if (rogueMesh) rogueMesh->animations = charAnimMesh->animations;
-  }
-  
-  if (skelAnimMesh) {
-    RenderMesh* skelWarriorMesh = m_Renderer->GetRenderMesh("Skeleton_Warrior");
-    RenderMesh* skelMinionMesh = m_Renderer->GetRenderMesh("Skeleton_Minion");
-    RenderMesh* skelMageMesh = m_Renderer->GetRenderMesh("Skeleton_Mage");
-    
-    if (skelWarriorMesh) skelWarriorMesh->animations = skelAnimMesh->animations;
-    if (skelMinionMesh) skelMinionMesh->animations = skelAnimMesh->animations;
-    if (skelMageMesh) skelMageMesh->animations = skelAnimMesh->animations;
-  }
-
   // Load Map
   MapLoader::LoadFromFile("assets/saves/my_dungeon.map", m_Registry,
                            m_Renderer);
@@ -199,8 +169,15 @@ void BattleMode::SpawnCharacter(const std::string &mesh, float x, float y,
         break;
       }
     }
+    std::cout << "[DEBUG] Spawning " << mesh << " with " << rm->animations.size() << " animations:";
+    for (size_t i = 0; i < rm->animations.size(); ++i) {
+      std::cout << " [" << i << "]=" << rm->animations[i].name;
+    }
+    std::cout << ". Idle animation index: " << idleIdx << std::endl;
     m_Registry->AddComponent<SkeletalAnimationComponent>(
         e, {idleIdx, (float)(rand() % 100) * 0.01f, 1.0f});
+  } else {
+    std::cout << "[DEBUG] Mesh " << mesh << " not skinned or not found!" << std::endl;
   }
 
   BattleUnitComponent unit;
@@ -347,6 +324,7 @@ void BattleMode::Update(float dt, Entity playerEntity) {
               if (rm->animations[i].name.find("Idle") != std::string::npos) {
                 animComp->animationIndex = (int)i;
                 animComp->currentTime = 0.0f;
+                animComp->loop = true;
                 break;
               }
             }
@@ -398,6 +376,7 @@ void BattleMode::Update(float dt, Entity playerEntity) {
             if (rm->animations[i].name.find("Idle") != std::string::npos) {
               animComp->animationIndex = (int)i;
               animComp->currentTime = 0.0f;
+              animComp->loop = true;
               break;
             }
           }
@@ -445,14 +424,43 @@ void BattleMode::Update(float dt, Entity playerEntity) {
   }
 
   auto &skeletalView = m_Registry->View<SkeletalAnimationComponent>();
+  static int frameCounter = 0;
+  frameCounter++;
+  bool debugFrame = (frameCounter % 60 == 0);  // Debug every 60 frames
+  
   for (auto &pair : skeletalView) {
     Entity e = pair.first;
     auto &anim = pair.second;
     auto *mesh = m_Registry->GetComponent<MeshComponent>(e);
     if (mesh) {
       RenderMesh *rm = m_Renderer->GetRenderMesh(mesh->meshName);
+      if (debugFrame && rm) {
+        std::cout << "[DEBUG] Frame " << frameCounter << ": Entity " << e << " mesh=" << mesh->meshName << " animIdx=" << anim.animationIndex << " time=" << anim.currentTime << " loop=" << anim.loop << std::endl;
+      }
       if (rm && rm->isSkinned) {
-        anim.currentTime += dt * anim.speed;
+        // Handle animation looping properly
+        if (anim.animationIndex >= 0 && 
+            anim.animationIndex < (int)rm->animations.size()) {
+          float animDuration = rm->animations[anim.animationIndex].duration;
+          if (animDuration > 0) {
+            anim.currentTime += dt * anim.speed;
+            if (anim.loop) {
+              // Wrap time for looping animations
+              if (anim.currentTime >= animDuration) {
+                anim.currentTime = fmod(anim.currentTime, animDuration);
+              }
+            } else {
+              // Clamp time for non-looping animations
+              if (anim.currentTime > animDuration) {
+                anim.currentTime = animDuration;
+              }
+            }
+          } else {
+            anim.currentTime += dt * anim.speed;
+          }
+        } else {
+          anim.currentTime += dt * anim.speed;
+        }
         m_Renderer->UpdateSkinnedMesh(*rm, anim.animationIndex,
                                       anim.currentTime);
       }
@@ -652,6 +660,8 @@ void BattleMode::HandlePlayerInput() {
                     rm->animations[i].name.find("Walk") != std::string::npos) {
                   animComp->animationIndex = (int)i;
                   animComp->currentTime = 0.0f;
+                  animComp->loop = true;  // Walking should loop
+                  animComp->speed = 1.0f;  // Normal speed
                   break;
                 }
               }
@@ -728,8 +738,10 @@ void BattleMode::ExecuteAction(Entity actor, ActionType action, Entity target,
       auto arrow = m_Registry->CreateEntity();
       m_Registry->AddComponent<Transform3DComponent>(
           arrow, {tActor->x, tActor->y, 1.0f, tActor->rot, 0});
+      // Create a simple arrow projectile with scaling
       m_Registry->AddComponent<MeshComponent>(arrow,
-                                              {"Arrow", "Knight_tex", 1, 1, 1});
+                                              {"Arrow", "", 0.3f, 0.3f, 0.3f});
+      m_Registry->AddComponent<ProceduralAnimationComponent>(arrow, {0.0f, 1.0f, 0.3f, 0.0f, 0.0f});
 
       m_ActiveProjectile.entity = arrow;
       m_ActiveProjectile.startX = tActor->x;
@@ -743,7 +755,8 @@ void BattleMode::ExecuteAction(Entity actor, ActionType action, Entity target,
 
   // Animation Trigger
   auto *mesh = m_Registry->GetComponent<MeshComponent>(actor);
-  if (mesh) {
+  auto *animComp = m_Registry->GetComponent<SkeletalAnimationComponent>(actor);
+  if (mesh && animComp) {
     RenderMesh *rm = m_Renderer->GetRenderMesh(mesh->meshName);
     if (rm) {
       std::string animName = "Idle";
@@ -751,21 +764,27 @@ void BattleMode::ExecuteAction(Entity actor, ActionType action, Entity target,
         animName = "Melee_1H_Attack_Chop";
       else if (action == Ranged)
         animName = "Ranged_Bow_Shoot";
+      else if (action == Jump)
+        animName = "Jump_Full_Long";
       else if (action == Shove)
         animName = "Melee_Unarmed_Attack_Kick";
       else if (action == Sneak)
-        animName = "Idle_A"; // Could use crouch or stealth animation if available
+        animName = "Sneaking";
 
+      std::cout << "[ACTION] Looking for animation '" << animName << "' on " << mesh->meshName << " with " << rm->animations.size() << " available animations" << std::endl;
+      
       // Search for best match
       int bestIdx = -1;
       for (size_t i = 0; i < rm->animations.size(); i++) {
+        std::cout << "  [CHECK] Animation " << i << ": " << rm->animations[i].name << std::endl;
         if (rm->animations[i].name.find(animName) != std::string::npos) {
           bestIdx = (int)i;
+          std::cout << "  [MATCH] Found at index " << bestIdx << std::endl;
           break;
         }
       }
 
-      // Fallback
+      // Fallback for attack animations
       if (bestIdx == -1) {
         for (size_t i = 0; i < rm->animations.size(); i++) {
           if (rm->animations[i].name.find("Attack") != std::string::npos) {
@@ -776,22 +795,24 @@ void BattleMode::ExecuteAction(Entity actor, ActionType action, Entity target,
       }
 
       if (bestIdx != -1) {
-        auto *animComp =
-            m_Registry->GetComponent<SkeletalAnimationComponent>(actor);
-        if (animComp) {
-          animComp->animationIndex = bestIdx;
-          animComp->currentTime = 0.0f;
+        animComp->animationIndex = bestIdx;
+        animComp->currentTime = 0.0f;
+        animComp->loop = false;  // Action animations should not loop
+        animComp->speed = 1.0f;  // Ensure normal playback speed
 
-          // Set up Attacking state to wait for animation
-          m_State = Attacking;
-          m_AnimState.actor = actor;
-          m_AnimState.timer = 0.0f;
-          // Speed up ranged attacks (fixed 0.1s travel time)
-          m_AnimState.duration =
-              (action == Ranged) ? 0.1f : rm->animations[bestIdx].duration;
-          if (m_AnimState.duration <= 0)
-            m_AnimState.duration = 1.0f;
-        }
+        // Set up Attacking state to wait for animation
+        m_State = Attacking;
+        m_AnimState.actor = actor;
+        m_AnimState.timer = 0.0f;
+        // Speed up ranged attacks (fixed 0.1s travel time)
+        m_AnimState.duration =
+            (action == Ranged) ? 0.1f : rm->animations[bestIdx].duration;
+        if (m_AnimState.duration <= 0)
+          m_AnimState.duration = 1.0f;
+        
+        std::cout << "[DEBUG] Animation triggered: " << animName << " (index " << bestIdx << ", name=" << rm->animations[bestIdx].name << ", duration " << m_AnimState.duration << ", loop=" << animComp->loop << ")" << std::endl;
+      } else {
+        std::cout << "No animation found for: " << animName << std::endl;
       }
     }
   }

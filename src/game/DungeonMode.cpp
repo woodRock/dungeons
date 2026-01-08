@@ -312,6 +312,10 @@ void DungeonMode::Update(float dt, Entity& playerEntity) {
             auto* unit = m_Registry->GetComponent<BattleUnitComponent>(m_PlayerEntity);
             std::string targetAnim = "Idle_A";
             
+            // Check if movement keys are being pressed
+            bool isMoving = Input::IsKeyDown(SDL_SCANCODE_W) || Input::IsKeyDown(SDL_SCANCODE_A) ||
+                           Input::IsKeyDown(SDL_SCANCODE_S) || Input::IsKeyDown(SDL_SCANCODE_D);
+            
             // Death animation takes priority
             if (unit && unit->hp <= 0) {
                 targetAnim = "Death_A";
@@ -320,7 +324,7 @@ void DungeonMode::Update(float dt, Entity& playerEntity) {
                 // Attack animation takes priority
                 if (m_CurrentWeapon == 3) {
                     // Crossbow/ranged attack
-                    targetAnim = "Melee_1H_Attack_Stab";  // Use as placeholder for ranged
+                    targetAnim = "Ranged_Bow_Shoot";
                 } else {
                     // Melee attack
                     targetAnim = "Melee_1H_Attack_Chop";
@@ -334,8 +338,8 @@ void DungeonMode::Update(float dt, Entity& playerEntity) {
                 // Sneaking animation
                 targetAnim = "Sneaking";
                 anim->loop = true;
-            } else if (phys && (fabs(phys->velX) > 0.1f || fabs(phys->velY) > 0.1f)) {
-                // Walking animation
+            } else if (isMoving) {
+                // Walking animation - use input state instead of velocity
                 targetAnim = "Walking_A";
                 anim->loop = true;
             } else {
