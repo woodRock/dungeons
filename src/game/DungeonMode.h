@@ -79,6 +79,12 @@ private:
     float m_SpawnX = 0.0f;
     float m_SpawnY = 0.0f;
     float m_SpawnZ = 0.0f;
+    
+    // Respawn state management
+    bool m_PlayerDead = false;
+    float m_RespawnTimer = 0.0f;
+    static constexpr float RESPAWN_DELAY = 1.0f;  // Delay before respawning
+    static constexpr float FALL_DEATH_THRESHOLD = -5.0f;  // Z position below which player dies
 };
 
 } // namespace PixelsEngine

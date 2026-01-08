@@ -174,7 +174,13 @@ void DungeonMode::LoadLevel(const std::string& levelName) {
                 playerRot = t->rot;
                 foundSpawn = true;
                 spawnMarker = pair.first;
-                std::cout << "DEBUG: Found player_spawn at " << spawnX << ", " << spawnY << std::endl;
+                std::cout << "DEBUG: Found player_spawn at X=" << spawnX << ", Y=" << spawnY << ", Z=" << spawnZ << std::endl;
+                
+                // Store spawn coordinates IMMEDIATELY for respawn
+                m_SpawnX = spawnX;
+                m_SpawnY = spawnY;
+                m_SpawnZ = spawnZ;
+                std::cout << "DEBUG: Stored spawn coordinates: X=" << m_SpawnX << ", Y=" << m_SpawnY << ", Z=" << m_SpawnZ << std::endl;
                 break;
             }
         }
@@ -192,20 +198,34 @@ void DungeonMode::LoadLevel(const std::string& levelName) {
                     spawnZ = t->z; 
                     playerRot = t->rot + M_PI; // Face the stairs
                     foundSpawn = true;
+                    
+                    // Store spawn coordinates for respawn
+                    m_SpawnX = spawnX;
+                    m_SpawnY = spawnY;
+                    m_SpawnZ = spawnZ;
+                    std::cout << "DEBUG: Using stairs as spawn at X=" << m_SpawnX << ", Y=" << m_SpawnY << ", Z=" << m_SpawnZ << std::endl;
                     break;
                 }
             }
         }
     }
     
+    // 3. Fallback to hardcoded position
     if (!foundSpawn) {
-        spawnX = 12.0f; spawnY = 0.0f; spawnZ = 0.0f;
+        spawnX = 12.0f; spawnY = 0.0f; spawnZ = 0.5f;
+        m_SpawnX = spawnX;
+        m_SpawnY = spawnY;
+        m_SpawnZ = spawnZ;
+        std::cout << "DEBUG: Using hardcoded spawn at X=" << m_SpawnX << ", Y=" << m_SpawnY << ", Z=" << m_SpawnZ << std::endl;
+    }
+    
+    // Ensure player spawns slightly above ground to avoid clipping
+    if (spawnZ < 0.5f) {
+        spawnZ = 0.5f;
+        m_SpawnZ = 0.5f;
     }
 
-    // Store spawn coordinates for respawn
-    m_SpawnX = spawnX;
-    m_SpawnY = spawnY;
-    m_SpawnZ = spawnZ;
+    std::cout << "DEBUG: Final spawn coordinates: X=" << m_SpawnX << ", Y=" << m_SpawnY << ", Z=" << m_SpawnZ << std::endl;
 
     // Remove the spawn marker if it exists
     if (spawnMarker != PixelsEngine::INVALID_ENTITY) {
@@ -214,12 +234,24 @@ void DungeonMode::LoadLevel(const std::string& levelName) {
     
     m_PlayerEntity = CharacterFactory::CreatePlayer(m_Registry, m_Renderer, spawnX, spawnY, spawnZ);
     auto* pt = m_Registry->GetComponent<Transform3DComponent>(m_PlayerEntity);
-    if (pt) pt->rot = playerRot;
+    if (pt) {
+        pt->rot = playerRot;
+        std::cout << "DEBUG: Player created at X=" << pt->x << ", Y=" << pt->y << ", Z=" << pt->z << std::endl;
+    }
     
     // Setup Controllers: Top-down view and world-space movement
     m_CameraController = std::make_unique<TopDownCamera>(m_Camera, m_Registry, m_PlayerEntity);
     m_CameraController->SetHeight(12.0f);
     m_CameraController->SetDistance(8.0f);
+    
+    // Initialize camera position at spawn location
+    m_Camera->x = spawnX;
+    m_Camera->y = spawnY - 8.0f;  // Distance offset
+    m_Camera->z = spawnZ + 12.0f; // Height offset
+    m_Camera->yaw = M_PI / 2.0f;
+    m_Camera->pitch = -0.98f;
+    
+    std::cout << "DEBUG: Camera initialized at X=" << m_Camera->x << ", Y=" << m_Camera->y << ", Z=" << m_Camera->z << std::endl;
     
     m_MovementController = std::make_unique<TopDownMovementController>(m_Registry, m_PlayerEntity);
     m_MovementController->SetAcceleration(80.0f);   // Moderate acceleration
@@ -264,6 +296,8 @@ void DungeonMode::LoadLevel(const std::string& levelName) {
     m_DoorUnlocked = false;
     m_LevelComplete = false;
     m_FirstFrame = true;
+    m_PlayerDead = false;
+    m_RespawnTimer = 0.0f;
     m_StatusMessage = "FLOOR " + std::to_string(m_CurrentLevelIdx + 1) + ": CLEAR ALL ENEMIES";
     m_MessageTimer = 3.0f;
 }
@@ -450,12 +484,38 @@ void DungeonMode::Update(float dt, Entity& playerEntity) {
 
     // 7. Check for player death and respawn
     auto* playerUnit = m_Registry->GetComponent<BattleUnitComponent>(m_PlayerEntity);
-    if (playerUnit && playerUnit->hp <= 0) {
-        // Respawn player at spawn point (using stored coordinates)
-        auto* playerTransform = m_Registry->GetComponent<Transform3DComponent>(m_PlayerEntity);
-        auto* playerPhys = m_Registry->GetComponent<PhysicsComponent>(m_PlayerEntity);
-        if (playerTransform && playerPhys) {
-            // Set position to stored spawn point
+    auto* playerTransform = m_Registry->GetComponent<Transform3DComponent>(m_PlayerEntity);
+    auto* playerPhys = m_Registry->GetComponent<PhysicsComponent>(m_PlayerEntity);
+    
+    if (!playerTransform || !playerPhys || !playerUnit) {
+        return;  // Skip respawn logic if player is missing components
+    }
+    
+    // Check if player fell through the map
+    if (playerTransform->z < FALL_DEATH_THRESHOLD) {
+        std::cout << "DEBUG: Player fell through map! Z=" << playerTransform->z << std::endl;
+        playerUnit->hp = 0;
+    }
+    
+    // Check if player is dead
+    bool playerDeadNow = (playerUnit->hp <= 0);
+    
+    // State transition: Player just died
+    if (playerDeadNow && !m_PlayerDead) {
+        std::cout << "DEBUG: Player DIED! Respawn in " << RESPAWN_DELAY << " seconds..." << std::endl;
+        m_PlayerDead = true;
+        m_RespawnTimer = RESPAWN_DELAY;
+    }
+    
+    // State: Player is dead, waiting for respawn
+    if (m_PlayerDead) {
+        m_RespawnTimer -= dt;
+        
+        if (m_RespawnTimer <= 0.0f) {
+            // Perform respawn
+            std::cout << "DEBUG: RESPAWNING at X=" << m_SpawnX << ", Y=" << m_SpawnY << ", Z=" << m_SpawnZ << std::endl;
+            
+            // Reset position
             playerTransform->x = m_SpawnX;
             playerTransform->y = m_SpawnY;
             playerTransform->z = m_SpawnZ;
@@ -475,10 +535,35 @@ void DungeonMode::Update(float dt, Entity& playerEntity) {
             // Reset animation
             auto* playerAnim = m_Registry->GetComponent<SkeletalAnimationComponent>(m_PlayerEntity);
             if (playerAnim) {
-                playerAnim->animationIndex = 0;
+                RenderMesh* rm = m_Renderer->GetRenderMesh("Knight");
+                if (rm) {
+                    int idleIdx = -1;
+                    for (size_t i = 0; i < rm->animations.size(); i++) {
+                        if (rm->animations[i].name.find("Idle") != std::string::npos) {
+                            idleIdx = (int)i;
+                            break;
+                        }
+                    }
+                    if (idleIdx != -1) {
+                        playerAnim->animationIndex = idleIdx;
+                    }
+                }
                 playerAnim->currentTime = 0.0f;
                 playerAnim->loop = true;
             }
+            
+            // Reset camera position at spawn
+            if (m_Camera) {
+                m_Camera->x = m_SpawnX;
+                m_Camera->y = m_SpawnY - 8.0f;
+                m_Camera->z = m_SpawnZ + 12.0f;
+            }
+            
+            // Reset death state
+            m_PlayerDead = false;
+            m_RespawnTimer = 0.0f;
+            
+            std::cout << "DEBUG: Respawn complete!" << std::endl;
         }
     }
 
