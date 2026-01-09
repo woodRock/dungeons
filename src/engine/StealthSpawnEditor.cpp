@@ -9,23 +9,18 @@
 namespace PixelsEngine {
 
 StealthSpawnEditor::StealthSpawnEditor() {
-    // Load default spawns
-    m_SpawnLocations = {
-        {48.0f, -32.0f, 0.0f, {}, SpawnType::Enemy},
-        {36.0f, -52.0f, 0.0f, {}, SpawnType::Enemy},
-        {20.0f, -40.0f, 0.0f, {}, SpawnType::Enemy},
-        {28.0f, 4.0f, 0.0f, {}, SpawnType::Enemy},
-    };
+    // No default spawns - start empty
 }
 
 StealthSpawnEditor::~StealthSpawnEditor() = default;
 
-void StealthSpawnEditor::AddSpawn(float x, float y, float rotation, SpawnType type) {
+void StealthSpawnEditor::AddSpawn(float x, float y, float rotation, SpawnType type, const std::string& subtype) {
     SpawnLocation loc;
     loc.x = x;
     loc.y = y;
     loc.rotation = rotation;
     loc.type = type;
+    loc.subtype = subtype;
     m_SpawnLocations.push_back(loc);
     m_SelectedIndex = m_SpawnLocations.size() - 1;
     m_StatusMessage = "Spawn added at (" + std::to_string((int)x) + ", " + std::to_string((int)y) + ")";
@@ -33,9 +28,9 @@ void StealthSpawnEditor::AddSpawn(float x, float y, float rotation, SpawnType ty
 }
 
 void StealthSpawnEditor::RemoveSelectedSpawn() {
-    if (m_SelectedIndex < m_SpawnLocations.size()) {
+    if (m_SelectedIndex < (int)m_SpawnLocations.size()) {
         m_SpawnLocations.erase(m_SpawnLocations.begin() + m_SelectedIndex);
-        if (m_SelectedIndex >= m_SpawnLocations.size() && m_SelectedIndex > 0) {
+        if (m_SelectedIndex >= (int)m_SpawnLocations.size() && m_SelectedIndex > 0) {
             m_SelectedIndex--;
         }
         m_StatusMessage = "Spawn removed";
@@ -56,7 +51,14 @@ void StealthSpawnEditor::SaveToFile(const std::string& filename) {
         for (const auto& wp : loc.waypoints) {
             file << " " << wp.first << " " << wp.second;
         }
-        file << " " << (int)loc.type << "\n";
+        file << " " << (int)loc.type;
+        // Save subtype if present, otherwise default to "default" or empty
+        if (!loc.subtype.empty()) {
+            file << " " << loc.subtype;
+        } else {
+            file << " default";
+        }
+        file << "\n";
     }
     file.close();
     
@@ -82,6 +84,7 @@ void StealthSpawnEditor::LoadFromFile(const std::string& filename) {
         SpawnLocation loc;
         loc.x = 0; loc.y = 0; loc.rotation = 0;
         loc.type = SpawnType::Enemy; // Default
+        loc.subtype = "";
         
         ss >> loc.x >> loc.y;
         
@@ -101,6 +104,13 @@ void StealthSpawnEditor::LoadFromFile(const std::string& filename) {
             int typeVal = 0;
             if (ss >> typeVal) {
                 loc.type = (SpawnType)typeVal;
+            }
+            // Try reading subtype
+            std::string sub;
+            if (ss >> sub) {
+                if (sub != "default") {
+                    loc.subtype = sub;
+                }
             }
         }
         
@@ -125,7 +135,7 @@ void StealthSpawnEditor::ProcessInput() {
         m_EditingRot = false;
     }
     if (Input::IsKeyPressed(SDL_SCANCODE_DOWN)) {
-        if (m_SelectedIndex < m_SpawnLocations.size() - 1) m_SelectedIndex++;
+        if (m_SelectedIndex < (int)m_SpawnLocations.size() - 1) m_SelectedIndex++;
         m_EditingX = false;
         m_EditingY = false;
         m_EditingRot = false;
@@ -207,12 +217,15 @@ void StealthSpawnEditor::ProcessInput() {
     
     // A key to add new spawn at player location (0,0 by default)
     if (Input::IsKeyPressed(SDL_SCANCODE_A)) {
-        AddSpawn(0.0f, 0.0f, 0.0f, SpawnType::Enemy);
+        AddSpawn(0.0f, 0.0f, 0.0f, SpawnType::Enemy, "");
     }
     
     // S key to save
     if (Input::IsKeyPressed(SDL_SCANCODE_S)) {
-        SaveToFile("assets/saves/spawn_config.txt");
+        // Warning: This hardcodes the filename if used from this UI. 
+        // Ideally this class should know its filename.
+        // For now, we assume the user will use the console /save command which controls the filename.
+        SaveToFile("assets/saves/spawn_config.txt"); 
     }
     
     // L key to load
@@ -243,7 +256,7 @@ void StealthSpawnEditor::Render(GLRenderer* renderer, TextRenderer* textRenderer
     // Draw spawn list
     int y = 35;
     for (size_t i = 0; i < m_SpawnLocations.size(); ++i) {
-        SDL_Color color = (i == m_SelectedIndex) ? SDL_Color{0, 255, 100, 255} : SDL_Color{200, 200, 200, 255};
+        SDL_Color color = ((int)i == m_SelectedIndex) ? SDL_Color{0, 255, 100, 255} : SDL_Color{200, 200, 200, 255};
         
         std::string text = "[" + std::to_string(i) + "] ";
         text += "(" + std::to_string((int)m_SpawnLocations[i].x) + ", ";
@@ -254,6 +267,10 @@ void StealthSpawnEditor::Render(GLRenderer* renderer, TextRenderer* textRenderer
         if (m_SpawnLocations[i].type == SpawnType::Player) text += " [P]";
         else if (m_SpawnLocations[i].type == SpawnType::Objective) text += " [O]";
         else text += " [E]";
+        
+        if (!m_SpawnLocations[i].subtype.empty()) {
+            text += " " + m_SpawnLocations[i].subtype;
+        }
         
         if (!m_SpawnLocations[i].waypoints.empty()) {
             text += " WP:" + std::to_string(m_SpawnLocations[i].waypoints.size());

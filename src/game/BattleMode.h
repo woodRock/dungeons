@@ -7,6 +7,9 @@
 #include "../engine/AssetManager.h"
 #include "../engine/CharacterFactory.h"
 #include "../engine/MapLoader.h"
+#include "../engine/Console.h"
+#include "../engine/StealthSpawnEditor.h"
+#include "../engine/VisualSpawnEditor.h"
 #include <string>
 #include <vector>
 #include <memory>
@@ -29,6 +32,12 @@ private:
   PixelsEngine::Registry *m_Registry;
   PixelsEngine::GLRenderer *m_Renderer;
   PixelsEngine::Camera *m_Camera = nullptr;
+  
+  // Editor & Console
+  std::unique_ptr<PixelsEngine::Console> m_Console;
+  std::unique_ptr<PixelsEngine::StealthSpawnEditor> m_SpawnEditor;
+  std::unique_ptr<PixelsEngine::VisualSpawnEditor> m_VisualSpawnEditor;
+  bool m_ConsoleWasOpen = false;
 
   enum State {
     Setup,
@@ -78,8 +87,8 @@ private:
   bool isMouseOverUI(int mx, int my, int w, int h);
   bool IsPositionOccupied(float x, float y, PixelsEngine::Entity ignoreEntity);
   void LoadMap(const std::string &path);
-  void SpawnCharacter(const std::string &mesh, float x, float y,
-                      PixelsEngine::BattleUnitComponent::Team team);
+  PixelsEngine::Entity SpawnCharacter(const std::string &mesh, float x, float y,
+                      PixelsEngine::BattleUnitComponent::Team team, float rotation = -1.0f);
 
   void StartBattle();
   void NextTurn();

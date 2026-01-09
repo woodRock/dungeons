@@ -55,6 +55,7 @@ private:
     float m_PreviewY = 0.0f;
     
     SpawnType m_CurrentSpawnType = SpawnType::Enemy;
+    std::string m_CurrentSubtype;
     
     // Free camera state
     float m_CameraX = 36.0f;

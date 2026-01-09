@@ -85,14 +85,92 @@ void BattleMode::Init(Camera *camera, Entity &playerEntity) {
   MapLoader::LoadFromFile("assets/saves/my_dungeon.map", m_Registry,
                            m_Renderer);
 
-  // Spawn Units
-  SpawnCharacter("Knight", 12.0f, -4.0f, BattleUnitComponent::Player);
-  SpawnCharacter("Ranger", 14.0f, -5.0f, BattleUnitComponent::Player);
-  SpawnCharacter("Mage", 10.0f, -5.0f, BattleUnitComponent::Player);
+  // Initialize Console and Editors
+  m_Console = std::make_unique<Console>();
+  m_SpawnEditor = std::make_unique<StealthSpawnEditor>();
+  m_VisualSpawnEditor = std::make_unique<VisualSpawnEditor>(m_Registry, m_Renderer);
+  
+  // Load battle spawns
+  m_SpawnEditor->LoadFromFile("assets/saves/battle_spawn_config.txt");
+  
+  // Spawn Units from Config
+  auto spawnLocations = m_SpawnEditor->GetSpawnLocations();
+  if (spawnLocations.empty()) {
+      // Fallback defaults if file missing/empty
+      SpawnCharacter("Knight", 12.0f, -4.0f, BattleUnitComponent::Player);
+      SpawnCharacter("Ranger", 14.0f, -5.0f, BattleUnitComponent::Player);
+      SpawnCharacter("Mage", 10.0f, -5.0f, BattleUnitComponent::Player);
 
-  SpawnCharacter("Skeleton_Warrior", 12.0f, 4.0f, BattleUnitComponent::Enemy);
-  SpawnCharacter("Skeleton_Mage", 15.0f, 6.0f, BattleUnitComponent::Enemy);
-  SpawnCharacter("Skeleton_Minion", 9.0f, 6.0f, BattleUnitComponent::Enemy);
+      SpawnCharacter("Skeleton_Warrior", 12.0f, 4.0f, BattleUnitComponent::Enemy);
+      SpawnCharacter("Skeleton_Mage", 15.0f, 6.0f, BattleUnitComponent::Enemy);
+      SpawnCharacter("Skeleton_Minion", 9.0f, 6.0f, BattleUnitComponent::Enemy);
+      
+      // Seed the editor with these so they can be saved
+      m_SpawnEditor->AddSpawn(12.0f, -4.0f, 3.14f, SpawnType::Player, "Knight");
+      m_SpawnEditor->AddSpawn(14.0f, -5.0f, 3.14f, SpawnType::Player, "Ranger");
+      m_SpawnEditor->AddSpawn(10.0f, -5.0f, 3.14f, SpawnType::Player, "Mage");
+      m_SpawnEditor->AddSpawn(12.0f, 4.0f, 0.0f, SpawnType::Enemy, "Skeleton_Warrior");
+      m_SpawnEditor->AddSpawn(15.0f, 6.0f, 0.0f, SpawnType::Enemy, "Skeleton_Mage");
+      m_SpawnEditor->AddSpawn(9.0f, 6.0f, 0.0f, SpawnType::Enemy, "Skeleton_Minion");
+  } else {
+      for (const auto& loc : spawnLocations) {
+          BattleUnitComponent::Team team = (loc.type == SpawnType::Player) ? 
+              BattleUnitComponent::Player : BattleUnitComponent::Enemy;
+          
+          std::string meshName = loc.subtype;
+          if (meshName.empty()) {
+              meshName = (team == BattleUnitComponent::Player) ? "Knight" : "Skeleton_Warrior";
+          }
+          
+          SpawnCharacter(meshName, loc.x, loc.y, team, loc.rotation);
+      }
+  }
+  
+  // Sync Visual Editor
+  m_VisualSpawnEditor->SetSpawnLocations(m_SpawnEditor->GetSpawnLocations());
+
+  // Register Console Commands
+  m_Console->RegisterCommand("/edit", [this](const std::vector<std::string>& args) {
+      bool wasActive = m_VisualSpawnEditor->IsActive();
+      m_VisualSpawnEditor->Activate(!wasActive);
+      if (!wasActive) {
+          m_ConsoleWasOpen = m_Console->IsOpen();
+          m_Console->Close();
+          m_Console->SetInputEnabled(false);
+          SDL_SetRelativeMouseMode(SDL_TRUE);
+      } else {
+          m_Console->SetInputEnabled(true);
+          SDL_SetRelativeMouseMode(SDL_FALSE);
+          if (m_ConsoleWasOpen) m_Console->Open();
+          // Sync back changes
+          auto locs = m_VisualSpawnEditor->GetSpawnLocations();
+          m_SpawnEditor->SetSpawnLocations(locs);
+          m_SpawnEditor->SaveToFile("assets/saves/battle_spawn_config.txt");
+      }
+  });
+  
+  m_Console->RegisterCommand("/save", [this](const std::vector<std::string>& args) {
+      if (m_VisualSpawnEditor->IsActive()) {
+          auto locs = m_VisualSpawnEditor->GetSpawnLocations();
+          m_SpawnEditor->SetSpawnLocations(locs);
+      }
+      m_SpawnEditor->SaveToFile("assets/saves/battle_spawn_config.txt");
+      m_Console->AddLog("Saved battle config.");
+  });
+  
+  m_Console->RegisterCommand("/load", [this](const std::vector<std::string>& args) {
+      m_SpawnEditor->LoadFromFile("assets/saves/battle_spawn_config.txt");
+      m_VisualSpawnEditor->SetSpawnLocations(m_SpawnEditor->GetSpawnLocations());
+      m_Console->AddLog("Loaded battle config (restart to apply).");
+  });
+  
+  m_Console->RegisterCommand("/help", [this](const std::vector<std::string>& args) {
+      m_Console->AddLog("Available commands:");
+      m_Console->AddLog("  /edit - Toggle Visual Spawn Editor");
+      m_Console->AddLog("  /save - Save spawn config");
+      m_Console->AddLog("  /load - Load spawn config");
+      m_Console->AddLog("  /help - Show this help");
+  });
 
   // 4. Setup Camera
   if (m_Camera) {
@@ -155,8 +233,8 @@ void BattleMode::LoadMap(const std::string &path) {
   MapLoader::LoadFromFile(path, m_Registry, m_Renderer);
 }
 
-void BattleMode::SpawnCharacter(const std::string &mesh, float x, float y,
-                                BattleUnitComponent::Team team) {
+PixelsEngine::Entity BattleMode::SpawnCharacter(const std::string &mesh, float x, float y,
+                                BattleUnitComponent::Team team, float rotation) {
   auto e = m_Registry->CreateEntity();
   std::string tex = "Knight_tex";
   if (mesh == "Ranger")
@@ -168,9 +246,12 @@ void BattleMode::SpawnCharacter(const std::string &mesh, float x, float y,
   if (mesh.find("Skeleton") != std::string::npos)
     tex = mesh + "_tex";  // Use the actual skeleton name with _tex suffix
 
-  // Players at -Y face +Y, Enemies at +Y face -Y. Swapping from previous to fix
-  // 180 deg issue.
-  float initialRot = (team == BattleUnitComponent::Player) ? 3.14f : 0.0f;
+  // Use provided rotation if >= 0, otherwise use team default
+  float initialRot = rotation;
+  if (initialRot < 0.0f) {
+      initialRot = (team == BattleUnitComponent::Player) ? 3.14f : 0.0f;
+  }
+  
   m_Registry->AddComponent<Transform3DComponent>(
       e, {x, y, 0.0f, initialRot, 0.0f});
   m_Registry->AddComponent<MeshComponent>(e, {mesh, tex, 1.0f, 1.0f, 1.0f});
@@ -184,15 +265,8 @@ void BattleMode::SpawnCharacter(const std::string &mesh, float x, float y,
         break;
       }
     }
-    std::cout << "[DEBUG] Spawning " << mesh << " with " << rm->animations.size() << " animations:";
-    for (size_t i = 0; i < rm->animations.size(); ++i) {
-      std::cout << " [" << i << "]=" << rm->animations[i].name;
-    }
-    std::cout << ". Idle animation index: " << idleIdx << std::endl;
     m_Registry->AddComponent<SkeletalAnimationComponent>(
         e, {idleIdx, (float)(rand() % 100) * 0.01f, 1.0f});
-  } else {
-    std::cout << "[DEBUG] Mesh " << mesh << " not skinned or not found!" << std::endl;
   }
 
   BattleUnitComponent unit;
@@ -217,9 +291,6 @@ void BattleMode::SpawnCharacter(const std::string &mesh, float x, float y,
 
   if (mesh == "Knight" || mesh == "Skeleton_Warrior") {
     attach.meshName = "Sword";
-    attach.rotX = -7.63f;
-    attach.rotY = 18.148f;
-    attach.rotZ = 1.702f;
     m_Registry->AddComponent<AttachmentComponent>(e, attach);
   } else if (mesh == "Ranger") {
     attach.meshName = "Crossbow";
@@ -229,17 +300,13 @@ void BattleMode::SpawnCharacter(const std::string &mesh, float x, float y,
     m_Registry->AddComponent<AttachmentComponent>(e, attach);
   } else if (mesh == "Mage" || mesh == "Skeleton_Mage") {
     attach.meshName = "Staff";
-    attach.rotX = -7.63f;
-    attach.rotY = 18.148f;
-    attach.rotZ = 1.702f;
     m_Registry->AddComponent<AttachmentComponent>(e, attach);
   } else if (mesh == "Rogue" || mesh == "Skeleton_Minion") {
     attach.meshName = "Dagger";
-    attach.rotX = -7.63f;
-    attach.rotY = 18.148f;
-    attach.rotZ = 1.702f;
     m_Registry->AddComponent<AttachmentComponent>(e, attach);
   }
+  
+  return e;
 }
 
 void BattleMode::StartBattle() {
@@ -294,6 +361,35 @@ void BattleMode::NextTurn() {
 }
 
 void BattleMode::Update(float dt, Entity playerEntity) {
+  // Update Console
+  if (m_Console) {
+      if (Input::IsKeyPressed(SDL_SCANCODE_GRAVE)) {
+          if (m_VisualSpawnEditor && m_VisualSpawnEditor->IsActive()) {
+              m_Console->Toggle();
+              m_Console->SetInputEnabled(m_Console->IsOpen());
+              if (m_Console->IsOpen()) Input::StartTextInput(); else Input::StopTextInput();
+          } else {
+              m_Console->Update();
+          }
+      } else if (m_VisualSpawnEditor && !m_VisualSpawnEditor->IsActive()) {
+          m_Console->Update();
+      } else if (m_Console->IsOpen()) {
+          m_Console->ProcessInput();
+      }
+  }
+  
+  if (m_SpawnEditor) m_SpawnEditor->Update();
+  
+  if (m_Console && m_Console->IsOpen()) return;
+  
+  if (m_VisualSpawnEditor) {
+      // Need screen width/height for editor raycast logic
+      int w = 1280, h = 720;
+      SDL_GetWindowSize(SDL_GL_GetCurrentWindow(), &w, &h);
+      m_VisualSpawnEditor->Update(dt, m_Camera, w, h);
+      if (m_VisualSpawnEditor->IsActive()) return;
+  }
+
   if (m_State == Victory)
     return;
 
@@ -909,6 +1005,11 @@ void BattleMode::RenderUI(GLRenderer *ren, TextRenderer *tr, int w, int h) {
   if (m_State == PlayerTurn) {
     DrawActionBar(ren, tr, w, h);
   }
+  
+  // Render Editor UI
+  if (m_Console) m_Console->Render(ren, tr, w, h);
+  if (m_SpawnEditor) m_SpawnEditor->Render(ren, tr, w, h);
+  if (m_VisualSpawnEditor) m_VisualSpawnEditor->Render(ren, tr, m_Camera, w, h);
 }
 
 void BattleMode::CheckVictory() {

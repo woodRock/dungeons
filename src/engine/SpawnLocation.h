@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <utility>
+#include <string>
 
 namespace PixelsEngine {
 
@@ -16,6 +17,7 @@ struct SpawnLocation {
     float rotation; // Rotation in radians
     std::vector<std::pair<float, float>> waypoints;
     SpawnType type = SpawnType::Enemy;
+    std::string subtype = ""; // e.g., "Knight", "Skeleton_Mage"
 };
 
 } // namespace PixelsEngine

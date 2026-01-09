@@ -69,7 +69,7 @@ void StealthMode::Init(Camera* camera, Entity& playerEntity) {
     
     // Initialize spawn editor and load spawn config BEFORE spawning enemies
     m_SpawnEditor = std::make_unique<StealthSpawnEditor>();
-    m_SpawnEditor->LoadFromFile("assets/saves/spawn_config.txt");
+    m_SpawnEditor->LoadFromFile("assets/saves/stealth_spawn_config.txt");
     
     // Find player spawn
     float playerX = 36.0f;
@@ -191,11 +191,20 @@ void StealthMode::Init(Camera* camera, Entity& playerEntity) {
             auto locs = m_VisualSpawnEditor->GetSpawnLocations();
             m_SpawnEditor->SetSpawnLocations(locs);
         }
-        m_SpawnEditor->SaveToFile("assets/saves/spawn_config.txt");
+        m_SpawnEditor->SaveToFile("assets/saves/stealth_spawn_config.txt");
     });
     
     m_Console->RegisterCommand("/load", [this](const std::vector<std::string>& args) {
-        m_SpawnEditor->LoadFromFile("assets/saves/spawn_config.txt");
+        m_SpawnEditor->LoadFromFile("assets/saves/stealth_spawn_config.txt");
+    });
+    
+    m_Console->RegisterCommand("/help", [this](const std::vector<std::string>& args) {
+        m_Console->AddLog("Available commands:");
+        m_Console->AddLog("  /edit - Toggle Visual Spawn Editor");
+        m_Console->AddLog("  /save - Save spawn config");
+        m_Console->AddLog("  /load - Load spawn config");
+        m_Console->AddLog("  /balance - Open Balance Menu");
+        m_Console->AddLog("  /help - Show this help");
     });
 }
 
@@ -617,7 +626,11 @@ void StealthMode::SpawnEnemies() {
     spawnLocations = m_SpawnEditor->GetSpawnLocations();
     for (const auto& loc : spawnLocations) {
         if (loc.type != SpawnType::Enemy) continue;
-        Entity enemy = CharacterFactory::CreateSkeleton(m_Registry, m_Renderer, "skel_warrior", loc.x, loc.y, 0.5f);
+        
+        std::string meshName = loc.subtype;
+        if (meshName.empty()) meshName = "skel_warrior";
+        
+        Entity enemy = CharacterFactory::CreateSkeleton(m_Registry, m_Renderer, meshName, loc.x, loc.y, 0.5f);
         if (enemy != INVALID_ENTITY) {
             auto* transform = m_Registry->GetComponent<Transform3DComponent>(enemy);
             if (transform) transform->rot = loc.rotation;

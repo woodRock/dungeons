@@ -12,6 +12,7 @@ namespace PixelsEngine {
 
 VisualSpawnEditor::VisualSpawnEditor(Registry* registry, GLRenderer* renderer)
     : m_Registry(registry), m_Renderer(renderer) {
+    m_CurrentSubtype = "skel_warrior"; // Default
 }
 
 VisualSpawnEditor::~VisualSpawnEditor() {
@@ -69,10 +70,11 @@ std::vector<SpawnLocation> VisualSpawnEditor::GetSpawnLocations() const {
             loc.x = transform->x;
             loc.y = transform->y;
             loc.rotation = transform->rot;
-            // Preserve waypoints and type from the internal state
+            // Preserve waypoints, type, and subtype from the internal state
             if (i < m_SpawnLocations.size()) {
                 loc.waypoints = m_SpawnLocations[i].waypoints;
                 loc.type = m_SpawnLocations[i].type;
+                loc.subtype = m_SpawnLocations[i].subtype;
             }
             result.push_back(loc);
         }
@@ -114,12 +116,16 @@ void VisualSpawnEditor::CreateSpawnEntities() {
     // Create entities based on type
     for (const auto& loc : m_SpawnLocations) {
         Entity e = INVALID_ENTITY;
+        std::string subtype = loc.subtype;
         
         if (loc.type == SpawnType::Enemy) {
+            if (subtype.empty()) subtype = "skel_warrior";
             e = CharacterFactory::CreateSkeleton(m_Registry, m_Renderer, 
-                                                 "skel_warrior", loc.x, loc.y, 0.5f);
+                                                 subtype, loc.x, loc.y, 0.5f);
         } else if (loc.type == SpawnType::Player) {
-            e = CharacterFactory::CreatePlayer(m_Registry, m_Renderer, loc.x, loc.y, 0.5f);
+            if (subtype.empty()) subtype = "Knight";
+            e = CharacterFactory::CreateCharacter(m_Registry, m_Renderer, 
+                                                 subtype, subtype + "_tex", loc.x, loc.y, 0.5f, 100, 100, 10, true);
             // Remove physics/control so it's just a visual
             if (m_Registry->HasComponent<PlayerControlComponent>(e))
                 m_Registry->RemoveComponent<PlayerControlComponent>(e);
@@ -242,10 +248,33 @@ void VisualSpawnEditor::UpdatePreviewSkeleton(Camera* camera, int screenWidth, i
     
     // Create preview skeleton if needed
     if (m_PreviewSkeleton == INVALID_ENTITY) {
-        m_PreviewSkeleton = CharacterFactory::CreateSkeleton(m_Registry, m_Renderer, 
-                                                              "skel_warrior", worldX, worldY, 0.5f);
+        std::string subtype = m_CurrentSubtype;
+        if (subtype.empty()) {
+            subtype = (m_CurrentSpawnType == SpawnType::Player) ? "Knight" : "skel_warrior";
+        }
+        
+        if (m_CurrentSpawnType == SpawnType::Objective) {
+            m_PreviewSkeleton = m_Registry->CreateEntity();
+            m_Registry->AddComponent<Transform3DComponent>(m_PreviewSkeleton, {worldX, worldY, 0.5f, 0.0f, 0.0f});
+            m_Registry->AddComponent<MeshComponent>(m_PreviewSkeleton, {"ChestGold", "assets/dungeons/Assets/gltf/chest_gold.gltf", 1.0f, 1.0f, 1.0f});
+        } else {
+            // Use CreateCharacter for players and CreateSkeleton for enemies/monsters
+            if (m_CurrentSpawnType == SpawnType::Player) {
+                 m_PreviewSkeleton = CharacterFactory::CreateCharacter(m_Registry, m_Renderer, 
+                                                              m_CurrentSubtype, m_CurrentSubtype + "_tex", worldX, worldY, 0.5f, 100, 100, 10, true);
+                // Remove physics/control
+                if (m_Registry->HasComponent<PlayerControlComponent>(m_PreviewSkeleton))
+                    m_Registry->RemoveComponent<PlayerControlComponent>(m_PreviewSkeleton);
+                if (m_Registry->HasComponent<PhysicsComponent>(m_PreviewSkeleton))
+                    m_Registry->RemoveComponent<PhysicsComponent>(m_PreviewSkeleton);
+            } else {
+                m_PreviewSkeleton = CharacterFactory::CreateSkeleton(m_Registry, m_Renderer, 
+                                                              m_CurrentSubtype, worldX, worldY, 0.5f);
+            }
+        }
+        
         m_PreviewIsTransparent = true;
-        // Mark this as a preview for rendering purposes
+        // Mark this as a preview for rendering purposes (handled in Renderer by alpha uniform potentially)
     } else {
         // Update preview position
         auto* transform = m_Registry->GetComponent<Transform3DComponent>(m_PreviewSkeleton);
@@ -284,6 +313,7 @@ void VisualSpawnEditor::HandleMouseInput(Camera* camera, int screenWidth, int sc
             loc.y = m_PreviewY;
             loc.rotation = 0.0f;
             loc.type = m_CurrentSpawnType;
+            loc.subtype = m_CurrentSubtype;
             m_SpawnLocations.push_back(loc);
             
             CreateSpawnEntities();
@@ -351,6 +381,12 @@ void VisualSpawnEditor::HandleMouseInput(Camera* camera, int screenWidth, int sc
     }
 }
 
+std::vector<std::string> GetSubtypesFor(SpawnType type) {
+    if (type == SpawnType::Player) return {"Knight", "Ranger", "Mage", "Rogue"};
+    if (type == SpawnType::Enemy) return {"skel_warrior", "Skeleton_Mage", "Skeleton_Minion"};
+    return {""};
+}
+
 void VisualSpawnEditor::HandleKeyboardInput(float dt) {
     float moveSpeed = 10.0f;  // units per second
     
@@ -403,9 +439,45 @@ void VisualSpawnEditor::HandleKeyboardInput(float dt) {
     }
     
     // Type switching
-    if (keyState[SDL_SCANCODE_1]) m_CurrentSpawnType = SpawnType::Enemy;
-    if (keyState[SDL_SCANCODE_2]) m_CurrentSpawnType = SpawnType::Player;
-    if (keyState[SDL_SCANCODE_3]) m_CurrentSpawnType = SpawnType::Objective;
+    if (keyState[SDL_SCANCODE_1]) { 
+        m_CurrentSpawnType = SpawnType::Enemy;
+        m_CurrentSubtype = "skel_warrior";
+    }
+    if (keyState[SDL_SCANCODE_2]) {
+        m_CurrentSpawnType = SpawnType::Player;
+        m_CurrentSubtype = "Knight";
+    }
+    if (keyState[SDL_SCANCODE_3]) {
+        m_CurrentSpawnType = SpawnType::Objective;
+        m_CurrentSubtype = "";
+    }
+    
+    // Subtype cycling (T)
+    static bool tWasDown = false;
+    bool tIsDown = keyState[SDL_SCANCODE_T];
+    if (tIsDown && !tWasDown) {
+        std::vector<std::string> subtypes = GetSubtypesFor(m_CurrentSpawnType);
+        if (!subtypes.empty()) {
+            // Find current index
+            int idx = -1;
+            for (size_t i = 0; i < subtypes.size(); ++i) {
+                if (subtypes[i] == m_CurrentSubtype) {
+                    idx = i;
+                    break;
+                }
+            }
+            // Cycle
+            idx = (idx + 1) % subtypes.size();
+            m_CurrentSubtype = subtypes[idx];
+            
+            // If we are in preview mode, recreate the preview skeleton
+            if (m_SpawnModeActive && m_PreviewSkeleton != INVALID_ENTITY) {
+                m_Registry->DestroyEntity(m_PreviewSkeleton);
+                m_PreviewSkeleton = INVALID_ENTITY;
+            }
+        }
+    }
+    tWasDown = tIsDown;
     
     // R to rotate selected spawn (only if not in spawn mode)
     static bool rWasDown = false;
@@ -559,7 +631,7 @@ void VisualSpawnEditor::Render(GLRenderer* renderer, TextRenderer* textRenderer,
     RenderPatrolPaths(renderer, camera);
     
     // Draw UI overlay
-    UIHelper::DrawPanel(renderer, 10, 10, 350, 200, {0, 0, 0, 200});
+    UIHelper::DrawPanel(renderer, 10, 10, 350, 220, {0, 0, 0, 200});
     
     textRenderer->RenderText(renderer, "SPAWN EDITOR", 20, 15, {0, 255, 100, 255});
     textRenderer->RenderText(renderer, "Mouse Look: Free Camera", 20, 35, {200, 200, 200, 255});
@@ -572,31 +644,38 @@ void VisualSpawnEditor::Render(GLRenderer* renderer, TextRenderer* textRenderer,
     }
     
     textRenderer->RenderText(renderer, "R: Rotate | DEL: Remove", 20, 80, {200, 200, 200, 255});
+    textRenderer->RenderText(renderer, "1/2/3: Change Type | T: Cycle Variant", 20, 95, {200, 200, 200, 255});
     
     // Patrol Mode UI
+    int yOffset = 115;
     if (m_PatrolEditMode) {
-        textRenderer->RenderText(renderer, "PATROL MODE ACTIVE", 20, 100, {255, 255, 0, 255});
-        textRenderer->RenderText(renderer, "Click Ground: Add Waypoint", 20, 115, {255, 255, 0, 255});
-        textRenderer->RenderText(renderer, "Backspace: Remove Last Waypoint", 20, 130, {255, 255, 0, 255});
+        textRenderer->RenderText(renderer, "PATROL MODE ACTIVE", 20, yOffset, {255, 255, 0, 255});
+        textRenderer->RenderText(renderer, "Click Ground: Add Waypoint", 20, yOffset + 15, {255, 255, 0, 255});
+        textRenderer->RenderText(renderer, "Backspace: Remove Last Waypoint", 20, yOffset + 30, {255, 255, 0, 255});
     } else {
-        textRenderer->RenderText(renderer, "P: Toggle Patrol Edit Mode", 20, 100, {150, 150, 150, 255});
+        textRenderer->RenderText(renderer, "P: Toggle Patrol Edit Mode", 20, yOffset, {150, 150, 150, 255});
     }
     
     std::string spawnCount = "Spawns: " + std::to_string(m_SpawnLocations.size());
-    textRenderer->RenderText(renderer, spawnCount, 20, 155, {100, 200, 255, 255});
+    textRenderer->RenderText(renderer, spawnCount, 20, 175, {100, 200, 255, 255});
     
     if (m_SelectedSpawnIndex >= 0 && !m_SpawnModeActive) {
         std::string selected = "Selected: " + std::to_string(m_SelectedSpawnIndex);
         if (!m_SpawnLocations[m_SelectedSpawnIndex].waypoints.empty()) {
             selected += " (Waypoints: " + std::to_string(m_SpawnLocations[m_SelectedSpawnIndex].waypoints.size()) + ")";
         }
-        textRenderer->RenderText(renderer, selected, 20, 170, {255, 255, 0, 255});
+        textRenderer->RenderText(renderer, selected, 20, 190, {255, 255, 0, 255});
     }
     
     std::string typeStr = "Type: Enemy (1)";
     if (m_CurrentSpawnType == SpawnType::Player) typeStr = "Type: Player (2)";
     if (m_CurrentSpawnType == SpawnType::Objective) typeStr = "Type: Objective (3)";
-    textRenderer->RenderText(renderer, typeStr, 20, 185, {200, 200, 255, 255});
+    
+    if (!m_CurrentSubtype.empty()) {
+        typeStr += " [" + m_CurrentSubtype + "]";
+    }
+    
+    textRenderer->RenderText(renderer, typeStr, 20, 205, {200, 200, 255, 255});
     
     // Draw crosshair at screen center
     int centerX = screenWidth / 2;
