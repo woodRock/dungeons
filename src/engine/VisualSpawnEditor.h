@@ -46,6 +46,9 @@ private:
     
     // Spawn mode (E + click to place)
     bool m_SpawnModeActive = false;
+    // Patrol edit mode (P + click to add waypoint to selected)
+    bool m_PatrolEditMode = false;
+    
     Entity m_PreviewSkeleton = INVALID_ENTITY;
     bool m_PreviewIsTransparent = false;
     float m_PreviewX = 0.0f;
@@ -66,6 +69,7 @@ private:
     void UpdatePreviewSkeleton(Camera* camera, int screenWidth, int screenHeight);
     bool RaycastToGround(Camera* camera, int mouseX, int mouseY, int screenWidth, int screenHeight, float& outX, float& outY);
     void RenderSpawnPoints(GLRenderer* renderer, Camera* camera);
+    void RenderPatrolPaths(GLRenderer* renderer, Camera* camera);
     void RenderSelectedHighlight(GLRenderer* renderer, Camera* camera, int screenWidth, int screenHeight);
 };
 

@@ -407,6 +407,7 @@ void StealthMode::UpdateGuardAI(float dt) {
         auto* guardTransform = m_Registry->GetComponent<Transform3DComponent>(m_Guards[i]);
         auto* guardPhys = m_Registry->GetComponent<PhysicsComponent>(m_Guards[i]);
         auto* playerTransform = m_Registry->GetComponent<Transform3DComponent>(m_PlayerEntity);
+        auto* patrol = m_Registry->GetComponent<PatrolComponent>(m_Guards[i]);
         
         if (!guardTransform || !playerTransform)
             continue;
@@ -429,13 +430,87 @@ void StealthMode::UpdateGuardAI(float dt) {
                 if (guardPhys) {
                     guardPhys->velX = dirX * 6.0f;
                     guardPhys->velY = dirY * 6.0f;
+                    // Rotate towards player
+                    guardTransform->rot = atan2(dirY, dirX) + M_PI / 2.0f;
                 }
             }
         } else {
             m_GuardStates[i] = GuardState::IDLE;
-            if (guardPhys) {
-                guardPhys->velX = 0;
-                guardPhys->velY = 0;
+            
+            // Handle Patrol Logic
+            if (patrol && !patrol->waypoints.empty()) {
+                if (patrol->waitTimer > 0.0f) {
+                    patrol->waitTimer -= dt;
+                    if (guardPhys) {
+                        guardPhys->velX = 0;
+                        guardPhys->velY = 0;
+                    }
+                } else {
+                    // Move towards current waypoint
+                    float targetX = patrol->waypoints[patrol->currentWaypointIndex].first;
+                    float targetY = patrol->waypoints[patrol->currentWaypointIndex].second;
+                    
+                    float dirX = targetX - guardTransform->x;
+                    float dirY = targetY - guardTransform->y;
+                    float dist = sqrt(dirX * dirX + dirY * dirY);
+                    
+                    if (dist < 0.5f) {
+                        // Reached waypoint
+                        patrol->waitTimer = patrol->waitDuration;
+                        patrol->currentWaypointIndex = (patrol->currentWaypointIndex + 1) % patrol->waypoints.size();
+                        if (guardPhys) {
+                            guardPhys->velX = 0;
+                            guardPhys->velY = 0;
+                        }
+                    } else {
+                        // Move
+                        dirX /= dist;
+                        dirY /= dist;
+                        float speed = 2.0f; // Patrol speed
+                        
+                        if (guardPhys) {
+                            guardPhys->velX = dirX * speed;
+                            guardPhys->velY = dirY * speed;
+                        }
+                        
+                        // Smooth rotation towards waypoint
+                        float targetRot = atan2(dirY, dirX) + M_PI / 2.0f;
+                        
+                        // Handle angle wrap-around for lerp
+                        float currentRot = guardTransform->rot;
+                        while (targetRot - currentRot > M_PI) targetRot -= 2 * M_PI;
+                        while (targetRot - currentRot < -M_PI) targetRot += 2 * M_PI;
+                        
+                        // Lerp rotation (5.0f is rotation speed)
+                        float rotSpeed = 5.0f;
+                        guardTransform->rot = currentRot + (targetRot - currentRot) * rotSpeed * dt;
+                    }
+                }
+            } else {
+                // No patrol, just idle
+                if (guardPhys) {
+                    guardPhys->velX = 0;
+                    guardPhys->velY = 0;
+                }
+            }
+        }
+        
+        // Update animation based on movement
+        auto* anim = m_Registry->GetComponent<SkeletalAnimationComponent>(m_Guards[i]);
+        RenderMesh* mesh = m_Renderer->GetRenderMesh("skel_warrior");
+        if (anim && mesh) {
+            bool isMoving = (guardPhys && (fabs(guardPhys->velX) > 0.1f || fabs(guardPhys->velY) > 0.1f));
+            std::string animName = isMoving ? "Walking_A" : "Idle_A"; // Use Walking_A for patrol
+            
+            // Find animation index (simplified lookup)
+            for (size_t k = 0; k < mesh->animations.size(); ++k) {
+                if (mesh->animations[k].name == animName) {
+                    if (anim->animationIndex != (int)k) {
+                        anim->animationIndex = k;
+                        anim->currentTime = 0.0f;
+                    }
+                    break;
+                }
             }
         }
     }
@@ -847,6 +922,15 @@ void StealthMode::SpawnEnemies() {
             auto* transform = m_Registry->GetComponent<Transform3DComponent>(enemy);
             if (transform) {
                 transform->rot = loc.rotation;
+            }
+            
+            // Apply patrol path if exists
+            if (!loc.waypoints.empty()) {
+                PatrolComponent patrol;
+                patrol.waypoints = loc.waypoints;
+                patrol.currentWaypointIndex = 0;
+                patrol.waitTimer = 0.0f; // Start moving immediately
+                m_Registry->AddComponent<PatrolComponent>(enemy, patrol);
             }
             
             m_Guards.push_back(enemy);

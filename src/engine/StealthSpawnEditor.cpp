@@ -11,17 +11,21 @@ namespace PixelsEngine {
 StealthSpawnEditor::StealthSpawnEditor() {
     // Load default spawns
     m_SpawnLocations = {
-        {48.0f, -32.0f, 0.0f},
-        {36.0f, -52.0f, 0.0f},
-        {20.0f, -40.0f, 0.0f},
-        {28.0f, 4.0f, 0.0f},
+        {48.0f, -32.0f, 0.0f, {}},
+        {36.0f, -52.0f, 0.0f, {}},
+        {20.0f, -40.0f, 0.0f, {}},
+        {28.0f, 4.0f, 0.0f, {}},
     };
 }
 
 StealthSpawnEditor::~StealthSpawnEditor() = default;
 
 void StealthSpawnEditor::AddSpawn(float x, float y, float rotation) {
-    m_SpawnLocations.push_back({x, y, rotation});
+    SpawnLocation loc;
+    loc.x = x;
+    loc.y = y;
+    loc.rotation = rotation;
+    m_SpawnLocations.push_back(loc);
     m_SelectedIndex = m_SpawnLocations.size() - 1;
     m_StatusMessage = "Spawn added at (" + std::to_string((int)x) + ", " + std::to_string((int)y) + ")";
     m_StatusMessageTime = 2.0f;
@@ -47,7 +51,11 @@ void StealthSpawnEditor::SaveToFile(const std::string& filename) {
     }
     
     for (const auto& loc : m_SpawnLocations) {
-        file << loc.x << " " << loc.y << " " << loc.rotation << "\n";
+        file << loc.x << " " << loc.y << " " << loc.rotation << " " << loc.waypoints.size();
+        for (const auto& wp : loc.waypoints) {
+            file << " " << wp.first << " " << wp.second;
+        }
+        file << "\n";
     }
     file.close();
     
@@ -69,12 +77,27 @@ void StealthSpawnEditor::LoadFromFile(const std::string& filename) {
     while (std::getline(file, line)) {
         if (line.empty()) continue;
         std::stringstream ss(line);
-        float x, y, rot = 0.0f;
-        ss >> x >> y;
-        if (ss >> rot) {
-             // Rotation was read successfully
+        
+        SpawnLocation loc;
+        loc.x = 0; loc.y = 0; loc.rotation = 0;
+        
+        ss >> loc.x >> loc.y;
+        
+        // Try reading rotation
+        if (ss >> loc.rotation) {
+            // Try reading waypoints count
+            size_t numWaypoints = 0;
+            if (ss >> numWaypoints) {
+                for (size_t i = 0; i < numWaypoints; ++i) {
+                    float wx, wy;
+                    if (ss >> wx >> wy) {
+                        loc.waypoints.push_back({wx, wy});
+                    }
+                }
+            }
         }
-        m_SpawnLocations.push_back({x, y, rot});
+        
+        m_SpawnLocations.push_back(loc);
         count++;
     }
     file.close();
@@ -207,6 +230,10 @@ void StealthSpawnEditor::Render(GLRenderer* renderer, TextRenderer* textRenderer
         text += "(" + std::to_string((int)m_SpawnLocations[i].x) + ", ";
         text += std::to_string((int)m_SpawnLocations[i].y) + ", ";
         text += std::to_string((int)(m_SpawnLocations[i].rotation * 180.0f / 3.14159f)) + "deg)";
+        
+        if (!m_SpawnLocations[i].waypoints.empty()) {
+            text += " WP:" + std::to_string(m_SpawnLocations[i].waypoints.size());
+        }
         
         textRenderer->RenderText(renderer, text, screenWidth - 390, y, color);
         y += 18;

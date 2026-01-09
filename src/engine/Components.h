@@ -3,6 +3,8 @@
 #include <SDL2/SDL.h>
 #include <memory>
 #include <string>
+#include <vector>
+#include <utility>
 
 namespace PixelsEngine {
 
@@ -12,6 +14,14 @@ struct Transform3DComponent {
   float z = 0.0f;   // 0 is floor
   float rot = 0.0f; // Yaw
   float pitch = 0.0f;
+};
+
+struct PatrolComponent {
+    std::vector<std::pair<float, float>> waypoints;
+    int currentWaypointIndex = 0;
+    float waitTimer = 0.0f;
+    float waitDuration = 2.0f; // Time to wait at each waypoint
+    bool movingForward = true; // For ping-pong patrol (optional)
 };
 
 struct BillboardComponent {

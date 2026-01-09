@@ -32,10 +32,19 @@ void VisualSpawnEditor::SetSpawnLocations(const std::vector<SpawnLocation>& loca
 std::vector<SpawnLocation> VisualSpawnEditor::GetSpawnLocations() const {
     // Update from current entity positions
     std::vector<SpawnLocation> result;
-    for (Entity e : m_SpawnEntities) {
+    for (size_t i = 0; i < m_SpawnEntities.size(); ++i) {
+        Entity e = m_SpawnEntities[i];
         auto* transform = m_Registry->GetComponent<Transform3DComponent>(e);
         if (transform) {
-            result.push_back({transform->x, transform->y, transform->rot});
+            SpawnLocation loc;
+            loc.x = transform->x;
+            loc.y = transform->y;
+            loc.rotation = transform->rot;
+            // Preserve waypoints from the internal state since they aren't on the entity in editor mode
+            if (i < m_SpawnLocations.size()) {
+                loc.waypoints = m_SpawnLocations[i].waypoints;
+            }
+            result.push_back(loc);
         }
     }
     return result;
@@ -51,6 +60,7 @@ void VisualSpawnEditor::ClearAllSpawns() {
     m_SpawnEntities.clear();
     m_SpawnLocations.clear();
     m_SelectedSpawnIndex = -1;
+    m_PatrolEditMode = false;
     
     // Clean up preview if active
     if (m_PreviewSkeleton != INVALID_ENTITY) {
@@ -81,7 +91,8 @@ void VisualSpawnEditor::CreateSpawnEntities() {
             m_SpawnEntities.push_back(e);
         }
     }
-    m_SelectedSpawnIndex = -1;
+    // Don't reset selection here if we are just refreshing
+    // m_SelectedSpawnIndex = -1; 
 }
 
 void VisualSpawnEditor::UpdateSpawnEntities() {
@@ -215,7 +226,12 @@ void VisualSpawnEditor::HandleMouseInput(Camera* camera, int screenWidth, int sc
         // If in spawn mode (E held), place the new spawn
         if (m_SpawnModeActive) {
             // Place at preview position
-            m_SpawnLocations.push_back({m_PreviewX, m_PreviewY, 0.0f});
+            SpawnLocation loc;
+            loc.x = m_PreviewX;
+            loc.y = m_PreviewY;
+            loc.rotation = 0.0f;
+            m_SpawnLocations.push_back(loc);
+            
             CreateSpawnEntities();
             m_SelectedSpawnIndex = m_SpawnLocations.size() - 1;
             m_SpawnModeActive = false;
@@ -231,6 +247,14 @@ void VisualSpawnEditor::HandleMouseInput(Camera* camera, int screenWidth, int sc
         
         float worldX, worldY;
         if (RaycastToGround(camera, currMouseX, currMouseY, screenWidth, screenHeight, worldX, worldY)) {
+            
+            // Handle Patrol Point Addition
+            if (m_PatrolEditMode && m_SelectedSpawnIndex >= 0 && m_SelectedSpawnIndex < (int)m_SpawnLocations.size()) {
+                // Add current mouse position as a waypoint
+                m_SpawnLocations[m_SelectedSpawnIndex].waypoints.push_back({worldX, worldY});
+                return; // Consume click
+            }
+            
             // Find nearest spawn to click with selection radius
             float closestDist = 3.5f;  // Increased selection radius
             int closestIdx = -1;
@@ -335,9 +359,6 @@ void VisualSpawnEditor::HandleKeyboardInput(float dt) {
             if (transform->rot > 2 * M_PI) {
                 transform->rot -= 2 * M_PI;
             }
-            // Update the source data too so dragging doesn't revert it? 
-            // Actually UpdateSpawnEntities doesn't touch rotation, so it's fine.
-            // But good to keep in sync.
             m_SpawnLocations[m_SelectedSpawnIndex].rotation = transform->rot;
         }
     }
@@ -350,9 +371,28 @@ void VisualSpawnEditor::HandleKeyboardInput(float dt) {
         m_SelectedSpawnIndex = -1;
     }
     
+    // P to toggle Patrol Edit Mode
+    static bool pWasDown = false;
+    bool pIsDown = keyState[SDL_SCANCODE_P];
+    if (pIsDown && !pWasDown && m_SelectedSpawnIndex >= 0 && !m_SpawnModeActive) {
+        m_PatrolEditMode = !m_PatrolEditMode;
+    }
+    pWasDown = pIsDown;
+    
+    // Backspace to remove last waypoint
+    static bool bkspWasDown = false;
+    bool bkspIsDown = keyState[SDL_SCANCODE_BACKSPACE];
+    if (bkspIsDown && !bkspWasDown && m_PatrolEditMode && m_SelectedSpawnIndex >= 0) {
+        if (!m_SpawnLocations[m_SelectedSpawnIndex].waypoints.empty()) {
+            m_SpawnLocations[m_SelectedSpawnIndex].waypoints.pop_back();
+        }
+    }
+    bkspWasDown = bkspIsDown;
+    
     // E key to enter spawn preview mode (E + click to place)
     if (eDown && !m_SpawnModeActive) {
         m_SpawnModeActive = true;
+        m_PatrolEditMode = false; // Disable patrol mode
     } else if (!eDown && m_SpawnModeActive) {
         // E released - cancel spawn mode
         m_SpawnModeActive = false;
@@ -366,6 +406,42 @@ void VisualSpawnEditor::HandleKeyboardInput(float dt) {
 void VisualSpawnEditor::RenderSpawnPoints(GLRenderer* renderer, Camera* camera) {
     // Render visual indicators for each spawn point
     // For now, we rely on the skeleton entities being rendered
+}
+
+void VisualSpawnEditor::RenderPatrolPaths(GLRenderer* renderer, Camera* camera) {
+    if (!m_IsActive || !camera) return;
+    
+    // Only render for selected spawn or all? Let's do selected for clarity, or all faint + selected bright.
+    
+    for (size_t i = 0; i < m_SpawnLocations.size(); ++i) {
+        const auto& loc = m_SpawnLocations[i];
+        if (loc.waypoints.empty()) continue;
+        
+        bool isSelected = (i == (size_t)m_SelectedSpawnIndex);
+        SDL_Color pathColor = isSelected ? SDL_Color{255, 255, 0, 255} : SDL_Color{100, 100, 100, 100};
+        
+        float startX = loc.x;
+        float startY = loc.y;
+        float prevX = startX;
+        float prevY = startY;
+        
+        for (const auto& wp : loc.waypoints) {
+            renderer->DrawLine(prevX, prevY, 0.5f, wp.first, wp.second, 0.5f, pathColor);
+            
+            // Draw a small box at the waypoint
+            renderer->DrawRect2D(0, 0, 0, 0, {0,0,0,0}); // Dummy call
+            // Since we don't have DrawRect3D, we can draw a small cross
+            float s = 0.5f;
+            renderer->DrawLine(wp.first - s, wp.second, 0.5f, wp.first + s, wp.second, 0.5f, pathColor);
+            renderer->DrawLine(wp.first, wp.second - s, 0.5f, wp.first, wp.second + s, 0.5f, pathColor);
+            
+            prevX = wp.first;
+            prevY = wp.second;
+        }
+        
+        // Loop back to start
+        renderer->DrawLine(prevX, prevY, 0.5f, startX, startY, 0.5f, {pathColor.r, pathColor.g, pathColor.b, 100});
+    }
 }
 
 void VisualSpawnEditor::RenderSelectedHighlight(GLRenderer* renderer, Camera* camera, int screenWidth, int screenHeight) {
@@ -420,8 +496,11 @@ void VisualSpawnEditor::Render(GLRenderer* renderer, TextRenderer* textRenderer,
     // Draw white border/highlight around selected skeleton
     RenderSelectedHighlight(renderer, camera, screenWidth, screenHeight);
     
+    // Draw patrol paths
+    RenderPatrolPaths(renderer, camera);
+    
     // Draw UI overlay
-    UIHelper::DrawPanel(renderer, 10, 10, 320, 160, {0, 0, 0, 200});
+    UIHelper::DrawPanel(renderer, 10, 10, 350, 200, {0, 0, 0, 200});
     
     textRenderer->RenderText(renderer, "SPAWN EDITOR", 20, 15, {0, 255, 100, 255});
     textRenderer->RenderText(renderer, "Mouse Look: Free Camera", 20, 35, {200, 200, 200, 255});
@@ -435,12 +514,24 @@ void VisualSpawnEditor::Render(GLRenderer* renderer, TextRenderer* textRenderer,
     
     textRenderer->RenderText(renderer, "R: Rotate | DEL: Remove", 20, 80, {200, 200, 200, 255});
     
+    // Patrol Mode UI
+    if (m_PatrolEditMode) {
+        textRenderer->RenderText(renderer, "PATROL MODE ACTIVE", 20, 100, {255, 255, 0, 255});
+        textRenderer->RenderText(renderer, "Click Ground: Add Waypoint", 20, 115, {255, 255, 0, 255});
+        textRenderer->RenderText(renderer, "Backspace: Remove Last Waypoint", 20, 130, {255, 255, 0, 255});
+    } else {
+        textRenderer->RenderText(renderer, "P: Toggle Patrol Edit Mode", 20, 100, {150, 150, 150, 255});
+    }
+    
     std::string spawnCount = "Spawns: " + std::to_string(m_SpawnLocations.size());
-    textRenderer->RenderText(renderer, spawnCount, 20, 115, {100, 200, 255, 255});
+    textRenderer->RenderText(renderer, spawnCount, 20, 155, {100, 200, 255, 255});
     
     if (m_SelectedSpawnIndex >= 0 && !m_SpawnModeActive) {
         std::string selected = "Selected: " + std::to_string(m_SelectedSpawnIndex);
-        textRenderer->RenderText(renderer, selected, 20, 130, {255, 255, 0, 255});
+        if (!m_SpawnLocations[m_SelectedSpawnIndex].waypoints.empty()) {
+            selected += " (Waypoints: " + std::to_string(m_SpawnLocations[m_SelectedSpawnIndex].waypoints.size()) + ")";
+        }
+        textRenderer->RenderText(renderer, selected, 20, 170, {255, 255, 0, 255});
     }
     
     // Draw crosshair at screen center
