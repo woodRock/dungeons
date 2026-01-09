@@ -4,6 +4,7 @@
 #include "Graphics.h"
 #include "Math3D.h"
 #include "Shader.h"
+#include "OpenGL.h"
 #include <SDL2/SDL.h>
 #include <memory>
 #include <string>

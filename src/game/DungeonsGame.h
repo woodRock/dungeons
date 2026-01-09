@@ -1,5 +1,6 @@
 #pragma once
 #include "../engine/Application.h"
+#include "../engine/OpenGL.h"
 #include "../engine/ECS.h"
 #include "../engine/GLRenderer.h"
 #include "../engine/Map.h"

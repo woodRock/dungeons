@@ -4,17 +4,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
-
-#ifdef __APPLE__
-#define GL_SILENCE_DEPRECATION
-#include <OpenGL/gl3.h>
-#elif defined(__EMSCRIPTEN__)
-#include <GLES3/gl3.h>
-#else
-#define GL_GLEXT_PROTOTYPES
-#include <GL/gl.h>
-#include <GL/glext.h>
-#endif
+#include "OpenGL.h"
 
 namespace PixelsEngine {
 

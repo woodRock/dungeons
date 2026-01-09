@@ -1,3 +1,4 @@
+#include "OpenGL.h"
 #include "StealthSpawnEditor.h"
 #include "Input.h"
 #include "GLRenderer.h"

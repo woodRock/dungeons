@@ -1,3 +1,4 @@
+#include "OpenGL.h"
 #include "TextRenderer.h"
 
 namespace PixelsEngine {

@@ -1,19 +1,9 @@
 #include "Application.h"
 #include "Input.h"
+#include "OpenGL.h"
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
 #include <iostream>
-
-#ifdef __APPLE__
-#define GL_SILENCE_DEPRECATION
-#include <OpenGL/gl3.h>
-#elif defined(__EMSCRIPTEN__)
-#include <GLES3/gl3.h>
-#else
-#define GL_GLEXT_PROTOTYPES
-#include <GL/gl.h>
-#include <GL/glext.h>
-#endif
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>

@@ -1,3 +1,4 @@
+#include "OpenGL.h"
 #include "VisualSpawnEditor.h"
 #include "Input.h"
 #include "Components.h"
