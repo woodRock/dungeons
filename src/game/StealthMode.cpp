@@ -40,6 +40,8 @@ void StealthMode::Init(Camera* camera, Entity& playerEntity) {
                         "assets/adventurers/Animations/gltf/Rig_Medium/Rig_Medium_General.glb");
     m_Renderer->LoadMesh("KnightMovement",
                         "assets/adventurers/Animations/gltf/Rig_Medium/Rig_Medium_MovementBasic.glb");
+    m_Renderer->LoadMesh("KnightSneak",
+                        "assets/animations/Animations/gltf/Rig_Medium/Rig_Medium_MovementAdvanced.glb");
     
     LoadLevel("assets/saves/my_dungeon.map");
     
@@ -69,15 +71,39 @@ void StealthMode::Init(Camera* camera, Entity& playerEntity) {
     // Setup animations for knight
     RenderMesh* charAnimMesh = m_Renderer->GetRenderMesh("CharacterAnimations");
     RenderMesh* knightMoveMesh = m_Renderer->GetRenderMesh("KnightMovement");
+    RenderMesh* knightSneakMesh = m_Renderer->GetRenderMesh("KnightSneak");
     RenderMesh* knightMesh = m_Renderer->GetRenderMesh("Knight");
     
+    if (knightMesh) {
+        std::cout << "DEBUG: Knight mesh found. Initial animations: " << knightMesh->animations.size() << std::endl;
+    } else {
+        std::cout << "DEBUG: ERROR: Knight mesh NOT found!" << std::endl;
+    }
+
     if (charAnimMesh && knightMesh) {
         knightMesh->animations = charAnimMesh->animations;
+        std::cout << "DEBUG: Merged CharacterAnimations. Total: " << knightMesh->animations.size() << std::endl;
     }
     if (knightMoveMesh && knightMesh) {
         // Merge movement animations into knight mesh
         for (const auto& anim : knightMoveMesh->animations) {
             knightMesh->animations.push_back(anim);
+        }
+        std::cout << "DEBUG: Merged KnightMovement. Total: " << knightMesh->animations.size() << std::endl;
+    }
+    if (knightSneakMesh && knightMesh) {
+        // Merge sneak animations into knight mesh
+        for (const auto& anim : knightSneakMesh->animations) {
+            knightMesh->animations.push_back(anim);
+        }
+        std::cout << "DEBUG: Merged KnightSneak. Total: " << knightMesh->animations.size() << std::endl;
+    }
+    
+    // Log all available animations for knight
+    if (knightMesh) {
+        std::cout << "DEBUG: Available Knight animations:" << std::endl;
+        for (const auto& anim : knightMesh->animations) {
+            std::cout << "  - " << anim.name << std::endl;
         }
     }
     
@@ -343,17 +369,21 @@ void StealthMode::UpdatePlayerAnimation(float speed, bool isGrounded) {
     } else if (speed > 1.0f) {
         // Moving - use walk or run animation
         // Check if player is crouching (moving slowly for stealth)
-        if (speed < 3.0f && m_PlayerAlertLevel < 0.3f) {
-            // Sneak/slow walk - use slower walk animation
-            targetAnim = "Walking_A";
+        if (m_PlayerSneaking) {
+            // Sneak/slow walk - use sneaking animation
+            targetAnim = "sneaking";
         } else {
             // Normal/fast movement
             targetAnim = "Running_A";
         }
     } else if (speed > 0.2f) {
-        targetAnim = "Walking_A";
+        if (m_PlayerSneaking) {
+            targetAnim = "sneaking";
+        } else {
+            targetAnim = "Walking_A";
+        }
     } else {
-        targetAnim = "Idle_A";
+        targetAnim = m_PlayerSneaking ? "Crouching" : "Idle_A";
     }
     
     // Find animation index
@@ -572,7 +602,8 @@ void StealthMode::CheckLineOfSight(Entity guardEntity, Entity playerEntity, bool
     
     // Direction from guard to player
     float playerAngle = atan2(distY, distX);
-    float guardFacing = guardTransform->rot;
+    // Offset rotation by -90 degrees to match the visual representation (RenderGuardLineOfSight)
+    float guardFacing = guardTransform->rot - M_PI / 2.0f;
     
     // Calculate angle difference
     float angleDiff = fabs(playerAngle - guardFacing);
