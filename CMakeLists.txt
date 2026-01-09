@@ -23,20 +23,26 @@ else()
     # Find SDL2
     find_package(SDL2 REQUIRED)
 
-    # On Windows with vcpkg, manually add all SDL2 module libraries
+    # Handle SDL2 modules - different approach for Windows vs Unix
     if(WIN32)
-        # Use the Release (optimized) library directory only
+        # On Windows with vcpkg static triplet, manually specify libraries
+        # SKIP find_package to avoid debug library paths from vcpkg CMake files
         set(VCPKG_LIB_DIR "${CMAKE_FIND_ROOT_PATH}/lib")
         
+        set(SDL2_IMAGE_INCLUDE_DIRS "${CMAKE_FIND_ROOT_PATH}/include")
         set(SDL2_IMAGE_LIBRARIES 
             ${VCPKG_LIB_DIR}/SDL2_image.lib
             ${VCPKG_LIB_DIR}/libpng16.lib
             ${VCPKG_LIB_DIR}/zlib.lib
         )
+        
+        set(SDL2_TTF_INCLUDE_DIRS "${CMAKE_FIND_ROOT_PATH}/include")
         set(SDL2_TTF_LIBRARIES 
             ${VCPKG_LIB_DIR}/SDL2_ttf.lib
             ${VCPKG_LIB_DIR}/freetype.lib
         )
+        
+        set(SDL2_MIXER_INCLUDE_DIRS "${CMAKE_FIND_ROOT_PATH}/include")
         set(SDL2_MIXER_LIBRARIES 
             ${VCPKG_LIB_DIR}/SDL2_mixer.lib
             ${VCPKG_LIB_DIR}/flac.lib
@@ -45,7 +51,7 @@ else()
             ${VCPKG_LIB_DIR}/vorbisfile.lib
         )
     else()
-        # On Linux/macOS, try find_package first, fallback to PkgConfig
+        # On Linux/macOS, use standard find_package with PkgConfig fallback
         find_package(SDL2_image QUIET)
         find_package(SDL2_ttf QUIET)
         find_package(SDL2_mixer QUIET)
