@@ -43,20 +43,12 @@ jobs:
 
       - name: Install Dependencies (Windows)
         if: matrix.os == 'windows-latest'
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgGitCommitId: 'a42af030640aa9ef282585f679e96c56852f8664'
-          vcpkgDirectory: '${{ github.workspace }}/vcpkg'
-          vcpkgJsonGlob: '**/vcpkg.json'
-
-      - name: Install SDL2 via vcpkg (Windows)
-        if: matrix.os == 'windows-latest'
         run: |
-          ./vcpkg/vcpkg install sdl2 sdl2-image sdl2-mixer sdl2-ttf --triplet x64-windows-static
+          vcpkg install sdl2 sdl2-image sdl2-mixer sdl2-ttf --triplet x64-windows-static
 
       - name: Configure CMake
         run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.os == 'windows-latest' && '-DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows-static' || '' }}
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.os == 'windows-latest' && '-DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows-static' || '' }}
 
       - name: Build
         run: cmake --build build --config Release
