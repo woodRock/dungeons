@@ -1037,10 +1037,9 @@ void BattleMode::RenderUI(GLRenderer *ren, TextRenderer *tr, int w, int h) {
     int alliesAlive = 0;
     int enemiesDefeated = 0;
     auto& units = m_Registry->View<BattleUnitComponent>();
-    for (Entity unit : units) {
-      auto* battleUnit = m_Registry->GetComponent<BattleUnitComponent>(unit);
-      if (battleUnit && battleUnit->health > 0) {
-        if (battleUnit->isPlayerSide) alliesAlive++;
+    for (auto& [id, unit] : units) {
+      if (unit.health > 0) {
+        if (unit.isPlayerSide) alliesAlive++;
         else enemiesDefeated++;
       }
     }
