@@ -5,6 +5,7 @@
 #include <SDL2/SDL.h>
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <iostream>
 
 using namespace PixelsEngine;
