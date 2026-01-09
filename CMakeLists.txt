@@ -23,27 +23,50 @@ else()
     # Find SDL2
     find_package(SDL2 REQUIRED)
 
-    # Find SDL2 modules - try find_package first, fallback to PkgConfig
+    # Find SDL2 modules - try find_package first
     find_package(SDL2_image QUIET)
     find_package(SDL2_ttf QUIET)
     find_package(SDL2_mixer QUIET)
 
-    # On Windows with vcpkg, targets may not be created, so use PkgConfig fallback
-    if((NOT TARGET SDL2_image::SDL2_image) OR (NOT TARGET SDL2_ttf::SDL2_ttf) OR (NOT TARGET SDL2_mixer::SDL2_mixer))
-        find_package(PkgConfig QUIET)
-        if(PkgConfig_FOUND)
-            pkg_check_modules(SDL2_IMAGE QUIET SDL2_image)
-            pkg_check_modules(SDL2_TTF QUIET SDL2_ttf)
-            pkg_check_modules(SDL2_MIXER QUIET SDL2_mixer)
-        endif()
+    # On Windows with vcpkg, manually add libraries if targets not found
+    if(WIN32 AND NOT TARGET SDL2_mixer::SDL2_mixer)
+        # Get the vcpkg library directory
+        get_filename_component(VCPKG_LIB_DIR "${CMAKE_FIND_ROOT_PATH}/lib" ABSOLUTE)
         
-        # If still not found, try harder on Windows with vcpkg
-        if(WIN32 AND NOT SDL2_IMAGE_FOUND)
-            find_package(SDL2_image REQUIRED)
-            find_package(SDL2_ttf REQUIRED)
-            find_package(SDL2_mixer REQUIRED)
-        elseif(NOT WIN32 AND (NOT SDL2_IMAGE_FOUND OR NOT SDL2_TTF_FOUND OR NOT SDL2_MIXER_FOUND))
-            message(FATAL_ERROR "SDL2 modules not found")
+        # Manually define library paths for vcpkg static triplet
+        if(NOT SDL2_MIXER_LIBRARIES)
+            set(SDL2_MIXER_LIBRARIES 
+                ${VCPKG_LIB_DIR}/SDL2_mixer.lib
+                ${VCPKG_LIB_DIR}/flac.lib
+                ${VCPKG_LIB_DIR}/ogg.lib
+                ${VCPKG_LIB_DIR}/vorbis.lib
+                ${VCPKG_LIB_DIR}/vorbisfile.lib
+            )
+        endif()
+        if(NOT SDL2_IMAGE_LIBRARIES)
+            set(SDL2_IMAGE_LIBRARIES 
+                ${VCPKG_LIB_DIR}/SDL2_image.lib
+                ${VCPKG_LIB_DIR}/libpng16.lib
+                ${VCPKG_LIB_DIR}/zlib.lib
+            )
+        endif()
+        if(NOT SDL2_TTF_LIBRARIES)
+            set(SDL2_TTF_LIBRARIES 
+                ${VCPKG_LIB_DIR}/SDL2_ttf.lib
+                ${VCPKG_LIB_DIR}/freetype.lib
+            )
+        endif()
+    elseif(NOT WIN32 AND (NOT TARGET SDL2_mixer::SDL2_mixer OR NOT TARGET SDL2_image::SDL2_image OR NOT TARGET SDL2_ttf::SDL2_ttf))
+        # On Linux/macOS, use PkgConfig as fallback
+        find_package(PkgConfig REQUIRED)
+        if(NOT SDL2_MIXER_FOUND)
+            pkg_check_modules(SDL2_MIXER REQUIRED SDL2_mixer)
+        endif()
+        if(NOT SDL2_IMAGE_FOUND)
+            pkg_check_modules(SDL2_IMAGE REQUIRED SDL2_image)
+        endif()
+        if(NOT SDL2_TTF_FOUND)
+            pkg_check_modules(SDL2_TTF REQUIRED SDL2_ttf)
         endif()
     endif()
 
@@ -71,34 +94,29 @@ else()
 
     if(TARGET SDL2_image::SDL2_image)
         target_link_libraries(Dungeons PRIVATE SDL2_image::SDL2_image)
-    elseif(SDL2_IMAGE_LIBRARIES)
+    else()
         target_link_libraries(Dungeons PRIVATE ${SDL2_IMAGE_LIBRARIES})
     endif()
 
     if(TARGET SDL2_ttf::SDL2_ttf)
         target_link_libraries(Dungeons PRIVATE SDL2_ttf::SDL2_ttf)
-    elseif(SDL2_TTF_LIBRARIES)
+    else()
         target_link_libraries(Dungeons PRIVATE ${SDL2_TTF_LIBRARIES})
     endif()
 
     if(TARGET SDL2_mixer::SDL2_mixer)
         target_link_libraries(Dungeons PRIVATE SDL2_mixer::SDL2_mixer)
-    elseif(SDL2_MIXER_LIBRARIES)
+    else()
         target_link_libraries(Dungeons PRIVATE ${SDL2_MIXER_LIBRARIES})
     endif()
 
     if(WIN32)
         target_link_libraries(Dungeons PRIVATE GLEW::GLEW)
+        # Link Windows system libraries
+        target_link_libraries(Dungeons PRIVATE opengl32 user32 gdi32)
     endif()
 
     target_link_libraries(Dungeons PRIVATE ${OPENGL_LIBRARIES})
-
-    # Set Windows subsystem for GUI application
-    if(WIN32)
-        set_target_properties(Dungeons PROPERTIES
-            WIN32_EXECUTABLE ON
-        )
-    endif()
 
     # Create a custom target to sync assets every time we build
     add_custom_target(sync_assets ALL
