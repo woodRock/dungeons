@@ -393,8 +393,7 @@ void DungeonsGame::UpdateAnimations(float dt) {
           }
         }
         
-        m_GLRenderer.UpdateSkinnedMesh(*rm, anim.animationIndex,
-                                       anim.currentTime);
+        // Removed UpdateSkinnedMesh call - moved to GLRenderer::Render
       }
     }
   }
