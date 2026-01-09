@@ -54,8 +54,8 @@ else()
         endif()
     endif()
     
-    if(NOT GLEW_FOUND AND NOT WIN32)
-        # If still not found on non-Windows, assume Homebrew installation
+    if(NOT GLEW_FOUND AND APPLE)
+        # If still not found on macOS, assume Homebrew installation
         set(GLEW_INCLUDE_DIRS "/opt/homebrew/include")
         set(GLEW_LIBRARIES "/opt/homebrew/lib/libGLEW.dylib")
         include_directories(${GLEW_INCLUDE_DIRS})
