@@ -292,44 +292,6 @@ void SidescrollerMode::RenderUI(GLRenderer* renderer, TextRenderer* textRenderer
     // Render basic HUD for sidescroller
     textRenderer->RenderText(renderer, "Sidescroller Mode", 20, 20, {255, 255, 255, 255});
     textRenderer->RenderText(renderer, "WASD: Move | Space: Jump | ESC: Back", 20, 50, {255, 255, 255, 255});
-    
-    // Jump velocity slider
-    int sliderX = 20;
-    int sliderY = height - 100;
-    int sliderWidth = 300;
-    int sliderHeight = 20;
-    
-    textRenderer->RenderText(renderer, "Jump Velocity", sliderX, sliderY - 25, {255, 255, 255, 255});
-    
-    // Draw slider background
-    renderer->DrawRect2D(sliderX, sliderY, sliderWidth, sliderHeight, {60, 60, 60, 255});
-    
-    // Draw slider value bar (min: 5.0, max: 30.0)
-    float minJump = 5.0f;
-    float maxJump = 30.0f;
-    float normalizedValue = (m_JumpVelocity - minJump) / (maxJump - minJump);
-    int valueWidth = (int)(sliderWidth * normalizedValue);
-    renderer->DrawRect2D(sliderX, sliderY, valueWidth, sliderHeight, {100, 200, 100, 255});
-    
-    // Draw slider handle
-    int handleX = sliderX + valueWidth - 5;
-    renderer->DrawRect2D(handleX, sliderY - 5, 10, sliderHeight + 10, {200, 200, 200, 255});
-    
-    // Show current value
-    std::string valueText = std::to_string((int)m_JumpVelocity);
-    textRenderer->RenderText(renderer, valueText, sliderX + sliderWidth + 10, sliderY, {255, 255, 255, 255});
-    
-    // Handle mouse input for slider
-    int mouseX, mouseY;
-    Uint32 mouseState = SDL_GetMouseState(&mouseX, &mouseY);
-    if (mouseState & SDL_BUTTON(SDL_BUTTON_LEFT)) {
-        if (mouseX >= sliderX && mouseX <= sliderX + sliderWidth &&
-            mouseY >= sliderY - 5 && mouseY <= sliderY + sliderHeight + 5) {
-            float newNormalized = (float)(mouseX - sliderX) / sliderWidth;
-            newNormalized = std::max(0.0f, std::min(1.0f, newNormalized));
-            m_JumpVelocity = minJump + newNormalized * (maxJump - minJump);
-        }
-    }
 }
 
 } // namespace PixelsEngine
