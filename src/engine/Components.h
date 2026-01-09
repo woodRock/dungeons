@@ -24,6 +24,14 @@ struct PatrolComponent {
     bool movingForward = true; // For ping-pong patrol (optional)
 };
 
+struct ObjectiveComponent {
+    enum Type { Exit, Collectible };
+    Type type = Exit;
+    bool isCompleted = false;
+    float radius = 1.0f;
+    std::string description = "Reach the exit";
+};
+
 struct BillboardComponent {
   std::shared_ptr<Texture> texture;
   float scale = 1.0f;

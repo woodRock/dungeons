@@ -43,6 +43,10 @@ void StealthMode::Init(Camera* camera, Entity& playerEntity) {
     m_Renderer->LoadMesh("KnightSneak",
                         "assets/animations/Animations/gltf/Rig_Medium/Rig_Medium_MovementAdvanced.glb");
     
+    // Load special animations for skeletons (Death)
+    m_Renderer->LoadMesh("SkeletonsSpecial",
+                        "assets/animations/Animations/gltf/Rig_Medium/Rig_Medium_Special.glb");
+    
     LoadLevel("assets/saves/my_dungeon.map");
     
     // Initialize spawn editor and load spawn config BEFORE spawning enemies
@@ -56,6 +60,9 @@ void StealthMode::Init(Camera* camera, Entity& playerEntity) {
     
     // Spawn enemies in the level (uses loaded spawn config)
     SpawnEnemies();
+    
+    // Spawn objective
+    SpawnObjective();
     
     // Create camera controller AFTER spawning the player
     m_CameraController = std::make_unique<ThirdPersonCamera>(
@@ -97,6 +104,18 @@ void StealthMode::Init(Camera* camera, Entity& playerEntity) {
             knightMesh->animations.push_back(anim);
         }
         std::cout << "DEBUG: Merged KnightSneak. Total: " << knightMesh->animations.size() << std::endl;
+    }
+    
+    // Setup animations for Skeleton
+    RenderMesh* skelSpecialMesh = m_Renderer->GetRenderMesh("SkeletonsSpecial");
+    RenderMesh* skelMesh = m_Renderer->GetRenderMesh("skel_warrior");
+    
+    if (skelSpecialMesh && skelMesh) {
+        // Merge special animations into skeleton mesh
+        for (const auto& anim : skelSpecialMesh->animations) {
+            skelMesh->animations.push_back(anim);
+        }
+        std::cout << "DEBUG: Merged SkeletonsSpecial into skel_warrior. Total: " << skelMesh->animations.size() << std::endl;
     }
     
     // Log all available animations for knight
@@ -331,6 +350,12 @@ void StealthMode::Update(float dt, Entity& playerEntity) {
     // Update guards
     UpdateGuardAI(dt);
     
+    // Check objectives
+    CheckObjectives();
+    
+    // Check takedowns
+    CheckTakedowns();
+    
     // Check if player is detected
     CheckPlayerDetection();
     
@@ -403,50 +428,117 @@ void StealthMode::UpdatePlayerAnimation(float speed, bool isGrounded) {
 }
 
 void StealthMode::UpdateGuardAI(float dt) {
+    auto* playerPhys = m_Registry->GetComponent<PhysicsComponent>(m_PlayerEntity);
+    auto* playerTransform = m_Registry->GetComponent<Transform3DComponent>(m_PlayerEntity);
+    
+    // Check for noise (running)
+    bool playerMakingNoise = false;
+    if (playerPhys && !m_PlayerSneaking) {
+        float speed = sqrt(playerPhys->velX * playerPhys->velX + playerPhys->velY * playerPhys->velY);
+        if (speed > 3.0f) {
+            playerMakingNoise = true;
+        }
+    }
+
     for (size_t i = 0; i < m_Guards.size(); ++i) {
+        if (m_GuardStates[i] == GuardState::DEAD) continue;
+        
         auto* guardTransform = m_Registry->GetComponent<Transform3DComponent>(m_Guards[i]);
         auto* guardPhys = m_Registry->GetComponent<PhysicsComponent>(m_Guards[i]);
-        auto* playerTransform = m_Registry->GetComponent<Transform3DComponent>(m_PlayerEntity);
         auto* patrol = m_Registry->GetComponent<PatrolComponent>(m_Guards[i]);
         
         if (!guardTransform || !playerTransform)
             continue;
         
-        // Simple guard patrol behavior
         float distToPlayer = sqrt(pow(guardTransform->x - playerTransform->x, 2) + 
                                 pow(guardTransform->y - playerTransform->y, 2));
         
-        if (m_PlayerAlertLevel > 0.5f) {
+        // 1. Check for State Transitions
+        
+        // ALERT: Visual Detection (High)
+        if (m_PlayerAlertLevel > 0.8f) {
             m_GuardStates[i] = GuardState::ALERT;
+        }
+        // SEARCHING: Hearing Noise OR Visual Glimpse
+        else if (m_GuardStates[i] != GuardState::ALERT) {
+            bool heardNoise = playerMakingNoise && (distToPlayer < 15.0f); // 15m hearing range
+            bool sawGlimpse = m_PlayerAlertLevel > 0.3f;
             
-            // Guard moves toward player
+            if (heardNoise || sawGlimpse) {
+                if (m_GuardStates[i] != GuardState::SEARCHING) {
+                    m_GuardStates[i] = GuardState::SEARCHING;
+                    m_GuardSearchTimers[i] = 5.0f; // Search for 5 seconds
+                    std::cout << "Guard " << i << " is investigating!" << std::endl;
+                }
+                // Update target to last known location
+                m_GuardSearchTargets[i] = {playerTransform->x, playerTransform->y};
+            }
+        }
+        
+        // 2. State Behavior
+        
+        if (m_GuardStates[i] == GuardState::ALERT) {
+            // Chase Player
             float dirX = playerTransform->x - guardTransform->x;
             float dirY = playerTransform->y - guardTransform->y;
             float len = sqrt(dirX * dirX + dirY * dirY);
-            if (len > 0) {
+            if (len > 0.5f) {
                 dirX /= len;
                 dirY /= len;
-                
                 if (guardPhys) {
-                    guardPhys->velX = dirX * 6.0f;
+                    guardPhys->velX = dirX * 6.0f; // Run
                     guardPhys->velY = dirY * 6.0f;
-                    // Rotate towards player
                     guardTransform->rot = atan2(dirY, dirX) + M_PI / 2.0f;
                 }
+            } else {
+                if (guardPhys) { guardPhys->velX = 0; guardPhys->velY = 0; }
             }
-        } else {
-            m_GuardStates[i] = GuardState::IDLE;
+        } 
+        else if (m_GuardStates[i] == GuardState::SEARCHING) {
+            // Move to Search Target
+            float targetX = m_GuardSearchTargets[i].first;
+            float targetY = m_GuardSearchTargets[i].second;
             
-            // Handle Patrol Logic
+            float dirX = targetX - guardTransform->x;
+            float dirY = targetY - guardTransform->y;
+            float dist = sqrt(dirX * dirX + dirY * dirY);
+            
+            if (dist < 1.0f) {
+                // Reached target, look around (wait)
+                if (guardPhys) { guardPhys->velX = 0; guardPhys->velY = 0; }
+                
+                m_GuardSearchTimers[i] -= dt;
+                if (m_GuardSearchTimers[i] <= 0.0f) {
+                    m_GuardStates[i] = GuardState::IDLE; // Give up
+                    std::cout << "Guard " << i << " returning to patrol." << std::endl;
+                }
+                
+                // Spin slowly to look around?
+                guardTransform->rot += 1.0f * dt;
+            } else {
+                // Move towards target
+                dirX /= dist;
+                dirY /= dist;
+                if (guardPhys) {
+                    guardPhys->velX = dirX * 3.0f; // Walk fast
+                    guardPhys->velY = dirY * 3.0f;
+                    
+                    float targetRot = atan2(dirY, dirX) + M_PI / 2.0f;
+                    float rotSpeed = 5.0f;
+                    float currentRot = guardTransform->rot;
+                    while (targetRot - currentRot > M_PI) targetRot -= 2 * M_PI;
+                    while (targetRot - currentRot < -M_PI) targetRot += 2 * M_PI;
+                    guardTransform->rot = currentRot + (targetRot - currentRot) * rotSpeed * dt;
+                }
+            }
+        }
+        else if (m_GuardStates[i] == GuardState::IDLE) {
+            // Patrol Logic (Existing)
             if (patrol && !patrol->waypoints.empty()) {
                 if (patrol->waitTimer > 0.0f) {
                     patrol->waitTimer -= dt;
-                    if (guardPhys) {
-                        guardPhys->velX = 0;
-                        guardPhys->velY = 0;
-                    }
+                    if (guardPhys) { guardPhys->velX = 0; guardPhys->velY = 0; }
                 } else {
-                    // Move towards current waypoint
                     float targetX = patrol->waypoints[patrol->currentWaypointIndex].first;
                     float targetY = patrol->waypoints[patrol->currentWaypointIndex].second;
                     
@@ -455,43 +547,27 @@ void StealthMode::UpdateGuardAI(float dt) {
                     float dist = sqrt(dirX * dirX + dirY * dirY);
                     
                     if (dist < 0.5f) {
-                        // Reached waypoint
                         patrol->waitTimer = patrol->waitDuration;
                         patrol->currentWaypointIndex = (patrol->currentWaypointIndex + 1) % patrol->waypoints.size();
-                        if (guardPhys) {
-                            guardPhys->velX = 0;
-                            guardPhys->velY = 0;
-                        }
+                        if (guardPhys) { guardPhys->velX = 0; guardPhys->velY = 0; }
                     } else {
-                        // Move
                         dirX /= dist;
                         dirY /= dist;
-                        float speed = 2.0f; // Patrol speed
-                        
                         if (guardPhys) {
-                            guardPhys->velX = dirX * speed;
-                            guardPhys->velY = dirY * speed;
+                            guardPhys->velX = dirX * 2.0f; // Walk slow
+                            guardPhys->velY = dirY * 2.0f;
+                            
+                            float targetRot = atan2(dirY, dirX) + M_PI / 2.0f;
+                            float rotSpeed = 5.0f;
+                            float currentRot = guardTransform->rot;
+                            while (targetRot - currentRot > M_PI) targetRot -= 2 * M_PI;
+                            while (targetRot - currentRot < -M_PI) targetRot += 2 * M_PI;
+                            guardTransform->rot = currentRot + (targetRot - currentRot) * rotSpeed * dt;
                         }
-                        
-                        // Smooth rotation towards waypoint
-                        float targetRot = atan2(dirY, dirX) + M_PI / 2.0f;
-                        
-                        // Handle angle wrap-around for lerp
-                        float currentRot = guardTransform->rot;
-                        while (targetRot - currentRot > M_PI) targetRot -= 2 * M_PI;
-                        while (targetRot - currentRot < -M_PI) targetRot += 2 * M_PI;
-                        
-                        // Lerp rotation (5.0f is rotation speed)
-                        float rotSpeed = 5.0f;
-                        guardTransform->rot = currentRot + (targetRot - currentRot) * rotSpeed * dt;
                     }
                 }
             } else {
-                // No patrol, just idle
-                if (guardPhys) {
-                    guardPhys->velX = 0;
-                    guardPhys->velY = 0;
-                }
+                if (guardPhys) { guardPhys->velX = 0; guardPhys->velY = 0; }
             }
         }
         
@@ -500,9 +576,12 @@ void StealthMode::UpdateGuardAI(float dt) {
         RenderMesh* mesh = m_Renderer->GetRenderMesh("skel_warrior");
         if (anim && mesh) {
             bool isMoving = (guardPhys && (fabs(guardPhys->velX) > 0.1f || fabs(guardPhys->velY) > 0.1f));
-            std::string animName = isMoving ? "Walking_A" : "Idle_A"; // Use Walking_A for patrol
             
-            // Find animation index (simplified lookup)
+            std::string animName = "Idle_A";
+            if (m_GuardStates[i] == GuardState::ALERT) animName = "Running_A";
+            else if (isMoving) animName = "Walking_A";
+            
+            // Find animation index
             for (size_t k = 0; k < mesh->animations.size(); ++k) {
                 if (mesh->animations[k].name == animName) {
                     if (anim->animationIndex != (int)k) {
@@ -529,6 +608,8 @@ void StealthMode::CheckPlayerDetection() {
     
     // Check visibility by each guard
     for (size_t i = 0; i < m_Guards.size(); ++i) {
+        if (m_GuardStates[i] == GuardState::DEAD) continue;
+        
         bool canSee = false;
         CheckLineOfSight(m_Guards[i], m_PlayerEntity, canSee);
         
@@ -745,6 +826,7 @@ void StealthMode::RenderUI(GLRenderer* renderer, TextRenderer* textRenderer, int
     // Render basic HUD
     textRenderer->RenderText(renderer, "Stealth Mode", 20, 20, {255, 255, 255, 255});
     textRenderer->RenderText(renderer, "WASD: Move | Space: Jump | ESC: Back", 20, 50, {255, 255, 255, 255});
+    textRenderer->RenderText(renderer, "F: Takedown | P: Patrol Edit", 20, 65, {255, 200, 100, 255});
     
     // Alert level indicator
     std::string alertText = "Alert Level: " + std::to_string((int)(m_PlayerAlertLevel * 100)) + "%";
@@ -781,6 +863,12 @@ void StealthMode::RenderUI(GLRenderer* renderer, TextRenderer* textRenderer, int
     // Render game over message
     if (m_Detected) {
         textRenderer->RenderText(renderer, "DETECTED! Game Over. Press ESC to return.", width/2 - 200, height/2, {255, 0, 0, 255});
+    }
+    
+    if (m_MissionComplete) {
+        textRenderer->RenderText(renderer, "MISSION COMPLETE!", width/2 - 150, height/2 - 50, {0, 255, 0, 255});
+    } else {
+        RenderObjectiveMarker(renderer, textRenderer, width, height);
     }
     
     // Render console and spawn editors
@@ -936,6 +1024,8 @@ void StealthMode::SpawnEnemies() {
             m_Guards.push_back(enemy);
             m_GuardStates.push_back(GuardState::IDLE);
             m_GuardAlertLevels.push_back(0.0f);
+            m_GuardSearchTimers.push_back(0.0f);
+            m_GuardSearchTargets.push_back({0.0f, 0.0f});
         }
     }
     
@@ -957,6 +1047,8 @@ void StealthMode::RenderGuardLineOfSight() {
     }
     
     for (size_t i = 0; i < m_Guards.size(); ++i) {
+        if (m_GuardStates[i] == GuardState::DEAD) continue;
+        
         auto* guardTransform = m_Registry->GetComponent<Transform3DComponent>(m_Guards[i]);
         if (!guardTransform) {
             continue;
@@ -1035,6 +1127,161 @@ void StealthMode::RenderGuardLineOfSight() {
         
         m_Renderer->DrawLine(guardTransform->x, guardTransform->y, 0.5f, xStart_max, yStart_max, 0.5f, coneColor);
         m_Renderer->DrawLine(guardTransform->x, guardTransform->y, 0.5f, xEnd_max, yEnd_max, 0.5f, coneColor);
+    }
+}
+
+void StealthMode::SpawnObjective() {
+    // Hardcoded location for now (e.g., end of corridor)
+    float objX = 10.0f;
+    float objY = 10.0f;
+    float objZ = 0.5f;
+    
+    // Create entity
+    m_ObjectiveEntity = m_Registry->CreateEntity();
+    
+    m_Registry->AddComponent<Transform3DComponent>(m_ObjectiveEntity, {objX, objY, objZ, 0.0f, 0.0f});
+    m_Registry->AddComponent<MeshComponent>(m_ObjectiveEntity, {"ChestGold", "assets/dungeons/Assets/gltf/chest_gold.gltf", 1.0f, 1.0f, 1.0f});
+    
+    ObjectiveComponent obj;
+    obj.type = ObjectiveComponent::Exit; // Or Collectible
+    obj.radius = 2.0f;
+    obj.description = "Steal the Gold Chest";
+    m_Registry->AddComponent<ObjectiveComponent>(m_ObjectiveEntity, obj);
+    
+    // Also load the mesh if not loaded (doing it via AssetManager or direct load)
+    m_Renderer->LoadMesh("ChestGold", "assets/dungeons/Assets/gltf/chest_gold.gltf");
+}
+
+void StealthMode::CheckObjectives() {
+    if (m_MissionComplete) return;
+    
+    auto* playerTransform = m_Registry->GetComponent<Transform3DComponent>(m_PlayerEntity);
+    auto* objTransform = m_Registry->GetComponent<Transform3DComponent>(m_ObjectiveEntity);
+    auto* objComp = m_Registry->GetComponent<ObjectiveComponent>(m_ObjectiveEntity);
+    
+    if (!playerTransform || !objTransform || !objComp) return;
+    
+    float dx = playerTransform->x - objTransform->x;
+    float dy = playerTransform->y - objTransform->y;
+    float dist = sqrt(dx*dx + dy*dy);
+    
+    if (dist < objComp->radius) {
+        objComp->isCompleted = true;
+        m_MissionComplete = true;
+        std::cout << "MISSION COMPLETE!" << std::endl;
+    }
+}
+
+void StealthMode::RenderObjectiveMarker(GLRenderer* renderer, TextRenderer* textRenderer, int screenWidth, int screenHeight) {
+    if (m_MissionComplete) return;
+    
+    auto* objTransform = m_Registry->GetComponent<Transform3DComponent>(m_ObjectiveEntity);
+    if (!objTransform || !m_Camera) return;
+    
+    // Calculate direction relative to camera
+    float camX = m_Camera->x;
+    float camY = m_Camera->y;
+    float camYaw = m_Camera->yaw;
+    
+    float dx = objTransform->x - camX;
+    float dy = objTransform->y - camY;
+    
+    // Draw a simple compass at top of screen
+    int compassX = screenWidth / 2;
+    int compassY = 50;
+    
+    // Direction to objective
+    float angleToObj = atan2(dy, dx) - camYaw;
+    // Normalize to -PI to PI
+    while (angleToObj > M_PI) angleToObj -= 2 * M_PI;
+    while (angleToObj < -M_PI) angleToObj += 2 * M_PI;
+    
+    // Map angle to screen position (simple compass bar)
+    // +/- 45 degrees maps to +/- 100 pixels
+    float xOffset = 0.0f;
+    bool visible = false;
+    
+    if (fabs(angleToObj) < M_PI / 2.0f) { // In front-ish
+        xOffset = -angleToObj * 200.0f; // Scale factor
+        visible = true;
+    }
+    
+    if (visible) {
+        // Clamp to screen
+        float drawX = compassX + xOffset;
+        if (drawX > 20 && drawX < screenWidth - 20) {
+            textRenderer->RenderText(renderer, "V", drawX, compassY, {255, 215, 0, 255}); // Gold marker
+            textRenderer->RenderText(renderer, "OBJ", drawX, compassY - 15, {255, 215, 0, 255});
+        }
+    }
+}
+
+void StealthMode::CheckTakedowns() {
+    if (Input::IsKeyPressed(SDL_SCANCODE_F)) {
+        auto* playerTransform = m_Registry->GetComponent<Transform3DComponent>(m_PlayerEntity);
+        if (!playerTransform) return;
+        
+        for (size_t i = 0; i < m_Guards.size(); ++i) {
+            if (m_GuardStates[i] == GuardState::DEAD) continue;
+            if (m_GuardStates[i] == GuardState::ALERT) continue; // Can't takedown if alerted (optional constraint)
+            
+            auto* guardTransform = m_Registry->GetComponent<Transform3DComponent>(m_Guards[i]);
+            if (!guardTransform) continue;
+            
+            // Check distance
+            float dx = guardTransform->x - playerTransform->x;
+            float dy = guardTransform->y - playerTransform->y;
+            float dist = sqrt(dx*dx + dy*dy);
+            
+            if (dist < 1.5f) {
+                // Check angle (dot product)
+                // Player forward vector
+                float pDirX = cos(playerTransform->rot - M_PI/2);
+                float pDirY = sin(playerTransform->rot - M_PI/2);
+                
+                // Guard forward vector
+                float gDirX = cos(guardTransform->rot - M_PI/2);
+                float gDirY = sin(guardTransform->rot - M_PI/2);
+                
+                // Dot product: if close to 1, they are facing same direction (player is behind)
+                float dot = pDirX * gDirX + pDirY * gDirY;
+                
+                if (dot > 0.5f) {
+                    // Execute Takedown
+                    m_GuardStates[i] = GuardState::DEAD;
+                    std::cout << "Takedown on Guard " << i << "!" << std::endl;
+                    
+                    // Play death animation
+                    auto* anim = m_Registry->GetComponent<SkeletalAnimationComponent>(m_Guards[i]);
+                    RenderMesh* mesh = m_Renderer->GetRenderMesh("skel_warrior");
+                    if (anim && mesh) {
+                        for (size_t k = 0; k < mesh->animations.size(); ++k) {
+                            if (mesh->animations[k].name == "Skeletons_Death") {
+                                anim->animationIndex = k;
+                                anim->currentTime = 0.0f;
+                                anim->loop = false; // Don't loop death
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // Stop movement physics
+                    auto* phys = m_Registry->GetComponent<PhysicsComponent>(m_Guards[i]);
+                    if (phys) {
+                        phys->velX = 0;
+                        phys->velY = 0;
+                    }
+                    
+                    // Disable hitbox (so we don't collide with body)
+                    auto* hitbox = m_Registry->GetComponent<HitboxComponent>(m_Guards[i]);
+                    if (hitbox) {
+                        hitbox->isSolid = false;
+                    }
+                    
+                    return; // One takedown per press
+                }
+            }
+        }
     }
 }
 

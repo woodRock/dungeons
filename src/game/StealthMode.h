@@ -23,7 +23,8 @@ enum class GuardState {
     IDLE,
     SEARCHING,
     ALERT,
-    ATTACKING
+    ATTACKING,
+    DEAD
 };
 
 // Hide spot component
@@ -50,6 +51,7 @@ private:
     void LoadLevel(const std::string& mapFile);
     void UpdateGuardAI(float dt);
     void CheckPlayerDetection();
+    void CheckTakedowns();
     void CheckLineOfSight(Entity guardEntity, Entity playerEntity, bool& canSee);
     bool IsPlayerInHideSpot();
     float GetPlayerVisibility();
@@ -80,6 +82,8 @@ private:
     std::vector<HideSpot> m_HideSpots;
     std::vector<GuardState> m_GuardStates;
     std::vector<float> m_GuardAlertLevels;
+    std::vector<float> m_GuardSearchTimers;
+    std::vector<std::pair<float, float>> m_GuardSearchTargets;
     
     // Player sneak state
     bool m_PlayerSneaking = false;
@@ -94,6 +98,15 @@ private:
     float m_AlertDecayRate = 0.5f;  // per second
     float m_SneakVisibilityMultiplier = 0.3f;  // Player is 70% less visible when sneaking
     
+    // Mission State
+    Entity m_ObjectiveEntity = PixelsEngine::INVALID_ENTITY;
+    bool m_MissionComplete = false;
+    
+    // Helper methods
+    void SpawnObjective();
+    void CheckObjectives();
+    void RenderObjectiveMarker(GLRenderer* renderer, TextRenderer* textRenderer, int screenWidth, int screenHeight);
+
     // Screen dimensions (cached for spawn editor)
     int m_ScreenWidth = 1280;
     int m_ScreenHeight = 720;
