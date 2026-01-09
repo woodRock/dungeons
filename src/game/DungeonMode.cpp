@@ -170,10 +170,22 @@ void DungeonMode::LoadDungeonFile(const std::string& filename) {
 }
 
 void DungeonMode::LoadLevel(const std::string& levelName) {
-    // Clear registry by destroying all entities
+    // Save player state before clearing
+    Transform3DComponent* savedPlayerTransform = nullptr;
+    BattleUnitComponent* savedPlayerUnit = nullptr;
+    if (m_PlayerEntity != PixelsEngine::INVALID_ENTITY) {
+        savedPlayerTransform = new Transform3DComponent(*m_Registry->GetComponent<Transform3DComponent>(m_PlayerEntity));
+        savedPlayerUnit = new BattleUnitComponent(*m_Registry->GetComponent<BattleUnitComponent>(m_PlayerEntity));
+    }
+    
+    // Clear registry by destroying all entities EXCEPT the player
     auto& meshView = m_Registry->View<MeshComponent>();
     std::vector<Entity> toKill;
-    for (auto& pair : meshView) toKill.push_back(pair.first);
+    for (auto& pair : meshView) {
+        if (pair.first != m_PlayerEntity) {  // Keep player!
+            toKill.push_back(pair.first);
+        }
+    }
     for (auto e : toKill) m_Registry->DestroyEntity(e);
     
     // Load map
@@ -260,11 +272,30 @@ void DungeonMode::LoadLevel(const std::string& levelName) {
         m_Registry->DestroyEntity(spawnMarker);
     }
     
-    m_PlayerEntity = CharacterFactory::CreatePlayer(m_Registry, m_Renderer, spawnX, spawnY, spawnZ);
-    auto* pt = m_Registry->GetComponent<Transform3DComponent>(m_PlayerEntity);
-    if (pt) {
-        pt->rot = playerRot;
-        std::cout << "DEBUG: Player created at X=" << pt->x << ", Y=" << pt->y << ", Z=" << pt->z << std::endl;
+    // Reposition existing player instead of creating new one
+    if (m_PlayerEntity != PixelsEngine::INVALID_ENTITY) {
+        auto* pt = m_Registry->GetComponent<Transform3DComponent>(m_PlayerEntity);
+        if (pt) {
+            pt->x = spawnX;
+            pt->y = spawnY;
+            pt->z = spawnZ;
+            pt->rot = playerRot;
+            std::cout << "DEBUG: Player repositioned to X=" << pt->x << ", Y=" << pt->y << ", Z=" << pt->z << std::endl;
+        }
+        auto* phys = m_Registry->GetComponent<PhysicsComponent>(m_PlayerEntity);
+        if (phys) {
+            phys->velX = 0;
+            phys->velY = 0;
+            phys->velZ = 0;
+        }
+    } else {
+        // If player doesn't exist, create it
+        m_PlayerEntity = CharacterFactory::CreatePlayer(m_Registry, m_Renderer, spawnX, spawnY, spawnZ);
+        auto* pt = m_Registry->GetComponent<Transform3DComponent>(m_PlayerEntity);
+        if (pt) {
+            pt->rot = playerRot;
+            std::cout << "DEBUG: Player created at X=" << pt->x << ", Y=" << pt->y << ", Z=" << pt->z << std::endl;
+        }
     }
     
     // Setup Controllers: Top-down view and world-space movement
