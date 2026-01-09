@@ -28,12 +28,12 @@ void DungeonsGame::RenderMainMenu() {
   m_GLRenderer.DrawRect2D(0, 0, w, h, {135, 206, 235, 255});
 
   m_TextRenderer->RenderTextCentered(&m_GLRenderer, "DUNGEON CREATIVE", w / 2,
-                                     100, {255, 255, 255, 255});
+                                     50, {255, 255, 255, 255});
 
   int btnW = 240;
   int btnH = 50;
-  int startY = 300;
-  int gap = 70;
+  int startY = 150;
+  int gap = 60;
 
   if (!m_InOptions) {
     DrawButton(w / 2 - btnW / 2, startY, btnW, btnH, "CREATIVE MODE",
@@ -42,14 +42,16 @@ void DungeonsGame::RenderMainMenu() {
                m_MenuSelection == 1);
     DrawButton(w / 2 - btnW / 2, startY + gap * 2, btnW, btnH, "SIDESCROLLER",
                m_MenuSelection == 2);
-    DrawButton(w / 2 - btnW / 2, startY + gap * 3, btnW, btnH, "SKELETON SIEGE",
+    DrawButton(w / 2 - btnW / 2, startY + gap * 3, btnW, btnH, "STEALTH MODE",
                m_MenuSelection == 3);
-    DrawButton(w / 2 - btnW / 2, startY + gap * 4, btnW, btnH, "BATTLE MODE",
+    DrawButton(w / 2 - btnW / 2, startY + gap * 4, btnW, btnH, "SKELETON SIEGE",
                m_MenuSelection == 4);
-    DrawButton(w / 2 - btnW / 2, startY + gap * 5, btnW, btnH, "OPTIONS",
+    DrawButton(w / 2 - btnW / 2, startY + gap * 5, btnW, btnH, "BATTLE MODE",
                m_MenuSelection == 5);
-    DrawButton(w / 2 - btnW / 2, startY + gap * 6, btnW, btnH, "QUIT",
+    DrawButton(w / 2 - btnW / 2, startY + gap * 6, btnW, btnH, "OPTIONS",
                m_MenuSelection == 6);
+    DrawButton(w / 2 - btnW / 2, startY + gap * 7, btnW, btnH, "QUIT",
+               m_MenuSelection == 7);
   } else {
     bool isFullscreen =
         SDL_GetWindowFlags(m_Window) & SDL_WINDOW_FULLSCREEN_DESKTOP;

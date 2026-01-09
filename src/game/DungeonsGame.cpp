@@ -107,6 +107,24 @@ void DungeonsGame::OnUpdate(float deltaTime) {
     }
     break;
   }
+  case GameState::Stealth: {
+    if (m_StealthMode) {
+      m_StealthMode->Update(deltaTime, m_PlayerEntity);
+      // Sync player entity back from stealth mode
+      m_PlayerEntity = m_StealthMode->GetPlayerEntity();
+      UpdatePhysics(deltaTime);
+      UpdateDoors(deltaTime);
+      UpdateProjectiles(deltaTime);
+      UpdateAnimations(deltaTime);
+      if (Input::IsKeyPressed(SDL_SCANCODE_ESCAPE)) {
+        m_PreviousState = m_State;
+        m_State = GameState::Paused;
+        SDL_SetRelativeMouseMode(SDL_FALSE);
+        m_MenuSelection = 0;
+      }
+    }
+    break;
+  }
   case GameState::MapSelect: {
       HandleInputMapSelect();
       break;

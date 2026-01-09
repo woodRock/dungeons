@@ -66,7 +66,7 @@ namespace {
 void DungeonsGame::UpdatePhysics(float dt) {
   if (m_State != GameState::Playing && m_State != GameState::Creative &&
       m_State != GameState::Siege && m_State != GameState::Dungeon &&
-      m_State != GameState::Sidescroller)
+      m_State != GameState::Sidescroller && m_State != GameState::Stealth)
     return;
 
   auto &physicsView = m_Registry.View<PhysicsComponent>();
@@ -126,9 +126,16 @@ void DungeonsGame::UpdatePhysics(float dt) {
                         t->y >= worldAABB.minY && t->y <= worldAABB.maxY) {
                         
                         // Check vertical. We want the surface that is below or slightly above the player.
-                        // Ideally, we want the highest surface that is <= t->z + stepHeight
+                        // For Stealth mode with thin floor tiles, use the transform Z (actual floor position)
+                        // For other modes with thicker platforms, use the AABB maxZ
+                        float floorZ;
+                        if (m_State == GameState::Stealth) {
+                            // Use the transform Z directly for thin floor tiles
+                            floorZ = ft->z;
+                        } else {
+                            floorZ = worldAABB.maxZ;
+                        }
                         
-                        float floorZ = worldAABB.maxZ;
                         if (floorZ <= t->z + 1.5f) { // Allow stepping up/snapping
                              if (floorZ > currentFloorHeight) {
                                  currentFloorHeight = floorZ;
@@ -153,7 +160,7 @@ void DungeonsGame::UpdatePhysics(float dt) {
     float eyeOffset = 0.0f;
       if (entity == m_PlayerEntity && m_State == GameState::Sidescroller) {
         eyeOffset = 0.0f; // Keep the player feet on the platform in sidescroller
-      } else if (entity == m_PlayerEntity && m_State != GameState::Siege && m_State != GameState::Dungeon) {
+      } else if (entity == m_PlayerEntity && m_State != GameState::Siege && m_State != GameState::Dungeon && m_State != GameState::Stealth) {
         eyeOffset = phys->isSliding ? 0.75f : 1.5f;
     }
     
@@ -338,7 +345,8 @@ void DungeonsGame::UpdateDoors(float dt) {
   for (auto &pair : doors) {
     auto *door = &pair.second;
     auto *doorTransform = m_Registry.GetComponent<Transform3DComponent>(pair.first);
-    if (!doorTransform) continue;
+    auto *doorMesh = m_Registry.GetComponent<MeshComponent>(pair.first);
+    if (!doorTransform || !doorMesh) continue;
     
     // Check if player is close to door (interaction range)
     float dx = playerTransform->x - doorTransform->x;
@@ -374,22 +382,50 @@ void DungeonsGame::UpdateDoors(float dt) {
       }
     }
     
-    // Update door position based on swing axis with hinge offset
-    // For a left-hand hinge door, it swings outward from the hinge point
-    switch (door->swingAxis) {
-      case DoorComponent::X:
-        // Door swings left/right from hinge on left side (hingeOffsetX < 0)
-        doorTransform->x = door->originalX + door->hingeOffsetX + door->currentOpenDistance;
-        break;
-      case DoorComponent::Y:
-        // Door swings forward/back from hinge
-        doorTransform->y = door->originalY + door->hingeOffsetY + door->currentOpenDistance;
-        break;
-      case DoorComponent::Z:
-        // Door swings up/down (unlikely but supported)
-        doorTransform->z = door->originalZ + door->currentOpenDistance;
-        break;
+    // Calculate opening angle based on distance and door width
+    // Get the door mesh to find its actual width
+    RenderMesh* rm = m_GLRenderer.GetRenderMesh(doorMesh->meshName);
+    float doorWidth = 1.0f;  // Default fallback
+    if (rm) {
+      // Get door width from mesh bounding box
+      doorWidth = rm->boundingBox.maxX - rm->boundingBox.minX;
     }
+    
+    // The hinge is on the left side of the mesh, so offset is -doorWidth/2
+    float hingeX = -doorWidth * 0.5f;
+    
+    // Calculate opening angle (in radians)
+    // Using small angle approximation: opening distance ≈ radius * angle
+    // radius from hinge to door's right edge = doorWidth/2
+    float doorRadius = doorWidth * 0.5f;
+    float openingAngle = (doorRadius > 0.0f) ? door->currentOpenDistance / doorRadius : 0.0f;
+    
+    // Update door rotation and position
+    // The door rotates around its left edge (hinge)
+    doorTransform->rot = openingAngle;
+    
+    // Adjust door center position as it swings open
+    // When door is closed, center is at original position
+    // When door opens, the hinge stays fixed but door center moves
+    float cosAngle = cos(openingAngle);
+    float sinAngle = sin(openingAngle);
+    
+    // Door center offset from hinge when closed (half width to the right)
+    float closedOffsetFromHinge = doorWidth * 0.5f;
+    
+    // When door rotates, the center position changes
+    // New position relative to hinge after rotation
+    float rotatedOffsetX = closedOffsetFromHinge * cosAngle;
+    float rotatedOffsetY = closedOffsetFromHinge * sinAngle;
+    
+    // Hinge position is at original - half width
+    float hingeWorldX = door->originalX + hingeX;
+    float hingeWorldY = door->originalY;
+    
+    // Door center after rotation
+    doorTransform->x = hingeWorldX + rotatedOffsetX;
+    doorTransform->y = hingeWorldY + rotatedOffsetY;
+    doorTransform->z = door->originalZ;
   }
 }
 
