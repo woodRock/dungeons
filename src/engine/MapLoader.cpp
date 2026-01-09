@@ -34,8 +34,16 @@ void SetHitboxFromMeshName(const std::string& meshName, HitboxComponent& hitbox)
   
   // Walls
   if (meshName.find("wall") != std::string::npos || meshName.find("corner") != std::string::npos) {
-    hitbox.width = 1.0f;
-    hitbox.depth = 1.0f;
+    if (meshName.find("corner") != std::string::npos) {
+        // Corners are usually connecting points
+        hitbox.width = 1.5f;
+        hitbox.depth = 1.5f;
+    } else {
+        // Straight walls are long
+        // Assuming default alignment is along X axis, so width is length
+        hitbox.width = 4.0f;
+        hitbox.depth = 0.5f;
+    }
     hitbox.height = 2.5f;
     hitbox.offsetZ = 1.25f;
     hitbox.isSolid = true;

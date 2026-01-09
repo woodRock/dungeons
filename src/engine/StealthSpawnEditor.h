@@ -1,6 +1,6 @@
 #pragma once
+#include "SpawnLocation.h"
 #include <vector>
-#include <utility>
 #include <string>
 
 namespace PixelsEngine {
@@ -22,16 +22,16 @@ public:
     void Toggle() { m_IsOpen = !m_IsOpen; }
     
     // Get the current spawn locations
-    std::vector<std::pair<float, float>> GetSpawnLocations() const { return m_SpawnLocations; }
+    std::vector<SpawnLocation> GetSpawnLocations() const { return m_SpawnLocations; }
     
     // Set spawn locations
-    void SetSpawnLocations(const std::vector<std::pair<float, float>>& locations) {
+    void SetSpawnLocations(const std::vector<SpawnLocation>& locations) {
         m_SpawnLocations = locations;
         m_SelectedIndex = 0;
     }
     
     // Add a spawn location
-    void AddSpawn(float x, float y);
+    void AddSpawn(float x, float y, float rotation = 0.0f);
     
     // Remove selected spawn location
     void RemoveSelectedSpawn();
@@ -44,7 +44,7 @@ public:
 
 private:
     bool m_IsOpen = false;
-    std::vector<std::pair<float, float>> m_SpawnLocations;
+    std::vector<SpawnLocation> m_SpawnLocations;
     int m_SelectedIndex = 0;
     std::string m_StatusMessage;
     float m_StatusMessageTime = 0.0f;
@@ -52,6 +52,7 @@ private:
     // Editing mode
     bool m_EditingX = false;
     bool m_EditingY = false;
+    bool m_EditingRot = false;
     std::string m_EditBuffer;
     
     void ProcessInput();

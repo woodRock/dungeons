@@ -11,17 +11,17 @@ namespace PixelsEngine {
 StealthSpawnEditor::StealthSpawnEditor() {
     // Load default spawns
     m_SpawnLocations = {
-        {48.0f, -32.0f},
-        {36.0f, -52.0f},
-        {20.0f, -40.0f},
-        {28.0f, 4.0f},
+        {48.0f, -32.0f, 0.0f},
+        {36.0f, -52.0f, 0.0f},
+        {20.0f, -40.0f, 0.0f},
+        {28.0f, 4.0f, 0.0f},
     };
 }
 
 StealthSpawnEditor::~StealthSpawnEditor() = default;
 
-void StealthSpawnEditor::AddSpawn(float x, float y) {
-    m_SpawnLocations.push_back({x, y});
+void StealthSpawnEditor::AddSpawn(float x, float y, float rotation) {
+    m_SpawnLocations.push_back({x, y, rotation});
     m_SelectedIndex = m_SpawnLocations.size() - 1;
     m_StatusMessage = "Spawn added at (" + std::to_string((int)x) + ", " + std::to_string((int)y) + ")";
     m_StatusMessageTime = 2.0f;
@@ -47,7 +47,7 @@ void StealthSpawnEditor::SaveToFile(const std::string& filename) {
     }
     
     for (const auto& loc : m_SpawnLocations) {
-        file << loc.first << " " << loc.second << "\n";
+        file << loc.x << " " << loc.y << " " << loc.rotation << "\n";
     }
     file.close();
     
@@ -60,23 +60,24 @@ void StealthSpawnEditor::LoadFromFile(const std::string& filename) {
     if (!file.is_open()) {
         m_StatusMessage = "Failed to load: " + filename;
         m_StatusMessageTime = 2.0f;
-        std::cout << "DEBUG: Failed to load spawn file: " << filename << std::endl;
         return;
     }
     
     m_SpawnLocations.clear();
-    float x, y;
+    std::string line;
     int count = 0;
-    while (file >> x >> y) {
-        m_SpawnLocations.push_back({x, y});
+    while (std::getline(file, line)) {
+        if (line.empty()) continue;
+        std::stringstream ss(line);
+        float x, y, rot = 0.0f;
+        ss >> x >> y;
+        if (ss >> rot) {
+             // Rotation was read successfully
+        }
+        m_SpawnLocations.push_back({x, y, rot});
         count++;
     }
     file.close();
-    
-    std::cout << "DEBUG: Loaded " << count << " spawn locations from " << filename << std::endl;
-    for (const auto& loc : m_SpawnLocations) {
-        std::cout << "DEBUG: Spawn at (" << loc.first << ", " << loc.second << ")" << std::endl;
-    }
     
     m_SelectedIndex = 0;
     m_StatusMessage = "Loaded " + std::to_string(m_SpawnLocations.size()) + " spawns";
@@ -91,29 +92,38 @@ void StealthSpawnEditor::ProcessInput() {
         if (m_SelectedIndex > 0) m_SelectedIndex--;
         m_EditingX = false;
         m_EditingY = false;
+        m_EditingRot = false;
     }
     if (Input::IsKeyPressed(SDL_SCANCODE_DOWN)) {
         if (m_SelectedIndex < m_SpawnLocations.size() - 1) m_SelectedIndex++;
         m_EditingX = false;
         m_EditingY = false;
+        m_EditingRot = false;
     }
     
     // X key to edit X coordinate
-    if (Input::IsKeyPressed(SDL_SCANCODE_X) && !m_EditingX && !m_EditingY) {
+    if (Input::IsKeyPressed(SDL_SCANCODE_X) && !m_EditingX && !m_EditingY && !m_EditingRot) {
         m_EditingX = true;
-        m_EditBuffer = std::to_string((int)m_SpawnLocations[m_SelectedIndex].first);
+        m_EditBuffer = std::to_string((int)m_SpawnLocations[m_SelectedIndex].x);
         Input::StartTextInput();
     }
     
     // Y key to edit Y coordinate
-    if (Input::IsKeyPressed(SDL_SCANCODE_Y) && !m_EditingX && !m_EditingY) {
+    if (Input::IsKeyPressed(SDL_SCANCODE_Y) && !m_EditingX && !m_EditingY && !m_EditingRot) {
         m_EditingY = true;
-        m_EditBuffer = std::to_string((int)m_SpawnLocations[m_SelectedIndex].second);
+        m_EditBuffer = std::to_string((int)m_SpawnLocations[m_SelectedIndex].y);
+        Input::StartTextInput();
+    }
+    
+    // R key to edit Rotation
+    if (Input::IsKeyPressed(SDL_SCANCODE_R) && !m_EditingX && !m_EditingY && !m_EditingRot) {
+        m_EditingRot = true;
+        m_EditBuffer = std::to_string((int)(m_SpawnLocations[m_SelectedIndex].rotation * 180.0f / 3.14159f)); // Display in degrees
         Input::StartTextInput();
     }
     
     // Process text input while editing
-    if (m_EditingX || m_EditingY) {
+    if (m_EditingX || m_EditingY || m_EditingRot) {
         std::string textInput = Input::GetTextInput();
         if (!textInput.empty()) {
             m_EditBuffer += textInput;
@@ -128,9 +138,11 @@ void StealthSpawnEditor::ProcessInput() {
             try {
                 float value = std::stof(m_EditBuffer);
                 if (m_EditingX) {
-                    m_SpawnLocations[m_SelectedIndex].first = value;
-                } else {
-                    m_SpawnLocations[m_SelectedIndex].second = value;
+                    m_SpawnLocations[m_SelectedIndex].x = value;
+                } else if (m_EditingY) {
+                    m_SpawnLocations[m_SelectedIndex].y = value;
+                } else if (m_EditingRot) {
+                    m_SpawnLocations[m_SelectedIndex].rotation = value * 3.14159f / 180.0f; // Convert back to radians
                 }
                 m_StatusMessage = "Updated spawn";
                 m_StatusMessageTime = 2.0f;
@@ -140,6 +152,7 @@ void StealthSpawnEditor::ProcessInput() {
             }
             m_EditingX = false;
             m_EditingY = false;
+            m_EditingRot = false;
             Input::StopTextInput();
             m_EditBuffer.clear();
         }
@@ -152,7 +165,7 @@ void StealthSpawnEditor::ProcessInput() {
     
     // A key to add new spawn at player location (0,0 by default)
     if (Input::IsKeyPressed(SDL_SCANCODE_A)) {
-        AddSpawn(0.0f, 0.0f);
+        AddSpawn(0.0f, 0.0f, 0.0f);
     }
     
     // S key to save
@@ -191,8 +204,9 @@ void StealthSpawnEditor::Render(GLRenderer* renderer, TextRenderer* textRenderer
         SDL_Color color = (i == m_SelectedIndex) ? SDL_Color{0, 255, 100, 255} : SDL_Color{200, 200, 200, 255};
         
         std::string text = "[" + std::to_string(i) + "] ";
-        text += "(" + std::to_string((int)m_SpawnLocations[i].first) + ", ";
-        text += std::to_string((int)m_SpawnLocations[i].second) + ")";
+        text += "(" + std::to_string((int)m_SpawnLocations[i].x) + ", ";
+        text += std::to_string((int)m_SpawnLocations[i].y) + ", ";
+        text += std::to_string((int)(m_SpawnLocations[i].rotation * 180.0f / 3.14159f)) + "deg)";
         
         textRenderer->RenderText(renderer, text, screenWidth - 390, y, color);
         y += 18;
@@ -202,7 +216,7 @@ void StealthSpawnEditor::Render(GLRenderer* renderer, TextRenderer* textRenderer
     int controlY = 35 + m_SpawnLocations.size() * 18 + 10;
     textRenderer->RenderText(renderer, "UP/DOWN: Select", screenWidth - 390, controlY, {150, 150, 150, 255});
     controlY += 14;
-    textRenderer->RenderText(renderer, "X: Edit X | Y: Edit Y", screenWidth - 390, controlY, {150, 150, 150, 255});
+    textRenderer->RenderText(renderer, "X: Edit X | Y: Edit Y | R: Edit Rot", screenWidth - 390, controlY, {150, 150, 150, 255});
     controlY += 14;
     textRenderer->RenderText(renderer, "DEL: Remove | A: Add", screenWidth - 390, controlY, {150, 150, 150, 255});
     controlY += 14;
@@ -215,8 +229,11 @@ void StealthSpawnEditor::Render(GLRenderer* renderer, TextRenderer* textRenderer
     }
     
     // Draw editing prompt if in edit mode
-    if (m_EditingX || m_EditingY) {
-        std::string prompt = m_EditingX ? "Edit X: " : "Edit Y: ";
+    if (m_EditingX || m_EditingY || m_EditingRot) {
+        std::string prompt;
+        if (m_EditingX) prompt = "Edit X: ";
+        else if (m_EditingY) prompt = "Edit Y: ";
+        else prompt = "Edit Rotation (deg): ";
         textRenderer->RenderText(renderer, prompt + m_EditBuffer + "_", screenWidth - 390, 10, {0, 255, 100, 255});
     }
 }

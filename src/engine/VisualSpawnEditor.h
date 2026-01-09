@@ -2,8 +2,8 @@
 #include "ECS.h"
 #include "Camera.h"
 #include "GLRenderer.h"
+#include "SpawnLocation.h"
 #include <vector>
-#include <utility>
 
 namespace PixelsEngine {
 
@@ -21,10 +21,10 @@ public:
     void Activate(bool active = true) { m_IsActive = active; }
     
     // Get the spawn locations
-    std::vector<std::pair<float, float>> GetSpawnLocations() const;
+    std::vector<SpawnLocation> GetSpawnLocations() const;
     
     // Set spawn locations to edit
-    void SetSpawnLocations(const std::vector<std::pair<float, float>>& locations);
+    void SetSpawnLocations(const std::vector<SpawnLocation>& locations);
     
     // Clear all spawns
     void ClearAllSpawns();
@@ -36,7 +36,7 @@ private:
     
     // Visual representation of spawns
     std::vector<Entity> m_SpawnEntities;
-    std::vector<std::pair<float, float>> m_SpawnLocations;
+    std::vector<SpawnLocation> m_SpawnLocations;
     
     // Editing state
     int m_SelectedSpawnIndex = -1;

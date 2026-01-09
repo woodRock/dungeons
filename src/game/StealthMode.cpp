@@ -7,6 +7,8 @@
 #include "../engine/UIHelper.h"
 #include <cmath>
 #include <iostream>
+#include <limits>
+#include <algorithm>
 
 namespace PixelsEngine {
 
@@ -41,12 +43,16 @@ void StealthMode::Init(Camera* camera, Entity& playerEntity) {
     
     LoadLevel("assets/saves/my_dungeon.map");
     
+    // Initialize spawn editor and load spawn config BEFORE spawning enemies
+    m_SpawnEditor = std::make_unique<StealthSpawnEditor>();
+    m_SpawnEditor->LoadFromFile("assets/saves/spawn_config.txt");
+    
     // Spawn player using CharacterFactory at a valid floor location in the dungeon
     // Moved back from box_stacked obstacle to avoid collision issues
     m_PlayerEntity = CharacterFactory::CreatePlayer(m_Registry, m_Renderer, 36.0f, -20.0f, 0.5f);
     playerEntity = m_PlayerEntity;
     
-    // Spawn enemies in the level
+    // Spawn enemies in the level (uses loaded spawn config)
     SpawnEnemies();
     
     // Create camera controller AFTER spawning the player
@@ -91,16 +97,12 @@ void StealthMode::Init(Camera* camera, Entity& playerEntity) {
         }
     }
     
-    // Initialize console and spawn editor
+    // Initialize console and visual spawn editor
     m_Console = std::make_unique<Console>();
-    m_SpawnEditor = std::make_unique<StealthSpawnEditor>();
     m_VisualSpawnEditor = std::make_unique<VisualSpawnEditor>(m_Registry, m_Renderer);
     
-    // Load spawn locations from saved config
-    m_SpawnEditor->LoadFromFile("assets/saves/spawn_config.txt");
+    // Load spawn locations into visual editor
     auto spawnLocations = m_SpawnEditor->GetSpawnLocations();
-    
-    // Initialize visual spawn editor with loaded spawn locations
     m_VisualSpawnEditor->SetSpawnLocations(spawnLocations);
     // Editor is closed by default, open with /edit command
     
@@ -204,6 +206,17 @@ void StealthMode::LoadLevel(const std::string& mapFile) {
 void StealthMode::Update(float dt, Entity& playerEntity) {
     if (!m_Active || !m_Camera)
         return;
+    
+    // If detected, disable normal input and wait for ESC to exit
+    if (m_Detected && Input::IsKeyPressed(SDL_SCANCODE_ESCAPE)) {
+        m_Active = false;
+        return;
+    }
+    
+    if (m_Detected) {
+        // Game over - disable game input
+        return;
+    }
     
     // Update console and spawn editor
     if (m_Console) {
@@ -428,6 +441,116 @@ void StealthMode::CheckPlayerDetection() {
     m_Detected = m_PlayerAlertLevel > 0.7f;
 }
 
+// Helper function for ray-AABB intersection using parametric approach
+// Returns true if collision detected, sets outDistance to the distance from start to collision point
+bool RayAABBIntersection(float startX, float startY, float endX, float endY,
+                         float minX, float maxX, float minY, float maxY,
+                         float& outDistance) {
+    float dirX = endX - startX;
+    float dirY = endY - startY;
+    float rayLength = sqrt(dirX * dirX + dirY * dirY);
+    
+    if (rayLength < 0.001f) return false;  // Ray too short
+    
+    // Normalize direction
+    float dirNormX = dirX / rayLength;
+    float dirNormY = dirY / rayLength;
+    
+    float tMin = 0.0f;
+    float tMax = rayLength;
+    
+    // Check X axis
+    if (fabs(dirNormX) > 0.001f) {
+        float t1 = (minX - startX) / dirNormX;
+        float t2 = (maxX - startX) / dirNormX;
+        if (t1 > t2) std::swap(t1, t2);
+        tMin = std::max(tMin, t1);
+        tMax = std::min(tMax, t2);
+    } else {
+        // Ray is parallel to X axis, check if it's within bounds
+        if (startX < minX || startX > maxX) return false;
+    }
+    
+    // Check Y axis
+    if (fabs(dirNormY) > 0.001f) {
+        float t1 = (minY - startY) / dirNormY;
+        float t2 = (maxY - startY) / dirNormY;
+        if (t1 > t2) std::swap(t1, t2);
+        tMin = std::max(tMin, t1);
+        tMax = std::min(tMax, t2);
+    } else {
+        // Ray is parallel to Y axis, check if it's within bounds
+        if (startY < minY || startY > maxY) return false;
+    }
+    
+    // Check if there's a valid intersection
+    if (tMin > tMax) return false;
+    if (tMax < 0.001f) return false;  // Collision is behind the ray start
+    
+    // Use the entry point, ensure it's not behind start
+    float collisionT = std::max(0.0f, tMin);
+    outDistance = collisionT;
+    
+    return true;
+}
+
+bool StealthMode::RayHitsCollider(float startX, float startY, float endX, float endY, float& outDistance) {
+    outDistance = std::numeric_limits<float>::max();
+    
+    // Iterate through all entities with hitboxes
+    auto& hitboxes = m_Registry->View<HitboxComponent>();
+    
+    static int callCount = 0;
+    static bool firstPrint = true;
+    callCount++;
+    
+    bool foundCollision = false;
+    for (auto& pair : hitboxes) {
+        Entity entity = pair.first;
+        HitboxComponent& hitbox = pair.second;
+        
+        // Only check solid objects
+        if (!hitbox.isSolid) continue;
+        
+        // Skip guards (don't collide with other guards)
+        bool isGuard = false;
+        for (const auto& guard : m_Guards) {
+            if (guard == entity) {
+                isGuard = true;
+                break;
+            }
+        }
+        if (isGuard) continue;
+        
+        // Skip the player entity
+        if (entity == m_PlayerEntity) continue;
+        
+        // Get the entity's transform
+        auto* transform = m_Registry->GetComponent<Transform3DComponent>(entity);
+        if (!transform) continue;
+        
+        // Get AABB bounds
+        float minX, maxX, minY, maxY, minZ, maxZ;
+        hitbox.GetBounds(transform->x, transform->y, transform->z, transform->rot,
+                        minX, maxX, minY, maxY, minZ, maxZ);
+        
+        // Check if ray intersects this AABB
+        float distance = 0.0f;
+        if (RayAABBIntersection(startX, startY, endX, endY, minX, maxX, minY, maxY, distance)) {
+            foundCollision = true;
+            if (firstPrint && callCount < 10) {
+                std::cout << "FIRST COLLISION FOUND: dist=" << distance << " ray_len=" << sqrt((endX-startX)*(endX-startX) + (endY-startY)*(endY-startY)) << std::endl;
+                firstPrint = false;
+            }
+            if (distance < outDistance) {
+                outDistance = distance;
+            }
+        }
+    }
+    
+    return foundCollision;
+}
+
 void StealthMode::CheckLineOfSight(Entity guardEntity, Entity playerEntity, bool& canSee) {
     auto* guardTransform = m_Registry->GetComponent<Transform3DComponent>(guardEntity);
     auto* playerTransform = m_Registry->GetComponent<Transform3DComponent>(playerEntity);
@@ -458,7 +581,23 @@ void StealthMode::CheckLineOfSight(Entity guardEntity, Entity playerEntity, bool
     // Check if within field of view
     float viewAngleRad = m_ViewAngle * M_PI / 360.0f;  // Half angle
     
-    canSee = angleDiff < viewAngleRad;
+    if (angleDiff >= viewAngleRad) {
+        canSee = false;
+        return;
+    }
+    
+    // Check for collision obstacles between guard and player
+    float collisionDist = 0.0f;
+    if (RayHitsCollider(guardTransform->x, guardTransform->y,
+                        playerTransform->x, playerTransform->y, collisionDist)) {
+        // If collision is closer than player, line of sight is blocked
+        if (collisionDist < distance) {
+            canSee = false;
+            return;
+        }
+    }
+    
+    canSee = true;
 }
 
 bool StealthMode::IsPlayerInHideSpot() {
@@ -529,6 +668,14 @@ void StealthMode::RenderUI(GLRenderer* renderer, TextRenderer* textRenderer, int
     
     // Render minimap
     RenderMinimap(renderer, textRenderer, width, height);
+    
+    // Render guard line of sight cones
+    RenderGuardLineOfSight();
+    
+    // Render game over message
+    if (m_Detected) {
+        textRenderer->RenderText(renderer, "DETECTED! Game Over. Press ESC to return.", width/2 - 200, height/2, {255, 0, 0, 255});
+    }
     
     // Render console and spawn editors
     if (m_Console) m_Console->Render(renderer, textRenderer, width, height);
@@ -653,64 +800,126 @@ void StealthMode::RenderMinimap(GLRenderer* renderer, TextRenderer* textRenderer
 
 void StealthMode::SpawnEnemies() {
     // Load spawn locations from the spawn editor's saved config
-    std::vector<std::pair<float, float>> spawnLocations;
+    std::vector<SpawnLocation> spawnLocations;
     
-    if (m_SpawnEditor) {
-        spawnLocations = m_SpawnEditor->GetSpawnLocations();
+    if (!m_SpawnEditor) {
+        return;
     }
     
-    std::cout << "DEBUG: SpawnEnemies called, attempting to spawn " << spawnLocations.size() << " enemies" << std::endl;
+    spawnLocations = m_SpawnEditor->GetSpawnLocations();
     
     for (const auto& loc : spawnLocations) {
-        std::cout << "DEBUG: Creating skeleton at (" << loc.first << ", " << loc.second << ")" << std::endl;
         Entity enemy = CharacterFactory::CreateSkeleton(m_Registry, m_Renderer, 
-                                                        "skel_warrior", loc.first, loc.second, 0.5f);
-        std::cout << "DEBUG: CreateSkeleton returned entity ID: " << enemy << std::endl;
+                                                        "skel_warrior", loc.x, loc.y, 0.5f);
         if (enemy != INVALID_ENTITY) {
+            // Apply rotation
+            auto* transform = m_Registry->GetComponent<Transform3DComponent>(enemy);
+            if (transform) {
+                transform->rot = loc.rotation;
+            }
+            
             m_Guards.push_back(enemy);
             m_GuardStates.push_back(GuardState::IDLE);
             m_GuardAlertLevels.push_back(0.0f);
-            std::cout << "DEBUG: Spawned skeleton guard at (" << loc.first << ", " << loc.second << ")" << std::endl;
-        } else {
-            std::cout << "DEBUG: Failed to create skeleton - INVALID_ENTITY returned" << std::endl;
         }
     }
-    std::cout << "DEBUG: SpawnEnemies completed. Total guards: " << m_Guards.size() << std::endl;
+    
+    // DEBUG: Print hitbox information
+    auto& hitboxes = m_Registry->View<HitboxComponent>();
+    std::cout << "DEBUG: Total hitboxes in scene: " << hitboxes.size() << std::endl;
+    int solidCount = 0;
+    for (auto& pair : hitboxes) {
+        HitboxComponent& hitbox = pair.second;
+        if (hitbox.isSolid) solidCount++;
+    }
+    std::cout << "DEBUG: Solid hitboxes: " << solidCount << std::endl;
 }
 
 void StealthMode::RenderGuardLineOfSight() {
     // Render vision cones for all guards as semi-transparent red cones
+    if (!m_Renderer) {
+        return;
+    }
+    
     for (size_t i = 0; i < m_Guards.size(); ++i) {
         auto* guardTransform = m_Registry->GetComponent<Transform3DComponent>(m_Guards[i]);
-        if (!guardTransform) continue;
+        if (!guardTransform) {
+            continue;
+        }
         
-        // Draw a simple cone representing the guard's field of view
-        // The cone has: origin at guard position, opens in the direction they face,
-        // with an angle of m_ViewAngle degrees and range of m_MaxDetectionDistance
-        
+        // Draw a cone representing the guard's field of view
         const int coneSegments = 16;
         const float viewAngleRad = (m_ViewAngle / 2.0f) * M_PI / 180.0f;
         
-        // Guard facing direction (based on their rotation)
-        float guardFacingX = -sin(guardTransform->rot);
-        float guardFacingY = -cos(guardTransform->rot);
-        
-        // Draw cone perimeter lines
-        for (int j = 0; j < coneSegments; ++j) {
-            float angle1 = guardTransform->rot - viewAngleRad + (2.0f * viewAngleRad * j / coneSegments);
-            float angle2 = guardTransform->rot - viewAngleRad + (2.0f * viewAngleRad * (j + 1) / coneSegments);
-            
-            // Cone edge points
-            float x1 = guardTransform->x + cos(angle1) * m_MaxDetectionDistance;
-            float y1 = guardTransform->y + sin(angle1) * m_MaxDetectionDistance;
-            
-            float x2 = guardTransform->x + cos(angle2) * m_MaxDetectionDistance;
-            float y2 = guardTransform->y + sin(angle2) * m_MaxDetectionDistance;
-            
-            // Draw lines from guard to cone edge and between edges
-            // These would be 3D lines in the actual renderer
-            // For now, we just store this for visual debugging
+        // Determine cone color based on guard state
+        SDL_Color coneColor;
+        if (m_GuardStates[i] == GuardState::ALERT) {
+            coneColor = {255, 0, 0, 100};  // Red with transparency when alert
+        } else {
+            coneColor = {200, 100, 100, 80};  // Dark red with more transparency when idle
         }
+        
+        // Draw cone segments (triangles from guard to cone edge)
+        for (int j = 0; j < coneSegments; ++j) {
+            float angle1 = guardTransform->rot - M_PI/2 - viewAngleRad + (2.0f * viewAngleRad * j / coneSegments);
+            float angle2 = guardTransform->rot - M_PI/2 - viewAngleRad + (2.0f * viewAngleRad * (j + 1) / coneSegments);
+            
+            // Cone edge points - calculate max distance considering collisions
+            float distToEdge1 = m_MaxDetectionDistance;
+            float distToEdge2 = m_MaxDetectionDistance;
+            
+            // Check for collisions along ray 1
+            float x1_max = guardTransform->x + cos(angle1) * m_MaxDetectionDistance;
+            float y1_max = guardTransform->y + sin(angle1) * m_MaxDetectionDistance;
+            float collisionDist1 = 0.0f;
+            if (RayHitsCollider(guardTransform->x, guardTransform->y, x1_max, y1_max, collisionDist1)) {
+                distToEdge1 = collisionDist1;
+            }
+            
+            // Check for collisions along ray 2
+            float x2_max = guardTransform->x + cos(angle2) * m_MaxDetectionDistance;
+            float y2_max = guardTransform->y + sin(angle2) * m_MaxDetectionDistance;
+            float collisionDist2 = 0.0f;
+            if (RayHitsCollider(guardTransform->x, guardTransform->y, x2_max, y2_max, collisionDist2)) {
+                distToEdge2 = collisionDist2;
+            }
+            
+            // Adjust points to collision distance
+            float x1 = guardTransform->x + cos(angle1) * distToEdge1;
+            float y1 = guardTransform->y + sin(angle1) * distToEdge1;
+            
+            float x2 = guardTransform->x + cos(angle2) * distToEdge2;
+            float y2 = guardTransform->y + sin(angle2) * distToEdge2;
+            
+            // Draw triangle from guard to two cone edge points
+            float z = 0.5f;
+            m_Renderer->DrawLine(guardTransform->x, guardTransform->y, z, x1, y1, z, coneColor);
+            m_Renderer->DrawLine(x1, y1, z, x2, y2, z, coneColor);
+        }
+        
+        // Draw closing lines with collision awareness
+        float angleStart = guardTransform->rot - M_PI/2 - viewAngleRad;
+        float angleEnd = guardTransform->rot - M_PI/2 + viewAngleRad;
+        
+        // Check collisions for closing lines
+        float xStart_max = guardTransform->x + cos(angleStart) * m_MaxDetectionDistance;
+        float yStart_max = guardTransform->y + sin(angleStart) * m_MaxDetectionDistance;
+        float collisionDistStart = 0.0f;
+        if (RayHitsCollider(guardTransform->x, guardTransform->y, xStart_max, yStart_max, collisionDistStart)) {
+            xStart_max = guardTransform->x + cos(angleStart) * collisionDistStart;
+            yStart_max = guardTransform->y + sin(angleStart) * collisionDistStart;
+        }
+        
+        float xEnd_max = guardTransform->x + cos(angleEnd) * m_MaxDetectionDistance;
+        float yEnd_max = guardTransform->y + sin(angleEnd) * m_MaxDetectionDistance;
+        float collisionDistEnd = 0.0f;
+        if (RayHitsCollider(guardTransform->x, guardTransform->y, xEnd_max, yEnd_max, collisionDistEnd)) {
+            xEnd_max = guardTransform->x + cos(angleEnd) * collisionDistEnd;
+            yEnd_max = guardTransform->y + sin(angleEnd) * collisionDistEnd;
+        }
+        
+        m_Renderer->DrawLine(guardTransform->x, guardTransform->y, 0.5f, xStart_max, yStart_max, 0.5f, coneColor);
+        m_Renderer->DrawLine(guardTransform->x, guardTransform->y, 0.5f, xEnd_max, yEnd_max, 0.5f, coneColor);
     }
 }
 

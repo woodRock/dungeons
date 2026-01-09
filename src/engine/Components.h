@@ -77,14 +77,31 @@ struct HitboxComponent {
   float climbHeight = 0.5f; // Maximum step height
   
   // Get actual bounds (min and max)
-  void GetBounds(float posX, float posY, float posZ,
+  void GetBounds(float posX, float posY, float posZ, float rotation,
                  float &minX, float &maxX,
                  float &minY, float &maxY,
                  float &minZ, float &maxZ) const {
-    minX = posX + offsetX - width / 2.0f;
-    maxX = posX + offsetX + width / 2.0f;
-    minY = posY + offsetY - depth / 2.0f;
-    maxY = posY + offsetY + depth / 2.0f;
+    
+    // Determine effective dimensions based on rotation
+    // We assume 90 degree increments for dungeon walls
+    float effectiveWidth = width;
+    float effectiveDepth = depth;
+    
+    // Check if rotated approx 90 or 270 degrees (PI/2 or 3*PI/2)
+    // PI/2 = 1.57, 3*PI/2 = 4.71
+    float absRot = std::abs(rotation);
+    // Normalize to 0-PI
+    while (absRot > 3.14159f) absRot -= 3.14159f;
+    
+    if (absRot > 0.78f && absRot < 2.35f) { // roughly 45 to 135 degrees
+        effectiveWidth = depth;
+        effectiveDepth = width;
+    }
+    
+    minX = posX + offsetX - effectiveWidth / 2.0f;
+    maxX = posX + offsetX + effectiveWidth / 2.0f;
+    minY = posY + offsetY - effectiveDepth / 2.0f;
+    maxY = posY + offsetY + effectiveDepth / 2.0f;
     minZ = posZ + offsetZ;
     maxZ = posZ + offsetZ + height;
   }

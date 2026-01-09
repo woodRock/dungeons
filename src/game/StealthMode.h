@@ -58,6 +58,9 @@ private:
     void RenderGuardLineOfSight();
     void RenderMinimap(GLRenderer* renderer, TextRenderer* textRenderer, int screenWidth, int screenHeight);
     
+    // Collision detection helper
+    bool RayHitsCollider(float startX, float startY, float endX, float endY, float& outDistance);
+    
     Registry* m_Registry;
     GLRenderer* m_Renderer;
     Camera* m_Camera = nullptr;

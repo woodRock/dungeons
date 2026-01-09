@@ -24,18 +24,18 @@ VisualSpawnEditor::~VisualSpawnEditor() {
     m_SpawnEntities.clear();
 }
 
-void VisualSpawnEditor::SetSpawnLocations(const std::vector<std::pair<float, float>>& locations) {
+void VisualSpawnEditor::SetSpawnLocations(const std::vector<SpawnLocation>& locations) {
     m_SpawnLocations = locations;
     CreateSpawnEntities();
 }
 
-std::vector<std::pair<float, float>> VisualSpawnEditor::GetSpawnLocations() const {
+std::vector<SpawnLocation> VisualSpawnEditor::GetSpawnLocations() const {
     // Update from current entity positions
-    std::vector<std::pair<float, float>> result;
+    std::vector<SpawnLocation> result;
     for (Entity e : m_SpawnEntities) {
         auto* transform = m_Registry->GetComponent<Transform3DComponent>(e);
         if (transform) {
-            result.push_back({transform->x, transform->y});
+            result.push_back({transform->x, transform->y, transform->rot});
         }
     }
     return result;
@@ -72,8 +72,12 @@ void VisualSpawnEditor::CreateSpawnEntities() {
     // Create skeleton entities at spawn locations
     for (const auto& loc : m_SpawnLocations) {
         Entity e = CharacterFactory::CreateSkeleton(m_Registry, m_Renderer, 
-                                                     "skel_warrior", loc.first, loc.second, 0.5f);
+                                                     "skel_warrior", loc.x, loc.y, 0.5f);
         if (e != INVALID_ENTITY) {
+            auto* transform = m_Registry->GetComponent<Transform3DComponent>(e);
+            if (transform) {
+                transform->rot = loc.rotation;
+            }
             m_SpawnEntities.push_back(e);
         }
     }
@@ -84,8 +88,10 @@ void VisualSpawnEditor::UpdateSpawnEntities() {
     for (size_t i = 0; i < m_SpawnEntities.size(); ++i) {
         auto* transform = m_Registry->GetComponent<Transform3DComponent>(m_SpawnEntities[i]);
         if (transform) {
-            transform->x = m_SpawnLocations[i].first;
-            transform->y = m_SpawnLocations[i].second;
+            transform->x = m_SpawnLocations[i].x;
+            transform->y = m_SpawnLocations[i].y;
+            // We don't update rotation here because dragging only affects position.
+            // Rotation is updated via R key directly on entity.
         }
     }
 }
@@ -209,7 +215,7 @@ void VisualSpawnEditor::HandleMouseInput(Camera* camera, int screenWidth, int sc
         // If in spawn mode (E held), place the new spawn
         if (m_SpawnModeActive) {
             // Place at preview position
-            m_SpawnLocations.push_back({m_PreviewX, m_PreviewY});
+            m_SpawnLocations.push_back({m_PreviewX, m_PreviewY, 0.0f});
             CreateSpawnEntities();
             m_SelectedSpawnIndex = m_SpawnLocations.size() - 1;
             m_SpawnModeActive = false;
@@ -230,8 +236,8 @@ void VisualSpawnEditor::HandleMouseInput(Camera* camera, int screenWidth, int sc
             int closestIdx = -1;
             
             for (size_t i = 0; i < m_SpawnLocations.size(); ++i) {
-                float dx = m_SpawnLocations[i].first - worldX;
-                float dy = m_SpawnLocations[i].second - worldY;
+                float dx = m_SpawnLocations[i].x - worldX;
+                float dy = m_SpawnLocations[i].y - worldY;
                 float dist = sqrt(dx * dx + dy * dy);
                 
                 if (dist < closestDist) {
@@ -243,8 +249,8 @@ void VisualSpawnEditor::HandleMouseInput(Camera* camera, int screenWidth, int sc
             if (closestIdx >= 0) {
                 m_SelectedSpawnIndex = closestIdx;
                 m_IsDragging = true;
-                m_DragOffsetX = m_SpawnLocations[closestIdx].first - worldX;
-                m_DragOffsetY = m_SpawnLocations[closestIdx].second - worldY;
+                m_DragOffsetX = m_SpawnLocations[closestIdx].x - worldX;
+                m_DragOffsetY = m_SpawnLocations[closestIdx].y - worldY;
             } else {
                 m_SelectedSpawnIndex = -1;
                 m_IsDragging = false;
@@ -257,8 +263,8 @@ void VisualSpawnEditor::HandleMouseInput(Camera* camera, int screenWidth, int sc
         if (Input::IsMouseButtonDown(1)) {
             float worldX, worldY;
             if (RaycastToGround(camera, currMouseX, currMouseY, screenWidth, screenHeight, worldX, worldY)) {
-                m_SpawnLocations[m_SelectedSpawnIndex].first = worldX + m_DragOffsetX;
-                m_SpawnLocations[m_SelectedSpawnIndex].second = worldY + m_DragOffsetY;
+                m_SpawnLocations[m_SelectedSpawnIndex].x = worldX + m_DragOffsetX;
+                m_SpawnLocations[m_SelectedSpawnIndex].y = worldY + m_DragOffsetY;
                 UpdateSpawnEntities();
             }
         } else {
@@ -319,15 +325,23 @@ void VisualSpawnEditor::HandleKeyboardInput(float dt) {
     }
     
     // R to rotate selected spawn (only if not in spawn mode)
-    if (keyState[SDL_SCANCODE_R] && m_SelectedSpawnIndex >= 0 && !m_SpawnModeActive) {
+    static bool rWasDown = false;
+    bool rIsDown = keyState[SDL_SCANCODE_R];
+    
+    if (rIsDown && !rWasDown && m_SelectedSpawnIndex >= 0 && !m_SpawnModeActive) {
         auto* transform = m_Registry->GetComponent<Transform3DComponent>(m_SpawnEntities[m_SelectedSpawnIndex]);
         if (transform) {
             transform->rot += M_PI / 2.0f;
             if (transform->rot > 2 * M_PI) {
                 transform->rot -= 2 * M_PI;
             }
+            // Update the source data too so dragging doesn't revert it? 
+            // Actually UpdateSpawnEntities doesn't touch rotation, so it's fine.
+            // But good to keep in sync.
+            m_SpawnLocations[m_SelectedSpawnIndex].rotation = transform->rot;
         }
     }
+    rWasDown = rIsDown;
     
     // Delete key to remove selected spawn (only if not in spawn mode)
     if (keyState[SDL_SCANCODE_DELETE] && m_SelectedSpawnIndex >= 0 && !m_SpawnModeActive) {
@@ -351,14 +365,7 @@ void VisualSpawnEditor::HandleKeyboardInput(float dt) {
 
 void VisualSpawnEditor::RenderSpawnPoints(GLRenderer* renderer, Camera* camera) {
     // Render visual indicators for each spawn point
-    for (size_t i = 0; i < m_SpawnLocations.size(); ++i) {
-        bool isSelected = (i == (size_t)m_SelectedSpawnIndex);
-        SDL_Color color = isSelected ? SDL_Color{0, 255, 100, 255} : SDL_Color{255, 100, 0, 255};
-        
-        // Draw a circle/marker at spawn location
-        // Note: This would need actual 3D rendering, which is complex
-        // For now, we rely on the skeleton entities being rendered
-    }
+    // For now, we rely on the skeleton entities being rendered
 }
 
 void VisualSpawnEditor::RenderSelectedHighlight(GLRenderer* renderer, Camera* camera, int screenWidth, int screenHeight) {
