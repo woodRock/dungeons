@@ -22,9 +22,9 @@ jobs:
           - os: macos-latest
             artifact_name: Dungeons-macos
             asset_name: Dungeons-macos
-          - os: windows-latest
-            artifact_name: Dungeons-windows.exe
-            asset_name: Dungeons-windows.exe
+          # - os: windows-latest
+          #   artifact_name: Dungeons-windows.exe
+          #   asset_name: Dungeons-windows.exe
 
     steps:
       - name: Checkout
@@ -41,10 +41,10 @@ jobs:
         run: |
           brew install sdl2 sdl2_mixer sdl2_ttf sdl2_image pkg-config glew
 
-      - name: Install Dependencies (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          vcpkg install sdl2 sdl2-image sdl2-mixer sdl2-ttf glew --triplet x64-windows-static
+      # - name: Install Dependencies (Windows)
+      #   if: matrix.os == 'windows-latest'
+      #   run: |
+      #     vcpkg install sdl2 sdl2-image sdl2-mixer sdl2-ttf glew --triplet x64-windows-static
 
       - name: Configure CMake
         run: |
@@ -64,11 +64,11 @@ jobs:
           fi
           cp -r assets dist/
 
-      - name: Create Archive (Windows)
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          Compress-Archive -Path dist/* -DestinationPath ${{ matrix.artifact_name }}.zip
+      # - name: Create Archive (Windows)
+      #   if: matrix.os == 'windows-latest'
+      #   shell: pwsh
+      #   run: |
+      #     Compress-Archive -Path dist/* -DestinationPath ${{ matrix.artifact_name }}.zip
 
       - name: Create Archive (Linux/macOS)
         if: matrix.os != 'windows-latest'
@@ -97,6 +97,6 @@ jobs:
           files: |
             Dungeons-linux/Dungeons-linux.zip
             Dungeons-macos/Dungeons-macos.zip
-            Dungeons-windows.exe/Dungeons-windows.exe.zip
+        #   Dungeons-windows.exe/Dungeons-windows.exe.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
