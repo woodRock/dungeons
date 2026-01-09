@@ -104,4 +104,9 @@ private:
                      PixelsEngine::TextRenderer *tr, int w, int h);
 
   void RaycastCursor();
+  
+  // Collision & Door helpers
+  void UpdateDoors(float dt);
+  bool CheckCollision(float x, float y, float z, PixelsEngine::Entity ignoreEntity);
+  PixelsEngine::AABB GetWorldAABB(const PixelsEngine::AABB& local, const PixelsEngine::Transform3DComponent& t, float scaleX, float scaleY, float scaleZ);
 };

@@ -220,7 +220,9 @@ void StealthMode::Update(float dt, Entity& playerEntity) {
     if (!m_Active || !m_Camera)
         return;
         
-    m_GameTime += dt;
+    if (!m_GameOver && !m_MissionComplete) {
+        m_GameTime += dt;
+    }
     
     // Sync balance settings
     m_MaxDetectionDistance = m_BalanceSettings.maxDetectionDistance;
@@ -233,8 +235,8 @@ void StealthMode::Update(float dt, Entity& playerEntity) {
         return; // Pause game while in menu? Or just block input. Let's just block input.
     }
     
-    // If detected
-    if (m_Detected) {
+    // Handle Game Over / Mission Complete
+    if (m_GameOver || m_MissionComplete) {
         if (Input::IsKeyPressed(SDL_SCANCODE_ESCAPE)) {
             m_Active = false;
             return;
@@ -243,6 +245,9 @@ void StealthMode::Update(float dt, Entity& playerEntity) {
             ResetLevel();
             return;
         }
+        
+        // Block other input/updates
+        SDL_SetRelativeMouseMode(SDL_FALSE);
         return;
     }
     
@@ -359,13 +364,25 @@ void StealthMode::UpdateGuardAI(float dt) {
             m_GuardStates[i] = GuardState::ALERT;
         } else if (m_GuardStates[i] != GuardState::ALERT) {
             bool heardNoise = playerMakingNoise && (distToPlayer < m_BalanceSettings.hearingDistance);
-            bool sawGlimpse = m_PlayerAlertLevel > 0.3f;
-            if (heardNoise || sawGlimpse) {
+            
+            // Only search if heard noise OR player is somewhat visible in general
+            if (heardNoise) {
                 if (m_GuardStates[i] != GuardState::SEARCHING) {
                     m_GuardStates[i] = GuardState::SEARCHING;
                     m_GuardSearchTimers[i] = 5.0f;
+                    m_GuardSearchTargets[i] = {playerTransform->x, playerTransform->y};
                 }
-                m_GuardSearchTargets[i] = {playerTransform->x, playerTransform->y};
+            } else if (m_PlayerAlertLevel > 0.3f) {
+                // Check if this guard can actually see the player right now before updating search target
+                bool canSee = false;
+                CheckLineOfSight(m_Guards[i], m_PlayerEntity, canSee);
+                if (canSee) {
+                    if (m_GuardStates[i] != GuardState::SEARCHING) {
+                        m_GuardStates[i] = GuardState::SEARCHING;
+                        m_GuardSearchTimers[i] = 3.0f;
+                    }
+                    m_GuardSearchTargets[i] = {playerTransform->x, playerTransform->y};
+                }
             }
         }
         
@@ -472,6 +489,10 @@ void StealthMode::CheckPlayerDetection() {
         }
     }
     m_Detected = m_PlayerAlertLevel > 0.7f;
+    if (m_Detected) {
+        m_GameOver = true;
+        m_TimesDetected++;
+    }
 }
 
 bool RayAABBIntersection(float startX, float startY, float endX, float endY, float minX, float maxX, float minY, float maxY, float& outDistance) {
@@ -522,15 +543,30 @@ void StealthMode::CheckLineOfSight(Entity guardEntity, Entity playerEntity, bool
     auto* guardTransform = m_Registry->GetComponent<Transform3DComponent>(guardEntity);
     auto* playerTransform = m_Registry->GetComponent<Transform3DComponent>(playerEntity);
     if (!guardTransform || !playerTransform) { canSee = false; return; }
+    
     float distX = playerTransform->x - guardTransform->x;
     float distY = playerTransform->y - guardTransform->y;
     float distance = sqrt(distX * distX + distY * distY);
     if (distance > m_MaxDetectionDistance) { canSee = false; return; }
-    float playerAngle = atan2(distY, distX);
-    float guardFacing = guardTransform->rot - M_PI / 2.0f;
-    float angleDiff = fabs(playerAngle - guardFacing);
-    while (angleDiff > M_PI) angleDiff = 2 * M_PI - angleDiff;
-    if (angleDiff >= (m_ViewAngle * M_PI / 360.0f)) { canSee = false; return; }
+    
+    // Guard facing is based on rot (where 0 is facing +Y in GL space, but here it depends on atan2 usage)
+    // In UpdateGuardAI: guardTransform->rot = atan2(dirY, dirX) + M_PI / 2.0f;
+    // So if dirX=0, dirY=1 (facing +Y), rot = PI/2 + PI/2 = PI.
+    // Let's re-calculate angle to player.
+    float angleToPlayer = atan2(distY, distX); // Range [-PI, PI]
+    
+    // The guard's forward vector angle
+    float guardForwardAngle = guardTransform->rot - M_PI / 2.0f;
+    
+    float angleDiff = angleToPlayer - guardForwardAngle;
+    while (angleDiff > M_PI) angleDiff -= 2 * M_PI;
+    while (angleDiff < -M_PI) angleDiff += 2 * M_PI;
+    
+    if (fabs(angleDiff) > (m_ViewAngle * M_PI / 360.0f)) { 
+        canSee = false; 
+        return; 
+    }
+    
     float collisionDist = 0.0f;
     if (RayHitsCollider(guardTransform->x, guardTransform->y, playerTransform->x, playerTransform->y, collisionDist)) {
         if (collisionDist < distance) { canSee = false; return; }
@@ -581,11 +617,38 @@ void StealthMode::RenderUI(GLRenderer* renderer, TextRenderer* textRenderer, int
     RenderMinimap(renderer, textRenderer, width, height);
     RenderGuardLineOfSight();
     
-    if (m_Detected) {
-        textRenderer->RenderText(renderer, "DETECTED! Game Over. Press R to Replay or ESC to return.", width/2 - 250, height/2, {255, 0, 0, 255});
-    }
-    if (m_MissionComplete) {
-        textRenderer->RenderText(renderer, "MISSION COMPLETE!", width/2 - 150, height/2 - 50, {0, 255, 0, 255});
+    if (m_GameOver || m_MissionComplete) {
+        // Overlay background
+        renderer->DrawRect2D(0, 0, width, height, {0, 0, 0, 180});
+        
+        int centerX = width / 2;
+        int centerY = height / 2;
+        
+        std::string title = m_MissionComplete ? "MISSION SUCCESS" : "MISSION FAILED";
+        SDL_Color titleColor = m_MissionComplete ? SDL_Color{0, 255, 100, 255} : SDL_Color{255, 50, 50, 255};
+        
+        textRenderer->RenderTextCentered(renderer, title, centerX, centerY - 100, titleColor);
+        
+        // Stats Panel
+        int panelW = 400;
+        int panelH = 200;
+        UIHelper::DrawPanel(renderer, centerX - panelW/2, centerY - 60, panelW, panelH, {30, 30, 40, 220});
+        
+        int statsY = centerY - 40;
+        textRenderer->RenderText(renderer, "Time Elapsed: " + std::to_string((int)m_GameTime) + "s", centerX - 180, statsY, {200, 200, 200, 255});
+        statsY += 25;
+        textRenderer->RenderText(renderer, "Guards Neutralized: " + std::to_string(m_GuardsNeutralized), centerX - 180, statsY, {200, 200, 200, 255});
+        statsY += 25;
+        textRenderer->RenderText(renderer, "Takedowns: " + std::to_string(m_TakedownsPerformed), centerX - 180, statsY, {200, 200, 200, 255});
+        statsY += 25;
+        textRenderer->RenderText(renderer, "Status: " + std::string(m_MissionComplete ? "Ghost" : "Compromised"), centerX - 180, statsY, {200, 200, 200, 255});
+        
+        // Buttons
+        int btnY = centerY + 80;
+        textRenderer->RenderTextCentered(renderer, "Press [R] to Retry", centerX, btnY, {255, 255, 255, 255});
+        textRenderer->RenderTextCentered(renderer, "Press [ESC] to Exit", centerX, btnY + 30, {200, 200, 200, 255});
+        
+        return; // Don't render other UI elements on top
     } else {
         RenderObjectiveMarker(renderer, textRenderer, width, height);
     }
@@ -675,13 +738,13 @@ void StealthMode::RenderGuardLineOfSight() {
 }
 
 void StealthMode::SpawnObjective() {
-    float objX = 10.0f, objY = 10.0f, objZ = 0.5f;
+    float objX = 10.0f, objY = 10.0f, objZ = 0.0f;
     float objRot = 0.0f;
     GetSpawnLocation(SpawnType::Objective, objX, objY, objRot);
 
     m_ObjectiveEntity = m_Registry->CreateEntity();
-    m_Registry->AddComponent<Transform3DComponent>(m_ObjectiveEntity, {objX, objY, objZ, 0.0f, 0.0f});
-    m_Registry->AddComponent<MeshComponent>(m_ObjectiveEntity, {"ChestGold", "assets/dungeons/Assets/gltf/chest_gold.gltf", 1.0f, 1.0f, 1.0f});
+    m_Registry->AddComponent<Transform3DComponent>(m_ObjectiveEntity, {objX, objY, objZ, objRot, 0.0f});
+    m_Registry->AddComponent<MeshComponent>(m_ObjectiveEntity, {"ChestGold", "dungeon", 1.0f, 1.0f, 1.0f});
     ObjectiveComponent obj; obj.type = ObjectiveComponent::Exit; obj.radius = 2.0f;
     m_Registry->AddComponent<ObjectiveComponent>(m_ObjectiveEntity, obj);
     m_Renderer->LoadMesh("ChestGold", "assets/dungeons/Assets/gltf/chest_gold.gltf");
@@ -692,7 +755,10 @@ void StealthMode::CheckObjectives() {
     auto* pT = m_Registry->GetComponent<Transform3DComponent>(m_PlayerEntity);
     auto* oT = m_Registry->GetComponent<Transform3DComponent>(m_ObjectiveEntity);
     if (!pT || !oT) return;
-    if (sqrt(pow(pT->x - oT->x, 2) + pow(pT->y - oT->y, 2)) < 2.0f) m_MissionComplete = true;
+    if (sqrt(pow(pT->x - oT->x, 2) + pow(pT->y - oT->y, 2)) < 2.0f) {
+        m_MissionComplete = true;
+        m_GameOver = true;
+    }
 }
 
 void StealthMode::RenderObjectiveMarker(GLRenderer* renderer, TextRenderer* textRenderer, int screenWidth, int screenHeight) {
@@ -724,6 +790,8 @@ void StealthMode::CheckTakedowns() {
                 if (dot > 0.5f) {
                     // Execute Takedown
                     m_GuardStates[i] = GuardState::DEAD;
+                    m_TakedownsPerformed++;
+                    m_GuardsNeutralized++;
                     std::cout << "Takedown on Guard " << i << "!" << std::endl;
                     
                     // Play sound
@@ -778,7 +846,12 @@ void StealthMode::CheckTakedowns() {
 }
 
 void StealthMode::ResetLevel() {
-    m_Detected = false; m_MissionComplete = false; m_PlayerAlertLevel = 0.0f; m_GameTime = 0.0f; m_PlayerSneaking = false;
+    m_Detected = false; m_MissionComplete = false; m_GameOver = false;
+    m_PlayerAlertLevel = 0.0f; m_GameTime = 0.0f; m_PlayerSneaking = false;
+    m_GuardsNeutralized = 0; m_TakedownsPerformed = 0;
+    
+    SDL_SetRelativeMouseMode(SDL_TRUE);
+    
     for (Entity guard : m_Guards) if (guard != INVALID_ENTITY) m_Registry->DestroyEntity(guard);
     m_Guards.clear(); m_GuardStates.clear(); m_GuardAlertLevels.clear(); m_GuardSearchTimers.clear(); m_GuardSearchTargets.clear();
     if (m_ObjectiveEntity != INVALID_ENTITY) { m_Registry->DestroyEntity(m_ObjectiveEntity); m_ObjectiveEntity = INVALID_ENTITY; }
@@ -797,7 +870,8 @@ void StealthMode::ResetLevel() {
         if (playerSpawnFound) transform->rot = playerRot;
     }
     if (phys) { phys->velX = 0; phys->velY = 0; phys->velZ = 0; }
-    SpawnEnemies(); SpawnObjective();
+    SpawnEnemies();
+    SpawnObjective();
 }
 
 void StealthMode::LoadBalanceConfig() {

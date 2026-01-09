@@ -136,8 +136,6 @@ void DungeonsGame::OnUpdate(float deltaTime) {
   case GameState::Battle: {
     UpdateBattle(deltaTime);
     UpdatePhysics(deltaTime);
-    UpdateDoors(deltaTime);
-    UpdateProjectiles(deltaTime);
     UpdateAnimations(deltaTime);
     if (Input::IsKeyPressed(SDL_SCANCODE_ESCAPE)) {
       m_PreviousState = m_State;

@@ -122,6 +122,12 @@ private:
     // Mission State
     Entity m_ObjectiveEntity = PixelsEngine::INVALID_ENTITY;
     bool m_MissionComplete = false;
+    bool m_GameOver = false;
+    
+    // Stats
+    int m_GuardsNeutralized = 0;
+    int m_TakedownsPerformed = 0;
+    int m_TimesDetected = 0;
     
     // Game State
     float m_GameTime = 0.0f;

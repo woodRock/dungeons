@@ -393,6 +393,9 @@ void BattleMode::Update(float dt, Entity playerEntity) {
   if (m_State == Victory)
     return;
 
+  // Update door states and animations
+  UpdateDoors(dt);
+
   if (m_Camera) {
     float speed = 10.0f * dt;
     if (Input::IsKeyDown(SDL_SCANCODE_W))
@@ -412,10 +415,19 @@ void BattleMode::Update(float dt, Entity playerEntity) {
     if (t) {
       m_AnimState.timer += dt;
       float p = std::min(1.0f, m_AnimState.timer / m_AnimState.duration);
-      t->x =
-          m_AnimState.startX + (m_AnimState.targetX - m_AnimState.startX) * p;
-      t->y =
-          m_AnimState.startY + (m_AnimState.targetY - m_AnimState.startY) * p;
+      
+      float nextX = m_AnimState.startX + (m_AnimState.targetX - m_AnimState.startX) * p;
+      float nextY = m_AnimState.startY + (m_AnimState.targetY - m_AnimState.startY) * p;
+      
+      // Collision check for unit movement
+      if (CheckCollision(nextX, nextY, t->z, m_AnimState.actor)) {
+          // Stop movement if blocked
+          p = 1.0f;
+          m_AnimState.timer = m_AnimState.duration;
+      } else {
+          t->x = nextX;
+          t->y = nextY;
+      }
 
       if (m_SelectedAction == Jump) {
         float h = sin(p * M_PI) * 2.0f;
@@ -460,12 +472,23 @@ void BattleMode::Update(float dt, Entity playerEntity) {
       auto *pt = m_Registry->GetComponent<Transform3DComponent>(
           m_ActiveProjectile.entity);
       if (pt) {
-        pt->x = m_ActiveProjectile.startX +
+        float nextX = m_ActiveProjectile.startX +
                 (m_ActiveProjectile.targetX - m_ActiveProjectile.startX) * p;
-        pt->y = m_ActiveProjectile.startY +
+        float nextY = m_ActiveProjectile.startY +
                 (m_ActiveProjectile.targetY - m_ActiveProjectile.startY) * p;
-        pt->z = m_ActiveProjectile.startZ +
+        float nextZ = m_ActiveProjectile.startZ +
                 (m_ActiveProjectile.targetZ - m_ActiveProjectile.startZ) * p;
+        
+        // Wall collision for projectile
+        if (CheckCollision(nextX, nextY, nextZ, m_AnimState.actor)) {
+            m_Registry->DestroyEntity(m_ActiveProjectile.entity);
+            m_ActiveProjectile.entity = -1;
+            m_AnimState.timer = m_AnimState.duration; // End animation
+        } else {
+            pt->x = nextX;
+            pt->y = nextY;
+            pt->z = nextZ;
+        }
       }
     }
 
@@ -738,7 +761,8 @@ void BattleMode::HandlePlayerInput() {
     if (m_SelectedAction == Move || m_SelectedAction == Jump ||
         m_SelectedAction == Melee) {
       if (m_Cursor.hoveredEntity == -1 &&
-          !IsPositionOccupied(m_Cursor.x, m_Cursor.y, current)) {
+          !IsPositionOccupied(m_Cursor.x, m_Cursor.y, current) &&
+          !CheckCollision(m_Cursor.x, m_Cursor.y, t->z, current)) {
         float dist =
             sqrt(pow(m_Cursor.x - t->x, 2) + pow(m_Cursor.y - t->y, 2));
         float maxRange =
@@ -1216,7 +1240,7 @@ void BattleMode::UpdateAI(float dt) {
 
         // Simple collision avoidance for AI: if destination is blocked, try
         // reducing distance
-        while (moveDist > 0.5f && IsPositionOccupied(destX, destY, current)) {
+        while (moveDist > 0.5f && (IsPositionOccupied(destX, destY, current) || CheckCollision(destX, destY, t1->z, current))) {
           moveDist -= 0.5f;
           destX = t1->x + cos(angle) * moveDist;
           destY = t1->y + sin(angle) * moveDist;
@@ -1325,4 +1349,147 @@ void BattleMode::RaycastCursor() {
       }
     }
   }
+}
+
+PixelsEngine::AABB BattleMode::GetWorldAABB(const PixelsEngine::AABB& local, const PixelsEngine::Transform3DComponent& t, float scaleX, float scaleY, float scaleZ) {
+    float minX = 1e9, minY = 1e9, minZ = 1e9;
+    float maxX = -1e9, maxY = -1e9, maxZ = -1e9;
+    
+    float corners[8][3] = {
+        {local.minX, local.minY, local.minZ},
+        {local.maxX, local.minY, local.minZ},
+        {local.minX, local.maxY, local.minZ},
+        {local.maxX, local.maxY, local.minZ},
+        {local.minX, local.minY, local.maxZ},
+        {local.maxX, local.minY, local.maxZ},
+        {local.minX, local.maxY, local.maxZ},
+        {local.maxX, local.maxY, local.maxZ}
+    };
+
+    float cosR = cos(-t.rot);
+    float sinR = sin(-t.rot);
+
+    for(int i=0; i<8; ++i) {
+        float smx = corners[i][0] * scaleX;
+        float smy = corners[i][1] * scaleZ; 
+        float smz = corners[i][2] * scaleY; 
+        
+        float gl_x = smx * cosR + smz * sinR;
+        float gl_y = smy;
+        float gl_z = -smx * sinR + smz * cosR;
+        
+        float g_x = gl_x + t.x;
+        float g_y = -gl_z + t.y; 
+        float g_z = gl_y + t.z;
+        
+        if(g_x < minX) minX = g_x;
+        if(g_x > maxX) maxX = g_x;
+        if(g_y < minY) minY = g_y;
+        if(g_y > maxY) maxY = g_y;
+        if(g_z < minZ) minZ = g_z;
+        if(g_z > maxZ) maxZ = g_z;
+    }
+    return PixelsEngine::AABB(minX, minY, minZ, maxX, maxY, maxZ);
+}
+
+bool BattleMode::CheckCollision(float x, float y, float z, Entity ignoreEntity) {
+    float radius = 0.4f;
+    float height = 1.8f;
+    PixelsEngine::AABB entityAABB(x - radius, y - radius, z, x + radius, y + radius, z + height);
+
+    auto &meshes = m_Registry->View<MeshComponent>();
+    for (auto &mPair : meshes) {
+        if (mPair.first == ignoreEntity) continue;
+        
+        auto *hc = m_Registry->GetComponent<HitboxComponent>(mPair.first);
+        if (!hc || !hc->isSolid) continue;
+
+        // Skip doors if they are fully open
+        auto *dc = m_Registry->GetComponent<DoorComponent>(mPair.first);
+        if (dc && dc->isOpen && dc->currentOpenDistance >= dc->maxOpenDistance * 0.8f) continue;
+
+        auto *wt = m_Registry->GetComponent<Transform3DComponent>(mPair.first);
+        if (!wt) continue;
+
+        RenderMesh* rm = m_Renderer->GetRenderMesh(mPair.second.meshName);
+        if (rm) {
+            PixelsEngine::AABB wallAABB = GetWorldAABB(rm->boundingBox, *wt, mPair.second.scaleX, mPair.second.scaleY, mPair.second.scaleZ);
+            if (entityAABB.Overlaps(wallAABB)) return true;
+        }
+    }
+    return false;
+}
+
+void BattleMode::UpdateDoors(float dt) {
+    auto &units = m_Registry->View<BattleUnitComponent>();
+    auto &doors = m_Registry->View<DoorComponent>();
+
+    for (auto &dPair : doors) {
+        auto *door = &dPair.second;
+        auto *dtans = m_Registry->GetComponent<Transform3DComponent>(dPair.first);
+        auto *mc = m_Registry->GetComponent<MeshComponent>(dPair.first);
+        if (!dtans || !mc) continue;
+
+        bool unitNear = false;
+        bool moveThrough = false;
+        
+        // 1. Check current unit positions
+        for (auto &uPair : units) {
+            auto *ut = m_Registry->GetComponent<Transform3DComponent>(uPair.first);
+            if (!ut) continue;
+            float dist = sqrt(pow(ut->x - dtans->x, 2) + pow(ut->y - dtans->y, 2));
+            if (dist < 2.5f) {
+                unitNear = true;
+                break;
+            }
+        }
+
+        // 2. Predict based on active movement path
+        if (m_State == Moving && m_AnimState.actor != INVALID_ENTITY) {
+            // Check if movement segment (startX, startY) -> (targetX, targetY) passes near door
+            float x1 = m_AnimState.startX, y1 = m_AnimState.startY;
+            float x2 = m_AnimState.targetX, y2 = m_AnimState.targetY;
+            float dx = x2 - x1, dy = y2 - y1;
+            float lenSq = dx*dx + dy*dy;
+            
+            if (lenSq > 0.001f) {
+                // Parameter t of projection of door onto segment
+                float t = ((dtans->x - x1) * dx + (dtans->y - y1) * dy) / lenSq;
+                t = std::max(0.0f, std::min(1.0f, t));
+                float projX = x1 + t * dx;
+                float projY = y1 + t * dy;
+                float distToPath = sqrt(pow(dtans->x - projX, 2) + pow(dtans->y - projY, 2));
+                
+                if (distToPath < 1.5f) {
+                    moveThrough = true;
+                }
+            }
+        }
+
+        // Auto open/close logic
+        if ((unitNear || moveThrough) && !door->isOpen) {
+            door->isOpen = true;
+        } else if (!unitNear && !moveThrough && door->isOpen) {
+            door->isOpen = false;
+        }
+
+        // Animate - Faster when moving through
+        float speedMult = moveThrough ? 4.0f : 1.5f;
+        float targetDist = door->isOpen ? door->maxOpenDistance : 0.0f;
+        if (door->currentOpenDistance < targetDist) {
+            door->currentOpenDistance = std::min(targetDist, door->currentOpenDistance + door->openSpeed * speedMult * dt);
+        } else if (door->currentOpenDistance > targetDist) {
+            door->currentOpenDistance = std::max(targetDist, door->currentOpenDistance - door->openSpeed * dt);
+        }
+
+        // Apply visual rotation/translation
+        RenderMesh* rm = m_Renderer->GetRenderMesh(mc->meshName);
+        float doorWidth = rm ? (rm->boundingBox.maxX - rm->boundingBox.minX) : 1.0f;
+        float doorRadius = doorWidth * 0.5f;
+        float angle = (doorRadius > 0.0f) ? door->currentOpenDistance / doorRadius : 0.0f;
+        dtans->rot = angle;
+        float hingeWorldX = door->originalX - doorWidth * 0.5f;
+        dtans->x = hingeWorldX + (doorWidth * 0.5f) * cos(angle);
+        dtans->y = door->originalY + (doorWidth * 0.5f) * sin(angle);
+    }
 }
