@@ -63,6 +63,15 @@ Application::Application(const char *title, int width, int height)
               << SDL_GetError() << std::endl;
   }
   SDL_GL_MakeCurrent(m_Window, m_GLContext);
+
+#ifdef _WIN32
+  glewExperimental = GL_TRUE;
+  GLenum err = glewInit();
+  if (err != GLEW_OK) {
+    std::cerr << "GLEW could not initialize! Error: " << glewGetErrorString(err) << std::endl;
+  }
+#endif
+
   SDL_GL_SetSwapInterval(1); // VSync
 
   // Set initial viewport based on drawable size (HighDPI support)

@@ -44,7 +44,7 @@ jobs:
       - name: Install Dependencies (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          vcpkg install sdl2 sdl2-image sdl2-mixer sdl2-ttf --triplet x64-windows-static
+          vcpkg install sdl2 sdl2-image sdl2-mixer sdl2-ttf glew --triplet x64-windows-static
 
       - name: Configure CMake
         run: |

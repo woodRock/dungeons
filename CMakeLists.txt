@@ -40,6 +40,11 @@ else()
     # Find OpenGL
     find_package(OpenGL REQUIRED)
 
+    if(WIN32)
+        find_package(GLEW REQUIRED)
+        include_directories(${GLEW_INCLUDE_DIRS})
+    endif()
+
     # Include directories
     include_directories(src ${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS} ${SDL2_TTF_INCLUDE_DIRS} ${SDL2_MIXER_INCLUDE_DIRS} ${OPENGL_INCLUDE_DIRS})
 
@@ -70,6 +75,10 @@ else()
         target_link_libraries(Dungeons PRIVATE SDL2_mixer::SDL2_mixer)
     else()
         target_link_libraries(Dungeons PRIVATE ${SDL2_MIXER_LIBRARIES})
+    endif()
+
+    if(WIN32)
+        target_link_libraries(Dungeons PRIVATE GLEW::GLEW)
     endif()
 
     target_link_libraries(Dungeons PRIVATE ${OPENGL_LIBRARIES})
