@@ -30,30 +30,31 @@ else()
 
     # On Windows with vcpkg, manually add libraries if targets not found
     if(WIN32 AND NOT TARGET SDL2_mixer::SDL2_mixer)
-        # Get the vcpkg library directory
-        get_filename_component(VCPKG_LIB_DIR "${CMAKE_FIND_ROOT_PATH}/lib" ABSOLUTE)
+        # Determine lib directory based on build type
+        set(VCPKG_LIB_DIR_RELEASE "${CMAKE_FIND_ROOT_PATH}/lib")
+        set(VCPKG_LIB_DIR_DEBUG "${CMAKE_FIND_ROOT_PATH}/debug/lib")
         
-        # Manually define library paths for vcpkg static triplet
+        # Use generator expressions to select the correct library path
         if(NOT SDL2_MIXER_LIBRARIES)
             set(SDL2_MIXER_LIBRARIES 
-                ${VCPKG_LIB_DIR}/SDL2_mixer.lib
-                ${VCPKG_LIB_DIR}/flac.lib
-                ${VCPKG_LIB_DIR}/ogg.lib
-                ${VCPKG_LIB_DIR}/vorbis.lib
-                ${VCPKG_LIB_DIR}/vorbisfile.lib
+                $<$<CONFIG:Debug>:${VCPKG_LIB_DIR_DEBUG}/SDL2_mixer.lib>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_LIB_DIR_RELEASE}/SDL2_mixer.lib>
+                $<$<CONFIG:Debug>:${VCPKG_LIB_DIR_DEBUG}/flac.lib>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_LIB_DIR_RELEASE}/flac.lib>
+                $<$<CONFIG:Debug>:${VCPKG_LIB_DIR_DEBUG}/ogg.lib>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_LIB_DIR_RELEASE}/ogg.lib>
+                $<$<CONFIG:Debug>:${VCPKG_LIB_DIR_DEBUG}/vorbis.lib>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_LIB_DIR_RELEASE}/vorbis.lib>
+                $<$<CONFIG:Debug>:${VCPKG_LIB_DIR_DEBUG}/vorbisfile.lib>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_LIB_DIR_RELEASE}/vorbisfile.lib>
             )
         endif()
         if(NOT SDL2_IMAGE_LIBRARIES)
             set(SDL2_IMAGE_LIBRARIES 
-                ${VCPKG_LIB_DIR}/SDL2_image.lib
-                ${VCPKG_LIB_DIR}/libpng16.lib
-                ${VCPKG_LIB_DIR}/zlib.lib
+                $<$<CONFIG:Debug>:${VCPKG_LIB_DIR_DEBUG}/SDL2_image.lib>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_LIB_DIR_RELEASE}/SDL2_image.lib>
+                $<$<CONFIG:Debug>:${VCPKG_LIB_DIR_DEBUG}/libpng16.lib>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_LIB_DIR_RELEASE}/libpng16.lib>
+                $<$<CONFIG:Debug>:${VCPKG_LIB_DIR_DEBUG}/zlib.lib>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_LIB_DIR_RELEASE}/zlib.lib>
             )
         endif()
         if(NOT SDL2_TTF_LIBRARIES)
             set(SDL2_TTF_LIBRARIES 
-                ${VCPKG_LIB_DIR}/SDL2_ttf.lib
-                ${VCPKG_LIB_DIR}/freetype.lib
+                $<$<CONFIG:Debug>:${VCPKG_LIB_DIR_DEBUG}/SDL2_ttf.lib>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_LIB_DIR_RELEASE}/SDL2_ttf.lib>
+                $<$<CONFIG:Debug>:${VCPKG_LIB_DIR_DEBUG}/freetype.lib>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_LIB_DIR_RELEASE}/freetype.lib>
             )
         endif()
     elseif(NOT WIN32 AND (NOT TARGET SDL2_mixer::SDL2_mixer OR NOT TARGET SDL2_image::SDL2_image OR NOT TARGET SDL2_ttf::SDL2_ttf))
@@ -114,6 +115,9 @@ else()
         target_link_libraries(Dungeons PRIVATE GLEW::GLEW)
         # Link Windows system libraries
         target_link_libraries(Dungeons PRIVATE opengl32 user32 gdi32)
+        # Fix CRT library conflicts - use dynamic CRT matching vcpkg static triplet
+        target_link_options(Dungeons PRIVATE /NODEFAULTLIB:LIBCMT)
+        set_target_properties(Dungeons PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
     endif()
 
     target_link_libraries(Dungeons PRIVATE ${OPENGL_LIBRARIES})
