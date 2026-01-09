@@ -58,15 +58,22 @@ else()
         # If still not found on macOS, assume Homebrew installation
         set(GLEW_INCLUDE_DIRS "/opt/homebrew/include")
         set(GLEW_LIBRARIES "/opt/homebrew/lib/libGLEW.dylib")
+    endif()
+    
+    if(GLEW_FOUND OR GLEW_INCLUDE_DIRS)
         include_directories(${GLEW_INCLUDE_DIRS})
     endif()
 
     # Include directories
-    include_directories(src ${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS} ${SDL2_TTF_INCLUDE_DIRS} ${SDL2_MIXER_INCLUDE_DIRS} ${OPENGL_INCLUDE_DIRS} ${GLEW_INCLUDE_DIRS})
+    include_directories(src ${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS} ${SDL2_TTF_INCLUDE_DIRS} ${SDL2_MIXER_INCLUDE_DIRS} ${OPENGL_INCLUDE_DIRS})
 
     add_executable(Dungeons ${SOURCES})
 
-    target_include_directories(Dungeons PRIVATE ${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS} ${SDL2_TTF_INCLUDE_DIRS} ${SDL2_MIXER_INCLUDE_DIRS} ${OPENGL_INCLUDE_DIRS} ${GLEW_INCLUDE_DIRS})
+    target_include_directories(Dungeons PRIVATE ${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS} ${SDL2_TTF_INCLUDE_DIRS} ${SDL2_MIXER_INCLUDE_DIRS} ${OPENGL_INCLUDE_DIRS})
+    
+    if(GLEW_FOUND OR GLEW_INCLUDE_DIRS)
+        target_include_directories(Dungeons PRIVATE ${GLEW_INCLUDE_DIRS})
+    endif()
     
     # Handle SDL2 link libraries - prefer targets, fallback to variables
     if(TARGET SDL2::SDL2)
