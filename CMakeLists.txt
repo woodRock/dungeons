@@ -20,38 +20,42 @@ else()
     link_directories(/opt/homebrew/lib)
     include_directories(/opt/homebrew/include)
 
-    # Find SDL2
-    find_package(SDL2 REQUIRED)
-
-    # Handle SDL2 modules - different approach for Windows vs Unix
     if(WIN32)
-        # On Windows with vcpkg static triplet, manually specify libraries
-        # SKIP find_package to avoid debug library paths from vcpkg CMake files
-        set(VCPKG_LIB_DIR "${CMAKE_FIND_ROOT_PATH}/lib")
+        # Windows with vcpkg: Don't use find_package, manually specify all paths
+        # This prevents vcpkg's CMake files from injecting debug library paths
+        set(VCPKG_ROOT "${CMAKE_FIND_ROOT_PATH}")
         
-        set(SDL2_IMAGE_INCLUDE_DIRS "${CMAKE_FIND_ROOT_PATH}/include")
-        set(SDL2_IMAGE_LIBRARIES 
-            ${VCPKG_LIB_DIR}/SDL2_image.lib
-            ${VCPKG_LIB_DIR}/libpng16.lib
-            ${VCPKG_LIB_DIR}/zlib.lib
+        # SDL2 main library (static triplet = /lib only, no /debug/lib)
+        set(SDL2_INCLUDE_DIRS "${VCPKG_ROOT}/include")
+        set(SDL2_LIBRARIES "${VCPKG_ROOT}/lib/SDL2.lib")
+        
+        # SDL2_image with dependencies
+        set(SDL2_IMAGE_INCLUDE_DIRS "${VCPKG_ROOT}/include")
+        set(SDL2_IMAGE_LIBRARIES
+            "${VCPKG_ROOT}/lib/SDL2_image.lib"
+            "${VCPKG_ROOT}/lib/libpng16.lib"
+            "${VCPKG_ROOT}/lib/zlib.lib"
         )
         
-        set(SDL2_TTF_INCLUDE_DIRS "${CMAKE_FIND_ROOT_PATH}/include")
-        set(SDL2_TTF_LIBRARIES 
-            ${VCPKG_LIB_DIR}/SDL2_ttf.lib
-            ${VCPKG_LIB_DIR}/freetype.lib
+        # SDL2_ttf with dependencies
+        set(SDL2_TTF_INCLUDE_DIRS "${VCPKG_ROOT}/include")
+        set(SDL2_TTF_LIBRARIES
+            "${VCPKG_ROOT}/lib/SDL2_ttf.lib"
+            "${VCPKG_ROOT}/lib/freetype.lib"
         )
         
-        set(SDL2_MIXER_INCLUDE_DIRS "${CMAKE_FIND_ROOT_PATH}/include")
-        set(SDL2_MIXER_LIBRARIES 
-            ${VCPKG_LIB_DIR}/SDL2_mixer.lib
-            ${VCPKG_LIB_DIR}/flac.lib
-            ${VCPKG_LIB_DIR}/ogg.lib
-            ${VCPKG_LIB_DIR}/vorbis.lib
-            ${VCPKG_LIB_DIR}/vorbisfile.lib
+        # SDL2_mixer with dependencies
+        set(SDL2_MIXER_INCLUDE_DIRS "${VCPKG_ROOT}/include")
+        set(SDL2_MIXER_LIBRARIES
+            "${VCPKG_ROOT}/lib/SDL2_mixer.lib"
+            "${VCPKG_ROOT}/lib/flac.lib"
+            "${VCPKG_ROOT}/lib/ogg.lib"
+            "${VCPKG_ROOT}/lib/vorbis.lib"
+            "${VCPKG_ROOT}/lib/vorbisfile.lib"
         )
     else()
-        # On Linux/macOS, use standard find_package with PkgConfig fallback
+        # Unix platforms: Use standard find_package with PkgConfig fallback
+        find_package(SDL2 REQUIRED)
         find_package(SDL2_image QUIET)
         find_package(SDL2_ttf QUIET)
         find_package(SDL2_mixer QUIET)
@@ -74,6 +78,10 @@ else()
     find_package(OpenGL REQUIRED)
 
     if(WIN32)
+        # GLEW is provided by vcpkg, no find_package needed
+        set(GLEW_INCLUDE_DIRS "${CMAKE_FIND_ROOT_PATH}/include")
+        set(GLEW_LIBRARIES "${CMAKE_FIND_ROOT_PATH}/lib/glew32s.lib")
+    else()
         find_package(GLEW REQUIRED)
         include_directories(${GLEW_INCLUDE_DIRS})
     endif()
