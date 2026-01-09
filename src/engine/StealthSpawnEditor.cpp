@@ -11,20 +11,21 @@ namespace PixelsEngine {
 StealthSpawnEditor::StealthSpawnEditor() {
     // Load default spawns
     m_SpawnLocations = {
-        {48.0f, -32.0f, 0.0f, {}},
-        {36.0f, -52.0f, 0.0f, {}},
-        {20.0f, -40.0f, 0.0f, {}},
-        {28.0f, 4.0f, 0.0f, {}},
+        {48.0f, -32.0f, 0.0f, {}, SpawnType::Enemy},
+        {36.0f, -52.0f, 0.0f, {}, SpawnType::Enemy},
+        {20.0f, -40.0f, 0.0f, {}, SpawnType::Enemy},
+        {28.0f, 4.0f, 0.0f, {}, SpawnType::Enemy},
     };
 }
 
 StealthSpawnEditor::~StealthSpawnEditor() = default;
 
-void StealthSpawnEditor::AddSpawn(float x, float y, float rotation) {
+void StealthSpawnEditor::AddSpawn(float x, float y, float rotation, SpawnType type) {
     SpawnLocation loc;
     loc.x = x;
     loc.y = y;
     loc.rotation = rotation;
+    loc.type = type;
     m_SpawnLocations.push_back(loc);
     m_SelectedIndex = m_SpawnLocations.size() - 1;
     m_StatusMessage = "Spawn added at (" + std::to_string((int)x) + ", " + std::to_string((int)y) + ")";
@@ -55,7 +56,7 @@ void StealthSpawnEditor::SaveToFile(const std::string& filename) {
         for (const auto& wp : loc.waypoints) {
             file << " " << wp.first << " " << wp.second;
         }
-        file << "\n";
+        file << " " << (int)loc.type << "\n";
     }
     file.close();
     
@@ -80,6 +81,7 @@ void StealthSpawnEditor::LoadFromFile(const std::string& filename) {
         
         SpawnLocation loc;
         loc.x = 0; loc.y = 0; loc.rotation = 0;
+        loc.type = SpawnType::Enemy; // Default
         
         ss >> loc.x >> loc.y;
         
@@ -94,6 +96,11 @@ void StealthSpawnEditor::LoadFromFile(const std::string& filename) {
                         loc.waypoints.push_back({wx, wy});
                     }
                 }
+            }
+            // Try reading type
+            int typeVal = 0;
+            if (ss >> typeVal) {
+                loc.type = (SpawnType)typeVal;
             }
         }
         
@@ -145,6 +152,18 @@ void StealthSpawnEditor::ProcessInput() {
         Input::StartTextInput();
     }
     
+    // T key to cycle Type
+    static bool tWasDown = false;
+    bool tIsDown = Input::IsKeyDown(SDL_SCANCODE_T);
+    if (tIsDown && !tWasDown && !m_EditingX && !m_EditingY && !m_EditingRot) {
+        int type = (int)m_SpawnLocations[m_SelectedIndex].type;
+        type = (type + 1) % 3; // Cycle 0, 1, 2
+        m_SpawnLocations[m_SelectedIndex].type = (SpawnType)type;
+        m_StatusMessage = "Changed Type";
+        m_StatusMessageTime = 2.0f;
+    }
+    tWasDown = tIsDown;
+    
     // Process text input while editing
     if (m_EditingX || m_EditingY || m_EditingRot) {
         std::string textInput = Input::GetTextInput();
@@ -188,7 +207,7 @@ void StealthSpawnEditor::ProcessInput() {
     
     // A key to add new spawn at player location (0,0 by default)
     if (Input::IsKeyPressed(SDL_SCANCODE_A)) {
-        AddSpawn(0.0f, 0.0f, 0.0f);
+        AddSpawn(0.0f, 0.0f, 0.0f, SpawnType::Enemy);
     }
     
     // S key to save
@@ -231,22 +250,27 @@ void StealthSpawnEditor::Render(GLRenderer* renderer, TextRenderer* textRenderer
         text += std::to_string((int)m_SpawnLocations[i].y) + ", ";
         text += std::to_string((int)(m_SpawnLocations[i].rotation * 180.0f / 3.14159f)) + "deg)";
         
+        // Show Type
+        if (m_SpawnLocations[i].type == SpawnType::Player) text += " [P]";
+        else if (m_SpawnLocations[i].type == SpawnType::Objective) text += " [O]";
+        else text += " [E]";
+        
         if (!m_SpawnLocations[i].waypoints.empty()) {
             text += " WP:" + std::to_string(m_SpawnLocations[i].waypoints.size());
         }
         
         textRenderer->RenderText(renderer, text, screenWidth - 390, y, color);
-        y += 18;
+        y += 22;
     }
     
     // Draw controls
-    int controlY = 35 + m_SpawnLocations.size() * 18 + 10;
+    int controlY = 35 + m_SpawnLocations.size() * 22 + 10;
     textRenderer->RenderText(renderer, "UP/DOWN: Select", screenWidth - 390, controlY, {150, 150, 150, 255});
-    controlY += 14;
+    controlY += 18;
     textRenderer->RenderText(renderer, "X: Edit X | Y: Edit Y | R: Edit Rot", screenWidth - 390, controlY, {150, 150, 150, 255});
-    controlY += 14;
-    textRenderer->RenderText(renderer, "DEL: Remove | A: Add", screenWidth - 390, controlY, {150, 150, 150, 255});
-    controlY += 14;
+    controlY += 18;
+    textRenderer->RenderText(renderer, "T: Cycle Type | DEL: Remove | A: Add", screenWidth - 390, controlY, {150, 150, 150, 255});
+    controlY += 18;
     textRenderer->RenderText(renderer, "S: Save | L: Load", screenWidth - 390, controlY, {150, 150, 150, 255});
     
     // Draw status message

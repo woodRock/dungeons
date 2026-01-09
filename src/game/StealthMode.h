@@ -130,10 +130,12 @@ private:
     Mix_Chunk* m_SfxSwordHit = nullptr;
     
     // Helper methods
+    void SpawnEntities();
     void SpawnObjective();
     void CheckObjectives();
     void ResetLevel();
     void RenderObjectiveMarker(GLRenderer* renderer, TextRenderer* textRenderer, int screenWidth, int screenHeight);
+    bool GetSpawnLocation(SpawnType type, float& x, float& y, float& rot);
 
     // Screen dimensions (cached for spawn editor)
     int m_ScreenWidth = 1280;

@@ -71,9 +71,23 @@ void StealthMode::Init(Camera* camera, Entity& playerEntity) {
     m_SpawnEditor = std::make_unique<StealthSpawnEditor>();
     m_SpawnEditor->LoadFromFile("assets/saves/spawn_config.txt");
     
+    // Find player spawn
+    float playerX = 36.0f;
+    float playerY = -20.0f;
+    float playerRot = 0.0f;
+    bool playerSpawnFound = GetSpawnLocation(SpawnType::Player, playerX, playerY, playerRot);
+
     // Spawn player using CharacterFactory
-    m_PlayerEntity = CharacterFactory::CreatePlayer(m_Registry, m_Renderer, 36.0f, -20.0f, 0.5f);
+    m_PlayerEntity = CharacterFactory::CreatePlayer(m_Registry, m_Renderer, playerX, playerY, 0.5f);
     playerEntity = m_PlayerEntity;
+    
+    // Apply rotation if found
+    if (playerSpawnFound) {
+         auto* transform = m_Registry->GetComponent<Transform3DComponent>(m_PlayerEntity);
+         if (transform) {
+             transform->rot = playerRot;
+         }
+    }
     
     // Change attachment to Dagger
     auto* attach = m_Registry->GetComponent<AttachmentComponent>(m_PlayerEntity);
@@ -602,6 +616,7 @@ void StealthMode::SpawnEnemies() {
     if (!m_SpawnEditor) return;
     spawnLocations = m_SpawnEditor->GetSpawnLocations();
     for (const auto& loc : spawnLocations) {
+        if (loc.type != SpawnType::Enemy) continue;
         Entity enemy = CharacterFactory::CreateSkeleton(m_Registry, m_Renderer, "skel_warrior", loc.x, loc.y, 0.5f);
         if (enemy != INVALID_ENTITY) {
             auto* transform = m_Registry->GetComponent<Transform3DComponent>(enemy);
@@ -648,6 +663,9 @@ void StealthMode::RenderGuardLineOfSight() {
 
 void StealthMode::SpawnObjective() {
     float objX = 10.0f, objY = 10.0f, objZ = 0.5f;
+    float objRot = 0.0f;
+    GetSpawnLocation(SpawnType::Objective, objX, objY, objRot);
+
     m_ObjectiveEntity = m_Registry->CreateEntity();
     m_Registry->AddComponent<Transform3DComponent>(m_ObjectiveEntity, {objX, objY, objZ, 0.0f, 0.0f});
     m_Registry->AddComponent<MeshComponent>(m_ObjectiveEntity, {"ChestGold", "assets/dungeons/Assets/gltf/chest_gold.gltf", 1.0f, 1.0f, 1.0f});
@@ -751,9 +769,20 @@ void StealthMode::ResetLevel() {
     for (Entity guard : m_Guards) if (guard != INVALID_ENTITY) m_Registry->DestroyEntity(guard);
     m_Guards.clear(); m_GuardStates.clear(); m_GuardAlertLevels.clear(); m_GuardSearchTimers.clear(); m_GuardSearchTargets.clear();
     if (m_ObjectiveEntity != INVALID_ENTITY) { m_Registry->DestroyEntity(m_ObjectiveEntity); m_ObjectiveEntity = INVALID_ENTITY; }
+    
+    float playerX = 36.0f;
+    float playerY = -20.0f;
+    float playerRot = 0.0f;
+    bool playerSpawnFound = GetSpawnLocation(SpawnType::Player, playerX, playerY, playerRot);
+
     auto* transform = m_Registry->GetComponent<Transform3DComponent>(m_PlayerEntity);
     auto* phys = m_Registry->GetComponent<PhysicsComponent>(m_PlayerEntity);
-    if (transform) { transform->x = 36.0f; transform->y = -20.0f; transform->z = 0.5f; }
+    if (transform) { 
+        transform->x = playerX; 
+        transform->y = playerY; 
+        transform->z = 0.5f; 
+        if (playerSpawnFound) transform->rot = playerRot;
+    }
     if (phys) { phys->velX = 0; phys->velY = 0; phys->velZ = 0; }
     SpawnEnemies(); SpawnObjective();
 }
@@ -844,6 +873,21 @@ void StealthMode::HandleBalanceMenuInput() {
         int saveX = x + 20; int saveY = y + menuH - 40;
         if (mx >= saveX && mx <= saveX + 100 && my >= saveY && my <= saveY + 30) SaveBalanceConfig();
     }
+}
+
+bool StealthMode::GetSpawnLocation(SpawnType type, float& x, float& y, float& rot) {
+    if (m_SpawnEditor) {
+        auto spawnLocations = m_SpawnEditor->GetSpawnLocations();
+        for (const auto& loc : spawnLocations) {
+            if (loc.type == type) {
+                x = loc.x;
+                y = loc.y;
+                rot = loc.rotation;
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 } // namespace PixelsEngine

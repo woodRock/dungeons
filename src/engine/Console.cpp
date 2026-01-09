@@ -102,11 +102,11 @@ void Console::Render(GLRenderer* renderer, TextRenderer* textRenderer, int scree
     
     // Draw output log
     int logStartY = consoleY + 10;
-    int visibleLines = (m_ConsoleHeight - 30) / 12;  // Account for padding
+    int visibleLines = (m_ConsoleHeight - 40) / 18;  // Account for padding
     int startIdx = std::max(0, (int)m_OutputLog.size() - visibleLines);
     
     for (size_t i = startIdx; i < m_OutputLog.size(); ++i) {
-        int lineY = logStartY + (i - startIdx) * 12;
+        int lineY = logStartY + (i - startIdx) * 18;
         textRenderer->RenderText(renderer, m_OutputLog[i], 10, lineY, {200, 200, 200, 255});
     }
     

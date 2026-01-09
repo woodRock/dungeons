@@ -69,9 +69,10 @@ std::vector<SpawnLocation> VisualSpawnEditor::GetSpawnLocations() const {
             loc.x = transform->x;
             loc.y = transform->y;
             loc.rotation = transform->rot;
-            // Preserve waypoints from the internal state since they aren't on the entity in editor mode
+            // Preserve waypoints and type from the internal state
             if (i < m_SpawnLocations.size()) {
                 loc.waypoints = m_SpawnLocations[i].waypoints;
+                loc.type = m_SpawnLocations[i].type;
             }
             result.push_back(loc);
         }
@@ -110,22 +111,35 @@ void VisualSpawnEditor::CreateSpawnEntities() {
     }
     m_SpawnEntities.clear();
     
-    // Create skeleton entities at spawn locations
+    // Create entities based on type
     for (const auto& loc : m_SpawnLocations) {
-        Entity e = CharacterFactory::CreateSkeleton(m_Registry, m_Renderer, 
-                                                     "skel_warrior", loc.x, loc.y, 0.5f);
+        Entity e = INVALID_ENTITY;
+        
+        if (loc.type == SpawnType::Enemy) {
+            e = CharacterFactory::CreateSkeleton(m_Registry, m_Renderer, 
+                                                 "skel_warrior", loc.x, loc.y, 0.5f);
+        } else if (loc.type == SpawnType::Player) {
+            e = CharacterFactory::CreatePlayer(m_Registry, m_Renderer, loc.x, loc.y, 0.5f);
+            // Remove physics/control so it's just a visual
+            if (m_Registry->HasComponent<PlayerControlComponent>(e))
+                m_Registry->RemoveComponent<PlayerControlComponent>(e);
+            if (m_Registry->HasComponent<PhysicsComponent>(e))
+                m_Registry->RemoveComponent<PhysicsComponent>(e);
+        } else if (loc.type == SpawnType::Objective) {
+            e = m_Registry->CreateEntity();
+            m_Registry->AddComponent<Transform3DComponent>(e, {loc.x, loc.y, 0.5f, loc.rotation, 0.0f});
+            m_Registry->AddComponent<MeshComponent>(e, {"ChestGold", "assets/dungeons/Assets/gltf/chest_gold.gltf", 1.0f, 1.0f, 1.0f});
+            m_Renderer->LoadMesh("ChestGold", "assets/dungeons/Assets/gltf/chest_gold.gltf");
+        }
+
         if (e != INVALID_ENTITY) {
             auto* transform = m_Registry->GetComponent<Transform3DComponent>(e);
             if (transform) {
                 transform->rot = loc.rotation;
             }
-            // Add a tag or component to identify as Editor Entity? 
-            // For now, relies on VisualSpawnEditor managing them.
             m_SpawnEntities.push_back(e);
         }
     }
-    // Don't reset selection here if we are just refreshing
-    // m_SelectedSpawnIndex = -1; 
 }
 
 void VisualSpawnEditor::UpdateSpawnEntities() {
@@ -166,10 +180,14 @@ bool VisualSpawnEditor::RaycastToGround(Camera* camera, int mouseX, int mouseY, 
     float upY = -sin(camera->pitch) * sin(camera->yaw);
     float upZ = cos(camera->pitch);
     
+    float aspect = (float)screenWidth / (float)screenHeight;
+    float fovScale = 0.5f; // tan(fov/2) approx
+    
     // Calculate ray direction with perspective
-    float rayX = dirX + (rightX * normalizedX * 0.5f) + (upX * normalizedY * 0.5f);
-    float rayY = dirY + (rightY * normalizedX * 0.5f) + (upY * normalizedY * 0.5f);
-    float rayZ = dirZ + (upZ * normalizedY * 0.5f);
+    // Apply aspect ratio to horizontal component (right vector)
+    float rayX = dirX + (rightX * normalizedX * fovScale * aspect) + (upX * normalizedY * fovScale);
+    float rayY = dirY + (rightY * normalizedX * fovScale * aspect) + (upY * normalizedY * fovScale);
+    float rayZ = dirZ + (upZ * normalizedY * fovScale);
     
     // Normalize ray
     float rayLen = sqrt(rayX*rayX + rayY*rayY + rayZ*rayZ);
@@ -265,6 +283,7 @@ void VisualSpawnEditor::HandleMouseInput(Camera* camera, int screenWidth, int sc
             loc.x = m_PreviewX;
             loc.y = m_PreviewY;
             loc.rotation = 0.0f;
+            loc.type = m_CurrentSpawnType;
             m_SpawnLocations.push_back(loc);
             
             CreateSpawnEntities();
@@ -382,6 +401,11 @@ void VisualSpawnEditor::HandleKeyboardInput(float dt) {
     if (shiftDown) {
         m_CameraHeight -= moveSpeed * dt;
     }
+    
+    // Type switching
+    if (keyState[SDL_SCANCODE_1]) m_CurrentSpawnType = SpawnType::Enemy;
+    if (keyState[SDL_SCANCODE_2]) m_CurrentSpawnType = SpawnType::Player;
+    if (keyState[SDL_SCANCODE_3]) m_CurrentSpawnType = SpawnType::Objective;
     
     // R to rotate selected spawn (only if not in spawn mode)
     static bool rWasDown = false;
@@ -568,6 +592,11 @@ void VisualSpawnEditor::Render(GLRenderer* renderer, TextRenderer* textRenderer,
         }
         textRenderer->RenderText(renderer, selected, 20, 170, {255, 255, 0, 255});
     }
+    
+    std::string typeStr = "Type: Enemy (1)";
+    if (m_CurrentSpawnType == SpawnType::Player) typeStr = "Type: Player (2)";
+    if (m_CurrentSpawnType == SpawnType::Objective) typeStr = "Type: Objective (3)";
+    textRenderer->RenderText(renderer, typeStr, 20, 185, {200, 200, 255, 255});
     
     // Draw crosshair at screen center
     int centerX = screenWidth / 2;

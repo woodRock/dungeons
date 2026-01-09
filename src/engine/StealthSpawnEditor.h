@@ -31,7 +31,7 @@ public:
     }
     
     // Add a spawn location
-    void AddSpawn(float x, float y, float rotation = 0.0f);
+    void AddSpawn(float x, float y, float rotation = 0.0f, SpawnType type = SpawnType::Enemy);
     
     // Remove selected spawn location
     void RemoveSelectedSpawn();
