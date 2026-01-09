@@ -4,6 +4,8 @@
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
 #include <iostream>
+#include <filesystem>
+#include <cstdlib>
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -13,6 +15,18 @@ namespace PixelsEngine {
 
 Application::Application(const char *title, int width, int height)
     : m_Width(width), m_Height(height) {
+  // Change working directory to executable's location for asset loading
+  // SDL_GetBasePath returns the base path of the executable on most platforms
+  char *basePath = SDL_GetBasePath();
+  if (basePath) {
+    std::filesystem::path exePath(basePath);
+    std::filesystem::current_path(exePath);
+    std::cout << "Working directory set to: " << exePath << std::endl;
+    SDL_free(basePath);
+  } else {
+    std::cout << "Warning: Could not determine executable path" << std::endl;
+  }
+  
   // Initialize Camera
   m_Camera = std::make_unique<Camera>(width, height);
 
