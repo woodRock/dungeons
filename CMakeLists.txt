@@ -20,46 +20,14 @@ else()
     link_directories(/opt/homebrew/lib)
     include_directories(/opt/homebrew/include)
 
-    if(WIN32)
-        # Windows with vcpkg: Don't use find_package, manually specify all paths
-        # This prevents vcpkg's CMake files from injecting debug library paths
-        set(VCPKG_ROOT "${CMAKE_FIND_ROOT_PATH}")
-        
-        # SDL2 main library (static triplet = /lib only, no /debug/lib)
-        set(SDL2_INCLUDE_DIRS "${VCPKG_ROOT}/include")
-        set(SDL2_LIBRARIES "${VCPKG_ROOT}/lib/SDL2.lib")
-        
-        # SDL2_image with dependencies
-        set(SDL2_IMAGE_INCLUDE_DIRS "${VCPKG_ROOT}/include")
-        set(SDL2_IMAGE_LIBRARIES
-            "${VCPKG_ROOT}/lib/SDL2_image.lib"
-            "${VCPKG_ROOT}/lib/libpng16.lib"
-            "${VCPKG_ROOT}/lib/zlib.lib"
-        )
-        
-        # SDL2_ttf with dependencies
-        set(SDL2_TTF_INCLUDE_DIRS "${VCPKG_ROOT}/include")
-        set(SDL2_TTF_LIBRARIES
-            "${VCPKG_ROOT}/lib/SDL2_ttf.lib"
-            "${VCPKG_ROOT}/lib/freetype.lib"
-        )
-        
-        # SDL2_mixer with dependencies
-        set(SDL2_MIXER_INCLUDE_DIRS "${VCPKG_ROOT}/include")
-        set(SDL2_MIXER_LIBRARIES
-            "${VCPKG_ROOT}/lib/SDL2_mixer.lib"
-            "${VCPKG_ROOT}/lib/flac.lib"
-            "${VCPKG_ROOT}/lib/ogg.lib"
-            "${VCPKG_ROOT}/lib/vorbis.lib"
-            "${VCPKG_ROOT}/lib/vorbisfile.lib"
-        )
-    else()
-        # Unix platforms: Use standard find_package with PkgConfig fallback
-        find_package(SDL2 REQUIRED)
-        find_package(SDL2_image QUIET)
-        find_package(SDL2_ttf QUIET)
-        find_package(SDL2_mixer QUIET)
-        
+    # Use find_package for all platforms (vcpkg toolchain handles Windows automatically)
+    find_package(SDL2 REQUIRED)
+    find_package(SDL2_image QUIET)
+    find_package(SDL2_ttf QUIET)
+    find_package(SDL2_mixer QUIET)
+    
+    if(NOT WIN32)
+        # Unix platforms: fallback to PkgConfig if not found
         if(NOT SDL2_image_FOUND OR NOT SDL2_ttf_FOUND OR NOT SDL2_mixer_FOUND)
             find_package(PkgConfig REQUIRED)
             if(NOT SDL2_image_FOUND)
@@ -77,26 +45,19 @@ else()
     # Find OpenGL
     find_package(OpenGL REQUIRED)
 
-    if(WIN32)
-        # GLEW is provided by vcpkg, no find_package needed
-        set(GLEW_INCLUDE_DIRS "${CMAKE_FIND_ROOT_PATH}/include")
-        set(GLEW_LIBRARIES "${CMAKE_FIND_ROOT_PATH}/lib/glew32s.lib")
-    else()
-        # Unix: Try find_package first, fallback to PkgConfig
-        find_package(GLEW QUIET)
-        if(NOT GLEW_FOUND)
-            find_package(PkgConfig QUIET)
-            if(PkgConfig_FOUND)
-                pkg_check_modules(GLEW QUIET glew)
-            endif()
+    # Find GLEW (vcpkg toolchain handles Windows)
+    find_package(GLEW QUIET)
+    if(NOT GLEW_FOUND)
+        find_package(PkgConfig QUIET)
+        if(PkgConfig_FOUND)
+            pkg_check_modules(GLEW QUIET glew)
         endif()
-        
-        if(NOT GLEW_FOUND)
-            # If still not found, assume macOS Homebrew installation
-            set(GLEW_INCLUDE_DIRS "/opt/homebrew/include")
-            set(GLEW_LIBRARIES "/opt/homebrew/lib/libGLEW.dylib")
-        endif()
-        
+    endif()
+    
+    if(NOT GLEW_FOUND AND NOT WIN32)
+        # If still not found on non-Windows, assume Homebrew installation
+        set(GLEW_INCLUDE_DIRS "/opt/homebrew/include")
+        set(GLEW_LIBRARIES "/opt/homebrew/lib/libGLEW.dylib")
         include_directories(${GLEW_INCLUDE_DIRS})
     endif()
 
@@ -133,12 +94,16 @@ else()
     endif()
 
     if(WIN32)
-        target_link_libraries(Dungeons PRIVATE ${GLEW_LIBRARIES})
-        # Link Windows system libraries
         target_link_libraries(Dungeons PRIVATE opengl32 user32 gdi32)
         # Fix CRT library conflicts - use dynamic CRT matching vcpkg static triplet
         target_link_options(Dungeons PRIVATE /NODEFAULTLIB:LIBCMT)
         set_target_properties(Dungeons PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+    endif()
+
+    if(GLEW_FOUND)
+        target_link_libraries(Dungeons PRIVATE GLEW::GLEW)
+    elseif(GLEW_LIBRARIES)
+        target_link_libraries(Dungeons PRIVATE ${GLEW_LIBRARIES})
     endif()
 
     target_link_libraries(Dungeons PRIVATE ${OPENGL_LIBRARIES})
