@@ -558,6 +558,31 @@ void DungeonsGame::HandleInputGameOver() {
   Input::GetMousePosition(mx, my);
   bool clicked = Input::IsMouseButtonPressed(SDL_BUTTON_LEFT);
   
+  // Keyboard input - R for Retry, ESC for Main Menu
+  if (Input::IsKeyPressed(SDL_SCANCODE_R)) {
+    // Retry - go back to map select with same character
+    m_AvailableMaps.clear();
+    if (std::filesystem::exists("assets/saves/")) {
+        for (const auto & entry : std::filesystem::directory_iterator("assets/saves/")) {
+            if (entry.path().extension() == ".dungeon") {
+                m_AvailableMaps.push_back(entry.path().stem().string());
+            }
+        }
+    }
+    if (!m_AvailableMaps.empty()) {
+        m_State = GameState::MapSelect;
+        m_MapSelectIdx = 0;
+        SDL_SetRelativeMouseMode(SDL_FALSE);
+    }
+    return;
+  }
+  
+  if (Input::IsKeyPressed(SDL_SCANCODE_ESCAPE)) {
+    m_State = GameState::MainMenu;
+    m_MenuSelection = 0;
+    return;
+  }
+  
   int btnW = 200;
   int btnH = 50;
   int btnStartX = w / 2 - 100;

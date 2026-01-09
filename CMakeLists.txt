@@ -23,49 +23,44 @@ else()
     # Find SDL2
     find_package(SDL2 REQUIRED)
 
-    # Find SDL2 modules - try find_package first
-    find_package(SDL2_image QUIET)
-    find_package(SDL2_ttf QUIET)
-    find_package(SDL2_mixer QUIET)
-
-    # On Windows with vcpkg, manually add libraries if targets not found
-    if(WIN32 AND NOT TARGET SDL2_mixer::SDL2_mixer)
-        # Use the Release (optimized) library directory
+    # On Windows with vcpkg, manually add all SDL2 module libraries
+    if(WIN32)
+        # Use the Release (optimized) library directory only
         set(VCPKG_LIB_DIR "${CMAKE_FIND_ROOT_PATH}/lib")
         
-        if(NOT SDL2_MIXER_LIBRARIES)
-            set(SDL2_MIXER_LIBRARIES 
-                ${VCPKG_LIB_DIR}/SDL2_mixer.lib
-                ${VCPKG_LIB_DIR}/flac.lib
-                ${VCPKG_LIB_DIR}/ogg.lib
-                ${VCPKG_LIB_DIR}/vorbis.lib
-                ${VCPKG_LIB_DIR}/vorbisfile.lib
-            )
-        endif()
-        if(NOT SDL2_IMAGE_LIBRARIES)
-            set(SDL2_IMAGE_LIBRARIES 
-                ${VCPKG_LIB_DIR}/SDL2_image.lib
-                ${VCPKG_LIB_DIR}/libpng16.lib
-                ${VCPKG_LIB_DIR}/zlib.lib
-            )
-        endif()
-        if(NOT SDL2_TTF_LIBRARIES)
-            set(SDL2_TTF_LIBRARIES 
-                ${VCPKG_LIB_DIR}/SDL2_ttf.lib
-                ${VCPKG_LIB_DIR}/freetype.lib
-            )
-        endif()
-    elseif(NOT WIN32 AND (NOT TARGET SDL2_mixer::SDL2_mixer OR NOT TARGET SDL2_image::SDL2_image OR NOT TARGET SDL2_ttf::SDL2_ttf))
-        # On Linux/macOS, use PkgConfig as fallback
-        find_package(PkgConfig REQUIRED)
-        if(NOT SDL2_MIXER_FOUND)
-            pkg_check_modules(SDL2_MIXER REQUIRED SDL2_mixer)
-        endif()
-        if(NOT SDL2_IMAGE_FOUND)
-            pkg_check_modules(SDL2_IMAGE REQUIRED SDL2_image)
-        endif()
-        if(NOT SDL2_TTF_FOUND)
-            pkg_check_modules(SDL2_TTF REQUIRED SDL2_ttf)
+        set(SDL2_IMAGE_LIBRARIES 
+            ${VCPKG_LIB_DIR}/SDL2_image.lib
+            ${VCPKG_LIB_DIR}/libpng16.lib
+            ${VCPKG_LIB_DIR}/zlib.lib
+        )
+        set(SDL2_TTF_LIBRARIES 
+            ${VCPKG_LIB_DIR}/SDL2_ttf.lib
+            ${VCPKG_LIB_DIR}/freetype.lib
+        )
+        set(SDL2_MIXER_LIBRARIES 
+            ${VCPKG_LIB_DIR}/SDL2_mixer.lib
+            ${VCPKG_LIB_DIR}/flac.lib
+            ${VCPKG_LIB_DIR}/ogg.lib
+            ${VCPKG_LIB_DIR}/vorbis.lib
+            ${VCPKG_LIB_DIR}/vorbisfile.lib
+        )
+    else()
+        # On Linux/macOS, try find_package first, fallback to PkgConfig
+        find_package(SDL2_image QUIET)
+        find_package(SDL2_ttf QUIET)
+        find_package(SDL2_mixer QUIET)
+        
+        if(NOT SDL2_image_FOUND OR NOT SDL2_ttf_FOUND OR NOT SDL2_mixer_FOUND)
+            find_package(PkgConfig REQUIRED)
+            if(NOT SDL2_image_FOUND)
+                pkg_check_modules(SDL2_IMAGE REQUIRED SDL2_image)
+            endif()
+            if(NOT SDL2_ttf_FOUND)
+                pkg_check_modules(SDL2_TTF REQUIRED SDL2_ttf)
+            endif()
+            if(NOT SDL2_mixer_FOUND)
+                pkg_check_modules(SDL2_MIXER REQUIRED SDL2_mixer)
+            endif()
         endif()
     endif()
 
