@@ -30,41 +30,29 @@ else()
 
     # On Windows with vcpkg, manually add libraries if targets not found
     if(WIN32 AND NOT TARGET SDL2_mixer::SDL2_mixer)
-        # Use CMAKE_BUILD_TYPE or generator expression to pick correct lib directory
-        # For MSVC (multi-config), use the optimized/debug keyword approach
-        set(VCPKG_LIB_DIR_OPT "${CMAKE_FIND_ROOT_PATH}/lib")
-        set(VCPKG_LIB_DIR_DBG "${CMAKE_FIND_ROOT_PATH}/debug/lib")
+        # Use the Release (optimized) library directory
+        set(VCPKG_LIB_DIR "${CMAKE_FIND_ROOT_PATH}/lib")
         
         if(NOT SDL2_MIXER_LIBRARIES)
             set(SDL2_MIXER_LIBRARIES 
-                optimized ${VCPKG_LIB_DIR_OPT}/SDL2_mixer.lib
-                debug ${VCPKG_LIB_DIR_DBG}/SDL2_mixer.lib
-                optimized ${VCPKG_LIB_DIR_OPT}/flac.lib
-                debug ${VCPKG_LIB_DIR_DBG}/flac.lib
-                optimized ${VCPKG_LIB_DIR_OPT}/ogg.lib
-                debug ${VCPKG_LIB_DIR_DBG}/ogg.lib
-                optimized ${VCPKG_LIB_DIR_OPT}/vorbis.lib
-                debug ${VCPKG_LIB_DIR_DBG}/vorbis.lib
-                optimized ${VCPKG_LIB_DIR_OPT}/vorbisfile.lib
-                debug ${VCPKG_LIB_DIR_DBG}/vorbisfile.lib
+                ${VCPKG_LIB_DIR}/SDL2_mixer.lib
+                ${VCPKG_LIB_DIR}/flac.lib
+                ${VCPKG_LIB_DIR}/ogg.lib
+                ${VCPKG_LIB_DIR}/vorbis.lib
+                ${VCPKG_LIB_DIR}/vorbisfile.lib
             )
         endif()
         if(NOT SDL2_IMAGE_LIBRARIES)
             set(SDL2_IMAGE_LIBRARIES 
-                optimized ${VCPKG_LIB_DIR_OPT}/SDL2_image.lib
-                debug ${VCPKG_LIB_DIR_DBG}/SDL2_image.lib
-                optimized ${VCPKG_LIB_DIR_OPT}/libpng16.lib
-                debug ${VCPKG_LIB_DIR_DBG}/libpng16.lib
-                optimized ${VCPKG_LIB_DIR_OPT}/zlib.lib
-                debug ${VCPKG_LIB_DIR_DBG}/zlib.lib
+                ${VCPKG_LIB_DIR}/SDL2_image.lib
+                ${VCPKG_LIB_DIR}/libpng16.lib
+                ${VCPKG_LIB_DIR}/zlib.lib
             )
         endif()
         if(NOT SDL2_TTF_LIBRARIES)
             set(SDL2_TTF_LIBRARIES 
-                optimized ${VCPKG_LIB_DIR_OPT}/SDL2_ttf.lib
-                debug ${VCPKG_LIB_DIR_DBG}/SDL2_ttf.lib
-                optimized ${VCPKG_LIB_DIR_OPT}/freetype.lib
-                debug ${VCPKG_LIB_DIR_DBG}/freetype.lib
+                ${VCPKG_LIB_DIR}/SDL2_ttf.lib
+                ${VCPKG_LIB_DIR}/freetype.lib
             )
         endif()
     elseif(NOT WIN32 AND (NOT TARGET SDL2_mixer::SDL2_mixer OR NOT TARGET SDL2_image::SDL2_image OR NOT TARGET SDL2_ttf::SDL2_ttf))
