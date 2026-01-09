@@ -241,6 +241,51 @@ ActionResult CreativeMode::Update(float dt, Entity /*playerEntity*/) {
       SDL_SetRelativeMouseMode(SDL_TRUE);
     }
     return ActionResult::None;
+  } else if (m_ShowMapSelection) {
+    // Handle map selection menu input
+    if (Input::IsKeyPressed(SDL_SCANCODE_BACKSPACE) && m_NewMapName.length() > 0) {
+      m_NewMapName.pop_back();
+    }
+    
+    std::string text = Input::GetTextInput();
+    if (!text.empty()) {
+      m_NewMapName += text;
+      Input::ClearTextInput();
+    }
+    
+    // Keyboard navigation
+    if (Input::IsKeyPressed(SDL_SCANCODE_UP) && m_MapSelectionIdx > 0) {
+      m_MapSelectionIdx--;
+    }
+    if (Input::IsKeyPressed(SDL_SCANCODE_DOWN) && m_MapSelectionIdx < (int)m_SavedMaps.size() - 1) {
+      m_MapSelectionIdx++;
+    }
+    
+    // Enter to load selected map
+    if (Input::IsKeyPressed(SDL_SCANCODE_RETURN) && !m_SavedMaps.empty() && m_MapSelectionIdx >= 0 && m_MapSelectionIdx < (int)m_SavedMaps.size()) {
+      m_CurrentMapName = m_SavedMaps[m_MapSelectionIdx];
+      LoadDungeon("assets/saves/" + m_SavedMaps[m_MapSelectionIdx] + ".map");
+      m_ShowMapSelection = false;
+      Input::StopTextInput();
+      SDL_SetRelativeMouseMode(SDL_TRUE);
+      return ActionResult::None;
+    }
+    
+    // Delete key to delete selected map
+    if (Input::IsKeyPressed(SDL_SCANCODE_DELETE) && !m_SavedMaps.empty() && m_MapSelectionIdx >= 0 && m_MapSelectionIdx < (int)m_SavedMaps.size()) {
+      fs::remove("assets/saves/" + m_SavedMaps[m_MapSelectionIdx] + ".map");
+      ScanSavedMaps();
+      if (m_MapSelectionIdx >= (int)m_SavedMaps.size()) {
+        m_MapSelectionIdx = std::max(0, (int)m_SavedMaps.size() - 1);
+      }
+    }
+
+    if (Input::IsKeyPressed(SDL_SCANCODE_ESCAPE)) {
+      m_ShowMapSelection = false;
+      Input::StopTextInput();
+      SDL_SetRelativeMouseMode(SDL_TRUE);
+    }
+    return ActionResult::None;
   } else if (m_ShowSaveMenu) {
     std::string* activeBuffer = nullptr;
     if (m_FocusedInput == ActiveInput::MapName) activeBuffer = &m_MapInputBuffer;
@@ -776,13 +821,15 @@ void CreativeMode::RenderUI(GLRenderer *ren, TextRenderer *tr, int w, int h) {
 
   if (m_ShowInventory) {
     DrawInventory(ren, tr, w, h);
+  } else if (m_ShowMapSelection) {
+    DrawMapSelectionMenu(ren, tr, w, h);
   } else if (m_ShowSaveMenu) {
     DrawSaveMenu(ren, tr, w, h);
   }
 
   DrawHotbar(ren, tr, w, h);
 
-  if (!m_ShowInventory && !m_ShowSaveMenu) {
+  if (!m_ShowInventory && !m_ShowSaveMenu && !m_ShowMapSelection) {
     // Instruction
     tr->RenderText(ren, "E: Inventory | 1-9: Select | Click: Place",
                    20, 20, {255, 255, 255, 255});
@@ -1190,6 +1237,160 @@ void CreativeMode::LoadDungeon(const std::string &filename) {
     }
   }
   std::cout << "Loaded map from: " << filename << std::endl;
+}
+
+void CreativeMode::CreateInitialFloorTile() {
+  // Create a single floor tile in front of the player
+  auto e = m_Registry->CreateEntity();
+  
+  // Place it in front of the camera (slightly ahead)
+  float floorX = m_Camera->x + cos(m_Camera->yaw) * 2.0f;
+  float floorY = m_Camera->y + sin(m_Camera->yaw) * 2.0f;
+  
+  m_Registry->AddComponent<Transform3DComponent>(e, {floorX, floorY, 0.0f, 0.0f, 0.0f});
+  m_Registry->AddComponent<MeshComponent>(e, {"floor_tile_large", "dungeon", 1.0f, 1.0f, 1.0f});
+}
+
+void CreativeMode::ShowMapSelectionMenu() {
+  m_ShowMapSelection = true;
+  m_MapSelectionIdx = 0;
+  m_NewMapName = "";
+  ScanSavedMaps();
+  Input::StartTextInput();
+}
+
+void CreativeMode::DrawMapSelectionMenu(GLRenderer *ren, TextRenderer *tr, int w, int h) {
+  ren->DrawRect2D(0, 0, (float)w, (float)h, {0, 0, 0, 200});
+  
+  float boxW = 600.0f;
+  float boxH = 500.0f;
+  float x = (w - boxW) / 2.0f;
+  float y = (h - boxH) / 2.0f;
+  ren->DrawRect2D(x, y, boxW, boxH, {40, 40, 45, 255});
+  
+  int mx, my;
+  Input::GetMousePosition(mx, my);
+  bool clicked = Input::IsMouseButtonPressed(SDL_BUTTON_LEFT);
+  
+  // Title
+  tr->RenderText(ren, "MANAGE MAPS - CREATE OR LOAD", (int)x + 20, (int)y + 20, {255, 255, 100, 255});
+  
+  // Create New Map Section
+  tr->RenderText(ren, "CREATE NEW MAP:", (int)x + 20, (int)y + 60, {200, 200, 200, 255});
+  ren->DrawRect2D(x + 20, y + 85, boxW - 150, 40, {20, 20, 20, 255});
+  tr->RenderText(ren, m_NewMapName + "_", (int)x + 30, (int)y + 95, {255, 255, 255, 255});
+  
+  if (clicked && mx >= x + 20 && mx <= x + boxW - 130 && my >= y + 85 && my <= y + 125) {
+    Input::ClearTextInput();
+  }
+  
+  bool hoverCreate = (mx >= x + boxW - 120 && mx <= x + boxW - 20 && my >= y + 85 && my <= y + 125);
+  ren->DrawRect2D(x + boxW - 120, y + 85, 100, 40, hoverCreate ? SDL_Color{100, 200, 100, 255} : SDL_Color{50, 150, 50, 255});
+  tr->RenderText(ren, "CREATE", (int)x + boxW - 105, (int)y + 95, {255, 255, 255, 255});
+  if (hoverCreate && clicked && !m_NewMapName.empty()) {
+    m_CurrentMapName = m_NewMapName;
+    // Clear all entities
+    std::vector<Entity> toKill;
+    auto &view = m_Registry->View<MeshComponent>();
+    for (auto &pair : view) toKill.push_back(pair.first);
+    for (auto e : toKill) m_Registry->DestroyEntity(e);
+    
+    // Create initial floor tile
+    CreateInitialFloorTile();
+    
+    // Close menu
+    m_ShowMapSelection = false;
+    Input::StopTextInput();
+    SDL_SetRelativeMouseMode(SDL_TRUE);
+    return;
+  }
+  
+  // Load/Manage Existing Maps Section
+  tr->RenderText(ren, "EXISTING MAPS (" + std::to_string(m_SavedMaps.size()) + "):", (int)x + 20, (int)y + 145, {200, 200, 200, 255});
+  
+  if (m_SavedMaps.empty()) {
+    tr->RenderText(ren, "No saved maps found", (int)x + 30, (int)y + 180, {150, 150, 150, 255});
+  }
+  
+  float itemY = y + 175;
+  int maxVisible = 5;
+  int startIdx = std::max(0, std::min(m_MapSelectionIdx - maxVisible + 1, (int)m_SavedMaps.size() - maxVisible));
+  if (startIdx < 0) startIdx = 0;
+  
+  for (int i = startIdx; i < (int)m_SavedMaps.size() && i < startIdx + maxVisible; ++i) {
+    bool hover = (mx >= x + 20 && mx <= x + boxW - 180 && my >= itemY && my <= itemY + 35);
+    bool selected = (i == m_MapSelectionIdx);
+    
+    SDL_Color bgColor = selected ? SDL_Color{100, 100, 120, 255} : 
+                        (hover ? SDL_Color{80, 80, 90, 255} : SDL_Color{30, 30, 35, 255});
+    ren->DrawRect2D(x + 20, itemY, boxW - 200, 35, bgColor);
+    tr->RenderText(ren, m_SavedMaps[i], (int)x + 30, (int)itemY + 10, {255, 255, 255, 255});
+    
+    // Load button
+    if (hover && clicked) {
+      m_MapSelectionIdx = i;
+      m_CurrentMapName = m_SavedMaps[i];
+      LoadDungeon("assets/saves/" + m_SavedMaps[i] + ".map");
+      m_ShowMapSelection = false;
+      Input::StopTextInput();
+      SDL_SetRelativeMouseMode(SDL_TRUE);
+      return;
+    }
+    
+    // Duplicate button
+    bool hoverDup = (mx >= x + boxW - 170 && mx <= x + boxW - 105 && my >= itemY && my <= itemY + 35);
+    ren->DrawRect2D(x + boxW - 170, itemY, 60, 35, hoverDup ? SDL_Color{100, 150, 200, 255} : SDL_Color{50, 80, 120, 255});
+    tr->RenderText(ren, "DUP", (int)x + boxW - 155, (int)itemY + 10, {255, 255, 255, 255});
+    if (hoverDup && clicked) {
+      // Create duplicate with "_copy" suffix
+      std::string baseName = m_SavedMaps[i];
+      std::string newName = baseName + "_copy";
+      int copyNum = 1;
+      while (fs::exists("assets/saves/" + newName + ".map")) {
+        newName = baseName + "_copy" + std::to_string(copyNum);
+        copyNum++;
+      }
+      fs::copy_file("assets/saves/" + m_SavedMaps[i] + ".map", "assets/saves/" + newName + ".map");
+      ScanSavedMaps();
+      return;
+    }
+    
+    // Delete button
+    bool hoverDel = (mx >= x + boxW - 95 && mx <= x + boxW - 20 && my >= itemY && my <= itemY + 35);
+    ren->DrawRect2D(x + boxW - 95, itemY, 75, 35, hoverDel ? SDL_Color{200, 50, 50, 255} : SDL_Color{100, 30, 30, 255});
+    tr->RenderText(ren, "DEL", (int)x + boxW - 73, (int)itemY + 10, {255, 255, 255, 255});
+    if (hoverDel && clicked) {
+      fs::remove("assets/saves/" + m_SavedMaps[i] + ".map");
+      ScanSavedMaps();
+      if (m_MapSelectionIdx >= (int)m_SavedMaps.size()) {
+        m_MapSelectionIdx = std::max(0, (int)m_SavedMaps.size() - 1);
+      }
+      return;
+    }
+    
+    itemY += 40;
+  }
+  
+  // Scroll indicators
+  if (startIdx > 0) {
+    tr->RenderText(ren, "^ More above", (int)x + boxW / 2 - 50, (int)y + 175, {100, 200, 255, 255});
+  }
+  if (startIdx + maxVisible < (int)m_SavedMaps.size()) {
+    tr->RenderText(ren, "v More below", (int)x + boxW / 2 - 50, (int)itemY - 10, {100, 200, 255, 255});
+  }
+  
+  // Instructions
+  tr->RenderText(ren, "UP/DOWN: Navigate | ENTER: Load | DEL: Delete | DUP: Duplicate", (int)x + 20, (int)y + boxH - 65, {150, 150, 150, 255});
+  
+  // Cancel button
+  bool hoverCancel = (mx >= x + 20 && mx <= x + 200 && my >= y + boxH - 45 && my <= y + boxH - 15);
+  ren->DrawRect2D(x + 20, y + boxH - 45, 180, 30, hoverCancel ? SDL_Color{200, 100, 100, 255} : SDL_Color{150, 50, 50, 255});
+  tr->RenderText(ren, "CANCEL", (int)x + 45, (int)y + boxH - 38, {255, 255, 255, 255});
+  if (hoverCancel && clicked) {
+    m_ShowMapSelection = false;
+    Input::StopTextInput();
+    SDL_SetRelativeMouseMode(SDL_TRUE);
+  }
 }
 
 } // namespace PixelsEngine

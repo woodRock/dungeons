@@ -280,9 +280,17 @@ void DungeonsGame::HandleInputMenu() {
       case 0:
         m_Registry = Registry();
         m_GameFinished = false;
-        m_State = GameState::Creative;
+        // Initialize camera to face forward (0 radians) and level (0 pitch)
+        m_Camera->yaw = 0.0f;
+        m_Camera->pitch = 0.0f;
+        m_Camera->x = 5.0f;
+        m_Camera->y = 5.0f;
+        m_Camera->z = 1.7f;
+        m_CreativeMode.Init(&m_Registry, &m_GLRenderer, m_Camera.get());
         m_CreativeMode.ToggleEditorMode();
-        SDL_SetRelativeMouseMode(SDL_TRUE);
+        m_CreativeMode.ToggleSaveMenu(); // Show map selection menu
+        m_State = GameState::Creative;
+        SDL_SetRelativeMouseMode(SDL_FALSE);
         break;
       case 1:
         // Dungeon Mode - Go to Character Selection

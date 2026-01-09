@@ -106,10 +106,10 @@ void SidescrollerMode::LoadLevel(const std::string& mapFile) {
         }
         
         if (m_Camera) {
-            m_Camera->x = spawnX;
-            m_Camera->y = spawnY - 8.0f;
+            m_Camera->x = spawnX - 8.0f;  // 8 units to the left (rotated 90° counter-clockwise)
+            m_Camera->y = spawnY;
             m_Camera->z = spawnZ + 3.0f;
-            m_Camera->yaw = playerRot;
+            m_Camera->yaw = M_PI * 0.5f;  // Fixed camera angle for sidescroller
             m_Camera->pitch = -0.3f;
             std::cout << "Camera positioned at X=" << m_Camera->x << ", Y=" << m_Camera->y << ", Z=" << m_Camera->z << std::endl;
         }
@@ -120,20 +120,119 @@ void SidescrollerMode::Update(float dt, Entity& playerEntity) {
     if (!m_Active || !m_Camera)
         return;
 
-    // Update movement controller
-    if (m_MovementController) {
-        m_MovementController->HandleInput(dt);
+    // Handle custom WASD input for sidescroller (rotated 90 degrees)
+    // W: Left (negative X), A: Back (negative Y), S: Right (positive X), D: Forward (positive Y)
+    auto *phys = m_Registry->GetComponent<PhysicsComponent>(m_PlayerEntity);
+    if (phys) {
+        float accel = 80.0f * dt;  // Acceleration
+        float maxSpeed = 8.0f;     // Max speed
+        float friction = 0.92f;    // Friction coefficient
+        
+        float dx = 0, dy = 0;
+        
+        // Rotated input mapping for sidescroller
+        if (Input::IsKeyDown(SDL_SCANCODE_W)) dx += 1.0f;  // W = Move Right (+X)
+        if (Input::IsKeyDown(SDL_SCANCODE_A)) dy += 1.0f;  // A = Move Forward (+Y)
+        if (Input::IsKeyDown(SDL_SCANCODE_S)) dx -= 1.0f;  // S = Move Left (-X)
+        if (Input::IsKeyDown(SDL_SCANCODE_D)) dy -= 1.0f;  // D = Move Back (-Y)
+        
+        if (dx != 0 || dy != 0) {
+            // Normalize
+            float len = sqrt(dx * dx + dy * dy);
+            dx /= len;
+            dy /= len;
+            
+            // Apply acceleration
+            float newVelX = phys->velX + dx * accel;
+            float newVelY = phys->velY + dy * accel;
+            
+            // Clamp to max speed
+            float speed = sqrt(newVelX * newVelX + newVelY * newVelY);
+            if (speed > maxSpeed) {
+                float scale = maxSpeed / speed;
+                newVelX *= scale;
+                newVelY *= scale;
+            }
+            
+            phys->velX = newVelX;
+            phys->velY = newVelY;
+        } else {
+            // Apply friction when no input
+            phys->velX *= friction;
+            phys->velY *= friction;
+        }
+        
+        // Rotate player to face movement direction
+        if (dx != 0 || dy != 0) {
+            auto* playerTransform = m_Registry->GetComponent<Transform3DComponent>(m_PlayerEntity);
+            if (playerTransform) {
+                // Calculate rotation from velocity direction
+                // Negate dx to fix left/right orientation
+                float targetYaw = atan2(dy, -dx);
+                // Apply rotation offset for debugging
+                float rotationOffset = m_PlayerRotationOffset * M_PI * 0.5f;
+                playerTransform->rot = targetYaw + rotationOffset;
+            }
+        }
+        
+        // Handle jump input with double jump
+        bool spacePressed = Input::IsKeyDown(SDL_SCANCODE_SPACE);
+        if (spacePressed && !m_WasSpacePressed) {
+            if (phys->isGrounded) {
+                // First jump from ground
+                phys->velZ = m_JumpVelocity;
+                phys->isGrounded = false;
+                m_HasDoubleJumped = false;
+            } else if (!m_HasDoubleJumped) {
+                // Double jump in air
+                phys->velZ = m_JumpVelocity;
+                m_HasDoubleJumped = true;
+            }
+        }
+        
+        // Reset double jump when grounded
+        if (phys->isGrounded) {
+            m_HasDoubleJumped = false;
+        }
+        
+        m_WasSpacePressed = spacePressed;
     }
     
     // Update camera to follow player
     auto* playerTransform = m_Registry->GetComponent<Transform3DComponent>(m_PlayerEntity);
     if (playerTransform && m_Camera) {
-        // Camera follows player from behind and above (sidescroller perspective)
-        m_Camera->x = playerTransform->x;
-        m_Camera->y = playerTransform->y - 8.0f;  // 8 units back
+        // Calculate camera offset based on rotation angle
+        float offsetDist = 8.0f;
+        float offsetX = 0.0f, offsetY = 0.0f;
+        
+        // Apply rotation: 0=left(-X), 1=back(-Y), 2=right(+X), 3=front(+Y)
+        // Camera positioned around player and facing towards player
+        switch (m_CameraRotation) {
+            case 0:  // 0°: Left side (-X)
+                offsetX = -offsetDist;
+                offsetY = 0.0f;
+                m_Camera->yaw = 0.0f;  // Look towards +X (at player)
+                break;
+            case 1:  // 90°: Back side (-Y)
+                offsetX = 0.0f;
+                offsetY = -offsetDist;
+                m_Camera->yaw = M_PI * 0.5f;  // Look towards +Y (at player)
+                break;
+            case 2:  // 180°: Right side (+X)
+                offsetX = offsetDist;
+                offsetY = 0.0f;
+                m_Camera->yaw = M_PI;  // Look towards -X (at player)
+                break;
+            case 3:  // 270°: Front side (+Y)
+                offsetX = 0.0f;
+                offsetY = offsetDist;
+                m_Camera->yaw = -M_PI * 0.5f;  // Look towards -Y (at player)
+                break;
+        }
+        
+        m_Camera->x = playerTransform->x + offsetX;
+        m_Camera->y = playerTransform->y + offsetY;
         m_Camera->z = playerTransform->z + 3.0f;  // 3 units up
-        // Fixed camera angle for sidescroller (looking along X axis towards positive X)
-        m_Camera->yaw = M_PI * 0.5f;
         m_Camera->pitch = -0.3f;
     }
 
@@ -193,6 +292,44 @@ void SidescrollerMode::RenderUI(GLRenderer* renderer, TextRenderer* textRenderer
     // Render basic HUD for sidescroller
     textRenderer->RenderText(renderer, "Sidescroller Mode", 20, 20, {255, 255, 255, 255});
     textRenderer->RenderText(renderer, "WASD: Move | Space: Jump | ESC: Back", 20, 50, {255, 255, 255, 255});
+    
+    // Jump velocity slider
+    int sliderX = 20;
+    int sliderY = height - 100;
+    int sliderWidth = 300;
+    int sliderHeight = 20;
+    
+    textRenderer->RenderText(renderer, "Jump Velocity", sliderX, sliderY - 25, {255, 255, 255, 255});
+    
+    // Draw slider background
+    renderer->DrawRect2D(sliderX, sliderY, sliderWidth, sliderHeight, {60, 60, 60, 255});
+    
+    // Draw slider value bar (min: 5.0, max: 30.0)
+    float minJump = 5.0f;
+    float maxJump = 30.0f;
+    float normalizedValue = (m_JumpVelocity - minJump) / (maxJump - minJump);
+    int valueWidth = (int)(sliderWidth * normalizedValue);
+    renderer->DrawRect2D(sliderX, sliderY, valueWidth, sliderHeight, {100, 200, 100, 255});
+    
+    // Draw slider handle
+    int handleX = sliderX + valueWidth - 5;
+    renderer->DrawRect2D(handleX, sliderY - 5, 10, sliderHeight + 10, {200, 200, 200, 255});
+    
+    // Show current value
+    std::string valueText = std::to_string((int)m_JumpVelocity);
+    textRenderer->RenderText(renderer, valueText, sliderX + sliderWidth + 10, sliderY, {255, 255, 255, 255});
+    
+    // Handle mouse input for slider
+    int mouseX, mouseY;
+    Uint32 mouseState = SDL_GetMouseState(&mouseX, &mouseY);
+    if (mouseState & SDL_BUTTON(SDL_BUTTON_LEFT)) {
+        if (mouseX >= sliderX && mouseX <= sliderX + sliderWidth &&
+            mouseY >= sliderY - 5 && mouseY <= sliderY + sliderHeight + 5) {
+            float newNormalized = (float)(mouseX - sliderX) / sliderWidth;
+            newNormalized = std::max(0.0f, std::min(1.0f, newNormalized));
+            m_JumpVelocity = minJump + newNormalized * (maxJump - minJump);
+        }
+    }
 }
 
 } // namespace PixelsEngine

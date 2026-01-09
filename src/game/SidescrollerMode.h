@@ -39,6 +39,17 @@ private:
     int m_AnimRun = -1;
     int m_AnimJump = -1;
     
+    // Camera rotation debug (0=original, 1=90°, 2=180°, 3=270°)
+    int m_CameraRotation = 0;
+    
+    // Jump settings
+    float m_JumpVelocity = 8.0f;
+    bool m_WasSpacePressed = false;
+    bool m_HasDoubleJumped = false;
+    
+    // Player rotation debug
+    int m_PlayerRotationOffset = 1;  // 0=0°, 1=90°, 2=180°, 3=270°
+    
     bool m_Active = false;
 };
 

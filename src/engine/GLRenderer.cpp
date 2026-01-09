@@ -490,7 +490,18 @@ void GLRenderer::Render(SDL_Window *win, const Camera &cam, Registry &reg,
                          : m_DefaultTexture;
       glBindTexture(GL_TEXTURE_2D, texID);
       glBindVertexArray(rm.VAO);
+      
+      // Disable culling for floor tiles to render both top and bottom faces
+      if (mc.meshName.find("floor") != std::string::npos) {
+        glDisable(GL_CULL_FACE);
+      }
+      
       glDrawElements(GL_TRIANGLES, rm.indexCount, GL_UNSIGNED_INT, 0);
+      
+      // Re-enable culling
+      if (mc.meshName.find("floor") != std::string::npos) {
+        glEnable(GL_CULL_FACE);
+      }
 
       // Handle Attachments (Weapons)
       auto *attach = reg.GetComponent<AttachmentComponent>(pair.first);

@@ -54,13 +54,17 @@ public:
     }
   }
   bool IsActive() { return m_IsActive; }
-  bool IsInventoryOpen() { return m_ShowInventory || m_ShowSaveMenu; }
+  bool IsInventoryOpen() { return m_ShowInventory || m_ShowSaveMenu || m_ShowMapSelection; }
 
   void SaveDungeon(const std::string &filename);
   void LoadDungeon(const std::string &filename);
+  void CreateInitialFloorTile();
+  void ShowMapSelectionMenu();
+  void HideMapSelectionMenu() { m_ShowMapSelection = false; Input::StopTextInput(); }
+  bool IsMapSelectionMenuActive() { return m_ShowMapSelection; }
 
 private:
-  enum class EditorMenuState { Dungeons, Levels };
+  enum class EditorMenuState { Dungeons, Levels, MapSelection };
   enum class ActiveInput { None, MapName, DungeonName };
   EditorMenuState m_MenuState = EditorMenuState::Dungeons;
   ActiveInput m_FocusedInput = ActiveInput::None;
@@ -80,10 +84,13 @@ private:
                      int h);
   void DrawSaveMenu(GLRenderer *renderer, TextRenderer *textRenderer, int w,
                     int h);
+  void DrawMapSelectionMenu(GLRenderer *renderer, TextRenderer *textRenderer, int w,
+                            int h);
 
   bool m_IsActive = false;
   bool m_ShowInventory = false;
   bool m_ShowSaveMenu = false;
+  bool m_ShowMapSelection = false;
 
   Registry *m_Registry = nullptr;
   GLRenderer *m_Renderer = nullptr;
@@ -100,6 +107,8 @@ private:
   std::string m_DungeonInputBuffer;
   std::string m_CurrentMapName = "untitled";
   std::string m_SelectedDungeon = "";
+  std::string m_NewMapName = "";
+  int m_MapSelectionIdx = 0;
   std::vector<int> m_FilteredAssetIndices;
   std::vector<std::string> m_SavedMaps;
   std::vector<std::string> m_SavedDungeons;

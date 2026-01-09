@@ -179,6 +179,44 @@ void DungeonsGame::UpdatePhysics(float dt) {
       phys->isGrounded = false;
     }
 
+    // Ceiling collision (sidescroller mode: prevent jumping through bottom of tiles)
+    if (m_State == GameState::Sidescroller && phys->velZ > 0.0f) {
+      float playerHeight = 1.8f;
+      float playerTop = t->z + playerHeight;
+      float maxCeilingHeight = playerTop;
+
+      auto &ceilingMeshes = m_Registry.View<MeshComponent>();
+      for (auto &mPair : ceilingMeshes) {
+        if (mPair.first == entity) continue;
+
+        auto &mc = mPair.second;
+        std::string lowName = mc.meshName;
+        std::transform(lowName.begin(), lowName.end(), lowName.begin(), ::tolower);
+        
+        if (lowName.find("floor") != std::string::npos) {
+          auto *ft = m_Registry.GetComponent<Transform3DComponent>(mPair.first);
+          if (ft) {
+            RenderMesh* rm = m_GLRenderer.GetRenderMesh(mc.meshName);
+            if (rm) {
+              AABB worldAABB = GetWorldAABB(rm->boundingBox, *ft, mc.scaleX, mc.scaleY, mc.scaleZ);
+              
+              // Check horizontal overlap
+              if (t->x >= worldAABB.minX && t->x <= worldAABB.maxX &&
+                  t->y >= worldAABB.minY && t->y <= worldAABB.maxY) {
+                
+                // Check if player is jumping into this ceiling
+                float ceilingZ = worldAABB.minZ;
+                if (playerTop > ceilingZ && playerTop < ceilingZ + 1.5f) {
+                  t->z = ceilingZ - playerHeight;
+                  phys->velZ = 0;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
     // Wall Run Logic (Player Only)
     if (entity == m_PlayerEntity && !phys->isGrounded && phys->wallRunTimer > 0.0f) {
         // ... existing wall run logic ...
