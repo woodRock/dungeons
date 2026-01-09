@@ -121,6 +121,7 @@ private:
 
   GameState m_State = GameState::MainMenu;
   GameState m_PreviousState = GameState::MainMenu; // Store state before pause
+  GameState m_PreCreativeState = GameState::MainMenu; // Store state before entering creative
   int m_MenuSelection = 0; // 0: Play/Resume, 1: Options, 2: Quit/MainMenu
   bool m_InOptions = false;
 

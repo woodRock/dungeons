@@ -19,26 +19,44 @@ else()
     # Find SDL2
     find_package(SDL2 REQUIRED)
 
-    # Link directories for Homebrew on Apple Silicon
+    # Link directories for Homebrew on Apple Silicon (keep for user's local setup)
     link_directories(/opt/homebrew/lib)
     include_directories(/opt/homebrew/include)
 
     # Find SDL2 modules
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(SDL2_IMAGE REQUIRED SDL2_image)
-    pkg_check_modules(SDL2_TTF REQUIRED SDL2_ttf)
-    pkg_check_modules(SDL2_MIXER REQUIRED SDL2_mixer)
+    # Try find_package first (standard, works well with vcpkg)
+    find_package(SDL2_image QUIET)
+    find_package(SDL2_ttf QUIET)
+    find_package(SDL2_mixer QUIET)
+
+    if(NOT SDL2_image_FOUND OR NOT SDL2_ttf_FOUND OR NOT SDL2_mixer_FOUND)
+        # Fallback to PkgConfig (works well on Linux/macOS)
+        find_package(PkgConfig REQUIRED)
+        pkg_check_modules(SDL2_IMAGE REQUIRED SDL2_image)
+        pkg_check_modules(SDL2_TTF REQUIRED SDL2_ttf)
+        pkg_check_modules(SDL2_MIXER REQUIRED SDL2_mixer)
+    else()
+        # Use targets from find_package if found
+        set(SDL2_IMAGE_LIBRARIES SDL2_image::SDL2_image)
+        set(SDL2_TTF_LIBRARIES SDL2_ttf::SDL2_ttf)
+        set(SDL2_MIXER_LIBRARIES SDL2_mixer::SDL2_mixer)
+    endif()
 
     # Find OpenGL
     find_package(OpenGL REQUIRED)
 
     # Include directories
-    include_directories(src ${SDL2_IMAGE_INCLUDE_DIRS} ${SDL2_TTF_INCLUDE_DIRS} ${SDL2_MIXER_INCLUDE_DIRS} ${OPENGL_INCLUDE_DIRS} /opt/homebrew/include)
+    include_directories(src ${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS} ${SDL2_TTF_INCLUDE_DIRS} ${SDL2_MIXER_INCLUDE_DIRS} ${OPENGL_INCLUDE_DIRS})
 
     add_executable(Dungeons ${SOURCES})
 
     target_include_directories(Dungeons PRIVATE ${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS} ${SDL2_TTF_INCLUDE_DIRS} ${SDL2_MIXER_INCLUDE_DIRS} ${OPENGL_INCLUDE_DIRS})
-    target_link_libraries(Dungeons PRIVATE ${SDL2_LIBRARIES} ${SDL2_IMAGE_LIBRARIES} ${SDL2_TTF_LIBRARIES} ${SDL2_MIXER_LIBRARIES} ${OPENGL_LIBRARIES})
+    
+    if(SDL2_image_FOUND)
+        target_link_libraries(Dungeons PRIVATE SDL2::SDL2 SDL2_image::SDL2_image SDL2_ttf::SDL2_ttf SDL2_mixer::SDL2_mixer ${OPENGL_LIBRARIES})
+    else()
+        target_link_libraries(Dungeons PRIVATE ${SDL2_LIBRARIES} ${SDL2_IMAGE_LIBRARIES} ${SDL2_TTF_LIBRARIES} ${SDL2_MIXER_LIBRARIES} ${OPENGL_LIBRARIES})
+    endif()
 
     # Create a custom target to sync assets every time we build
     add_custom_target(sync_assets ALL

@@ -53,6 +53,7 @@ public:
   void SetMouseSensitivity(float sens) { m_MouseSensitivity = sens; }
   void SetYaw(float yaw) { m_CameraYaw = yaw; }
   void SetPitch(float pitch) { m_CameraPitch = pitch; }
+  void SetTarget(Entity targetEntity) { m_TargetEntity = targetEntity; }
   
   float GetYaw() const override { return m_CameraYaw; }
   float GetCameraYaw() const { return m_CameraYaw; }

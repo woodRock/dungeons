@@ -9,6 +9,9 @@
 #include "../engine/AssetManager.h"
 #include "../engine/CharacterFactory.h"
 #include "../engine/MapLoader.h"
+#include "../engine/Console.h"
+#include "../engine/StealthSpawnEditor.h"
+#include "../engine/VisualSpawnEditor.h"
 #include <memory>
 
 namespace PixelsEngine {
@@ -28,6 +31,11 @@ public:
   void RenderUI(PixelsEngine::GLRenderer *ren, PixelsEngine::TextRenderer *tr,
                 int w, int h, PixelsEngine::Entity playerEntity);
   
+  // Creative transition getters
+  bool RequestedCreative() const { return m_RequestedCreative; }
+  std::string GetRequestedMapPath() const { return m_RequestedMapPath; }
+  void ClearCreativeRequest() { m_RequestedCreative = false; }
+
   // Getters
   float GetCameraYaw() const;
 
@@ -38,6 +46,17 @@ private:
   PixelsEngine::Entity m_PlayerEntity;
   std::unique_ptr<PixelsEngine::ThirdPersonCamera> m_CameraController;
   std::unique_ptr<PixelsEngine::ThirdPersonMovementController> m_MovementController;
+  
+  // Editor & Console
+  std::unique_ptr<PixelsEngine::Console> m_Console;
+  std::unique_ptr<PixelsEngine::StealthSpawnEditor> m_SpawnEditor;
+  std::unique_ptr<PixelsEngine::VisualSpawnEditor> m_VisualSpawnEditor;
+  bool m_ConsoleWasOpen = false;
+  
+  // Creative transition
+  bool m_RequestedCreative = false;
+  std::string m_RequestedMapPath;
+  std::string m_CurrentMapPath;
 
   float m_HitmarkerTimer = 0.0f;
   float m_AttackTimer = 0.0f;

@@ -204,11 +204,19 @@ void StealthMode::Init(Camera* camera, Entity& playerEntity) {
         m_Console->AddLog("  /save - Save spawn config");
         m_Console->AddLog("  /load - Load spawn config");
         m_Console->AddLog("  /balance - Open Balance Menu");
+        m_Console->AddLog("  /creative - Edit current level map");
         m_Console->AddLog("  /help - Show this help");
+    });
+
+    m_Console->RegisterCommand("/creative", [this](const std::vector<std::string>& args) {
+        m_RequestedCreative = true;
+        m_RequestedMapPath = m_CurrentMapPath;
+        m_Console->AddLog("Switching to Creative Mode with: " + m_CurrentMapPath);
     });
 }
 
 void StealthMode::LoadLevel(const std::string& mapFile) {
+    m_CurrentMapPath = mapFile;
     m_Guards.clear();
     m_GuardStates.clear();
     m_GuardAlertLevels.clear();
@@ -254,22 +262,23 @@ void StealthMode::Update(float dt, Entity& playerEntity) {
     // Update console
     if (m_Console) {
         if (Input::IsKeyPressed(SDL_SCANCODE_GRAVE)) {
-            if (m_VisualSpawnEditor->IsActive()) {
-                m_Console->Toggle();
-                m_Console->SetInputEnabled(m_Console->IsOpen());
-                if (m_Console->IsOpen()) Input::StartTextInput(); else Input::StopTextInput();
+            m_Console->Toggle();
+            bool open = m_Console->IsOpen();
+            m_Console->SetInputEnabled(open);
+            if (open) {
+                Input::StartTextInput();
+                SDL_SetRelativeMouseMode(SDL_FALSE);
             } else {
-                m_Console->Update();
+                Input::StopTextInput();
+                SDL_SetRelativeMouseMode(SDL_TRUE);
             }
-        } else if (!m_VisualSpawnEditor->IsActive()) {
-            m_Console->Update();
-        } else if (m_Console->IsOpen()) {
+        }
+        
+        if (m_Console->IsOpen()) {
             m_Console->ProcessInput();
+            return;
         }
     }
-    if (m_SpawnEditor) m_SpawnEditor->Update();
-    
-    if (m_Console && m_Console->IsOpen()) return;
     
     if (m_VisualSpawnEditor) m_VisualSpawnEditor->Update(dt, m_Camera, m_ScreenWidth, m_ScreenHeight);
     if (m_VisualSpawnEditor && m_VisualSpawnEditor->IsActive()) return;
@@ -602,8 +611,7 @@ void StealthMode::RenderUI(GLRenderer* renderer, TextRenderer* textRenderer, int
     }
     
     textRenderer->RenderText(renderer, "Stealth Mode", 20, 20, {255, 255, 255, 255});
-    textRenderer->RenderText(renderer, "WASD: Move | Space: Jump | ESC: Back", 20, 50, {255, 255, 255, 255});
-    textRenderer->RenderText(renderer, "F: Takedown | P: Patrol Edit | /balance: Menu", 20, 65, {255, 200, 100, 255});
+    textRenderer->RenderText(renderer, "WASD: Move | Space: Jump | F: Takedown | ESC: Back", 20, 50, {255, 255, 255, 255});
     
     std::string alertText = "Alert Level: " + std::to_string((int)(m_PlayerAlertLevel * 100)) + "%" ;
     SDL_Color alertColor = {0, 255, 0, 255};

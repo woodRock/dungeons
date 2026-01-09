@@ -82,7 +82,8 @@ void BattleMode::Init(Camera *camera, Entity &playerEntity) {
   }
 
   // Load Map
-  MapLoader::LoadFromFile("assets/saves/my_dungeon.map", m_Registry,
+  m_CurrentMapPath = "assets/saves/my_dungeon.map";
+  MapLoader::LoadFromFile(m_CurrentMapPath, m_Registry,
                            m_Renderer);
 
   // Initialize Console and Editors
@@ -169,7 +170,14 @@ void BattleMode::Init(Camera *camera, Entity &playerEntity) {
       m_Console->AddLog("  /edit - Toggle Visual Spawn Editor");
       m_Console->AddLog("  /save - Save spawn config");
       m_Console->AddLog("  /load - Load spawn config");
+      m_Console->AddLog("  /creative - Edit current level map");
       m_Console->AddLog("  /help - Show this help");
+  });
+
+  m_Console->RegisterCommand("/creative", [this](const std::vector<std::string>& args) {
+      m_RequestedCreative = true;
+      m_RequestedMapPath = m_CurrentMapPath;
+      m_Console->AddLog("Switching to Creative Mode with: " + m_CurrentMapPath);
   });
 
   // 4. Setup Camera
@@ -364,23 +372,24 @@ void BattleMode::Update(float dt, Entity playerEntity) {
   // Update Console
   if (m_Console) {
       if (Input::IsKeyPressed(SDL_SCANCODE_GRAVE)) {
-          if (m_VisualSpawnEditor && m_VisualSpawnEditor->IsActive()) {
-              m_Console->Toggle();
-              m_Console->SetInputEnabled(m_Console->IsOpen());
-              if (m_Console->IsOpen()) Input::StartTextInput(); else Input::StopTextInput();
+          m_Console->Toggle();
+          bool open = m_Console->IsOpen();
+          m_Console->SetInputEnabled(open);
+          if (open) {
+              Input::StartTextInput();
+              SDL_SetRelativeMouseMode(SDL_FALSE);
           } else {
-              m_Console->Update();
+              Input::StopTextInput();
+              // Battle mode usually doesn't use relative mouse mode, but let's be safe
+              SDL_SetRelativeMouseMode(SDL_FALSE);
           }
-      } else if (m_VisualSpawnEditor && !m_VisualSpawnEditor->IsActive()) {
-          m_Console->Update();
-      } else if (m_Console->IsOpen()) {
+      }
+      
+      if (m_Console->IsOpen()) {
           m_Console->ProcessInput();
+          return;
       }
   }
-  
-  if (m_SpawnEditor) m_SpawnEditor->Update();
-  
-  if (m_Console && m_Console->IsOpen()) return;
   
   if (m_VisualSpawnEditor) {
       // Need screen width/height for editor raycast logic

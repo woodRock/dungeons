@@ -5,6 +5,7 @@
 #include "../engine/MapLoader.h"
 #include "../engine/InputController.h"
 #include "../engine/Skybox.h"
+#include "../engine/Console.h"
 #include <SDL2/SDL.h>
 #include <memory>
 #include <string>
@@ -25,6 +26,11 @@ public:
     bool IsActive() const { return m_Active; }
     void SetActive(bool active) { m_Active = active; }
     Entity GetPlayerEntity() const { return m_PlayerEntity; }
+    
+    // Creative transition getters
+    bool RequestedCreative() const { return m_RequestedCreative; }
+    std::string GetRequestedMapPath() const { return m_RequestedMapPath; }
+    void ClearCreativeRequest() { m_RequestedCreative = false; }
 
 private:
     void LoadLevel(const std::string& mapFile);
@@ -35,6 +41,13 @@ private:
     Entity m_PlayerEntity = PixelsEngine::INVALID_ENTITY;
     std::unique_ptr<TopDownMovementController> m_MovementController;
     std::unique_ptr<Skybox> m_Skybox;
+    std::unique_ptr<Console> m_Console;
+    
+    // Creative transition
+    bool m_RequestedCreative = false;
+    std::string m_RequestedMapPath;
+    std::string m_CurrentMapPath;
+
     int m_AnimIdle = -1;
     int m_AnimRun = -1;
     int m_AnimJump = -1;

@@ -28,6 +28,11 @@ public:
   void RenderUI(PixelsEngine::GLRenderer *renderer,
                 PixelsEngine::TextRenderer *textRenderer, int w, int h);
 
+  // Creative transition getters
+  bool RequestedCreative() const { return m_RequestedCreative; }
+  std::string GetRequestedMapPath() const { return m_RequestedMapPath; }
+  void ClearCreativeRequest() { m_RequestedCreative = false; }
+
 private:
   PixelsEngine::Registry *m_Registry;
   PixelsEngine::GLRenderer *m_Renderer;
@@ -38,6 +43,11 @@ private:
   std::unique_ptr<PixelsEngine::StealthSpawnEditor> m_SpawnEditor;
   std::unique_ptr<PixelsEngine::VisualSpawnEditor> m_VisualSpawnEditor;
   bool m_ConsoleWasOpen = false;
+  
+  // Creative transition
+  bool m_RequestedCreative = false;
+  std::string m_RequestedMapPath;
+  std::string m_CurrentMapPath;
 
   enum State {
     Setup,

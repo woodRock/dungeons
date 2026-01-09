@@ -12,7 +12,7 @@ namespace PixelsEngine {
 
 VisualSpawnEditor::VisualSpawnEditor(Registry* registry, GLRenderer* renderer)
     : m_Registry(registry), m_Renderer(renderer) {
-    m_CurrentSubtype = "skel_warrior"; // Default
+    m_CurrentSubtype = "Skeleton_Warrior"; // Default
 }
 
 VisualSpawnEditor::~VisualSpawnEditor() {
@@ -119,7 +119,7 @@ void VisualSpawnEditor::CreateSpawnEntities() {
         std::string subtype = loc.subtype;
         
         if (loc.type == SpawnType::Enemy) {
-            if (subtype.empty()) subtype = "skel_warrior";
+            if (subtype.empty()) subtype = "Skeleton_Warrior";
             e = CharacterFactory::CreateSkeleton(m_Registry, m_Renderer, 
                                                  subtype, loc.x, loc.y, 0.5f);
         } else if (loc.type == SpawnType::Player) {
@@ -237,7 +237,13 @@ void VisualSpawnEditor::UpdatePreviewSkeleton(Camera* camera, int screenWidth, i
     // Get mouse world position (not screen center - use actual mouse position)
     float worldX, worldY;
     int mouseX, mouseY;
-    Input::GetMousePosition(mouseX, mouseY);
+    
+    if (SDL_GetRelativeMouseMode()) {
+        mouseX = screenWidth / 2;
+        mouseY = screenHeight / 2;
+    } else {
+        Input::GetMousePosition(mouseX, mouseY);
+    }
     
     if (!RaycastToGround(camera, mouseX, mouseY, screenWidth, screenHeight, worldX, worldY)) {
         return;
@@ -250,7 +256,7 @@ void VisualSpawnEditor::UpdatePreviewSkeleton(Camera* camera, int screenWidth, i
     if (m_PreviewSkeleton == INVALID_ENTITY) {
         std::string subtype = m_CurrentSubtype;
         if (subtype.empty()) {
-            subtype = (m_CurrentSpawnType == SpawnType::Player) ? "Knight" : "skel_warrior";
+            subtype = (m_CurrentSpawnType == SpawnType::Player) ? "Knight" : "Skeleton_Warrior";
         }
         
         if (m_CurrentSpawnType == SpawnType::Objective) {
@@ -300,7 +306,13 @@ void VisualSpawnEditor::HandleMouseInput(Camera* camera, int screenWidth, int sc
     
     // Get current mouse position for click-based actions
     int currMouseX, currMouseY;
-    Input::GetMousePosition(currMouseX, currMouseY);
+    if (SDL_GetRelativeMouseMode()) {
+        currMouseX = screenWidth / 2;
+        currMouseY = screenHeight / 2;
+    } else {
+        Input::GetMousePosition(currMouseX, currMouseY);
+    }
+    
     Uint32 buttonState = SDL_GetMouseState(nullptr, nullptr);
     
     // Check if clicking on a spawn point (left click)
@@ -383,7 +395,7 @@ void VisualSpawnEditor::HandleMouseInput(Camera* camera, int screenWidth, int sc
 
 std::vector<std::string> GetSubtypesFor(SpawnType type) {
     if (type == SpawnType::Player) return {"Knight", "Ranger", "Mage", "Rogue"};
-    if (type == SpawnType::Enemy) return {"skel_warrior", "Skeleton_Mage", "Skeleton_Minion"};
+    if (type == SpawnType::Enemy) return {"Skeleton_Warrior", "Skeleton_Mage", "Skeleton_Minion", "Skeleton_Rogue"};
     return {""};
 }
 
@@ -441,7 +453,7 @@ void VisualSpawnEditor::HandleKeyboardInput(float dt) {
     // Type switching
     if (keyState[SDL_SCANCODE_1]) { 
         m_CurrentSpawnType = SpawnType::Enemy;
-        m_CurrentSubtype = "skel_warrior";
+        m_CurrentSubtype = "Skeleton_Warrior";
     }
     if (keyState[SDL_SCANCODE_2]) {
         m_CurrentSpawnType = SpawnType::Player;

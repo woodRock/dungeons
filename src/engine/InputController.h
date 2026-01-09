@@ -65,6 +65,7 @@ public:
   void SetFriction(float friction) { m_Friction = friction; }
   void SetMaxSpeed(float maxSpeed) { m_MaxSpeed = maxSpeed; }
   void SetJumpForce(float force) { m_JumpForce = force; }
+  void SetTarget(Entity playerEntity) { m_PlayerEntity = playerEntity; }
 
 private:
   Registry* m_Registry;

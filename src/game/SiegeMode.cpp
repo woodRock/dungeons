@@ -35,10 +35,10 @@ void SiegeMode::Init(Camera *camera, Entity &playerEntity) {
   assetManager->LoadCharacter("Knight",
                                "assets/adventurers/Characters/gltf/Knight.glb",
                                "assets/adventurers/Textures/knight_texture.png");
-  assetManager->LoadCharacter("skel_minion",
+  assetManager->LoadCharacter("Skeleton_Minion",
                                "assets/skeletons/characters/gltf/Skeleton_Minion.glb",
                                "assets/skeletons/texture/skeleton_texture.png");
-  assetManager->LoadCharacter("skel_warrior",
+  assetManager->LoadCharacter("Skeleton_Warrior",
                                "assets/skeletons/characters/gltf/Skeleton_Warrior.glb",
                                "assets/skeletons/texture/skeleton_texture.png");
 
@@ -66,20 +66,56 @@ void SiegeMode::Init(Camera *camera, Entity &playerEntity) {
   }
   
   if (skelAnimMesh) {
-    RenderMesh* skelWarriorMesh = m_Renderer->GetRenderMesh("skel_warrior");
-    RenderMesh* skelMinionMesh = m_Renderer->GetRenderMesh("skel_minion");
+    RenderMesh* skelWarriorMesh = m_Renderer->GetRenderMesh("Skeleton_Warrior");
+    RenderMesh* skelMinionMesh = m_Renderer->GetRenderMesh("Skeleton_Minion");
     
     if (skelWarriorMesh) skelWarriorMesh->animations = skelAnimMesh->animations;
     if (skelMinionMesh) skelMinionMesh->animations = skelAnimMesh->animations;
   }
 
   // 3. Load Map
-  MapLoader::LoadFromFile("assets/saves/my_dungeon.map", m_Registry,
+  m_CurrentMapPath = "assets/saves/my_dungeon.map";
+  MapLoader::LoadFromFile(m_CurrentMapPath, m_Registry,
                            m_Renderer);
 
-  // 4. Spawn Player
-  playerEntity =
-      CharacterFactory::CreatePlayer(m_Registry, m_Renderer, 12.0f, 0.0f, 0.0f);
+  // Initialize Console and Editors
+  m_Console = std::make_unique<Console>();
+  m_SpawnEditor = std::make_unique<StealthSpawnEditor>();
+  m_VisualSpawnEditor = std::make_unique<VisualSpawnEditor>(m_Registry, m_Renderer);
+  
+  // Load siege spawns
+  m_SpawnEditor->LoadFromFile("assets/saves/siege_spawn_config.txt");
+  
+  // Find spawns from config
+  auto spawnLocations = m_SpawnEditor->GetSpawnLocations();
+  float playerX = 12.0f, playerY = 0.0f, playerRot = -M_PI/2;
+  bool playerSpawnSet = false;
+
+  if (spawnLocations.empty()) {
+      // Seed defaults if empty
+      m_SpawnEditor->AddSpawn(12.0f, 0.0f, -M_PI/2, SpawnType::Player, "Knight");
+      m_SpawnEditor->AddSpawn(12.0f, 10.0f, 0.0f, SpawnType::Enemy, "Skeleton_Minion");
+      m_SpawnEditor->AddSpawn(15.0f, 12.0f, 0.0f, SpawnType::Enemy, "Skeleton_Warrior");
+      m_SpawnEditor->AddSpawn(8.0f, 15.0f, 0.0f, SpawnType::Enemy, "Skeleton_Minion");
+      spawnLocations = m_SpawnEditor->GetSpawnLocations();
+  }
+
+  // 4. Spawn Entities from Config
+  for (const auto& loc : spawnLocations) {
+      if (loc.type == SpawnType::Player && !playerSpawnSet) {
+          playerX = loc.x; playerY = loc.y; playerRot = loc.rotation;
+          playerSpawnSet = true;
+      } else if (loc.type == SpawnType::Enemy) {
+          std::string mesh = loc.subtype;
+          if (mesh.empty()) mesh = "Skeleton_Minion";
+          SpawnEnemy(mesh, loc.x, loc.y, (mesh == "Skeleton_Warrior") ? CharacterComponent::SkeletonWarrior : CharacterComponent::SkeletonMinion);
+      }
+  }
+
+  // Spawn Player
+  playerEntity = CharacterFactory::CreatePlayer(m_Registry, m_Renderer, playerX, playerY, 0.0f);
+  auto* pt = m_Registry->GetComponent<Transform3DComponent>(playerEntity);
+  if (pt) pt->rot = playerRot;
 
   // 5. Create camera controller AFTER spawning the player
   m_CameraController = std::make_unique<ThirdPersonCamera>(
@@ -87,15 +123,104 @@ void SiegeMode::Init(Camera *camera, Entity &playerEntity) {
   m_CameraController->SetDistance(3.0f);      // Distance behind player
   m_CameraController->SetShoulder(0.0f);     // Center behind, not on shoulder
   m_CameraController->SetHeight(1.6f);       // Eye level height
-  m_CameraController->SetYaw(-M_PI / 2);  // Rotate 180 degrees to look from behind
+  m_CameraController->SetYaw(playerRot);
+  
   // Create movement controller for player input handling
   m_MovementController = std::make_unique<ThirdPersonMovementController>(
       m_Registry, playerEntity);
 
-  // 5. Spawn Initial Enemies
-  SpawnEnemy("skel_minion", 12.0f, 10.0f, CharacterComponent::SkeletonMinion);
-  SpawnEnemy("skel_warrior", 15.0f, 12.0f, CharacterComponent::SkeletonWarrior);
-  SpawnEnemy("skel_minion", 8.0f, 15.0f, CharacterComponent::SkeletonMinion);
+  // Sync Visual Editor
+  m_VisualSpawnEditor->SetSpawnLocations(m_SpawnEditor->GetSpawnLocations());
+
+  // Register Console Commands
+  m_Console->RegisterCommand("/edit", [this, &playerEntity](const std::vector<std::string>& args) {
+      bool wasActive = m_VisualSpawnEditor->IsActive();
+      
+      if (!wasActive) {
+          // ENTERING EDIT MODE
+          m_ConsoleWasOpen = m_Console->IsOpen();
+          m_Console->Close();
+          m_Console->SetInputEnabled(false);
+          SDL_SetRelativeMouseMode(SDL_TRUE);
+          
+          // Clear current game entities
+          auto guards = m_Registry->View<EnemyComponent>();
+          std::vector<Entity> toDestroy;
+          for (auto& pair : guards) toDestroy.push_back(pair.first);
+          for (Entity e : toDestroy) m_Registry->DestroyEntity(e);
+          
+          if (playerEntity != INVALID_ENTITY) {
+              m_Registry->DestroyEntity(playerEntity);
+              playerEntity = INVALID_ENTITY;
+          }
+
+          // Activate editor (creates its own visual-only entities)
+          m_VisualSpawnEditor->Activate(true);
+      } else {
+          // EXITING EDIT MODE
+          m_VisualSpawnEditor->Activate(false);
+          
+          m_Console->SetInputEnabled(true);
+          SDL_SetRelativeMouseMode(SDL_FALSE);
+          if (m_ConsoleWasOpen) m_Console->Open();
+          
+          // Save and re-spawn real game entities from updated config
+          auto locs = m_VisualSpawnEditor->GetSpawnLocations();
+          m_SpawnEditor->SetSpawnLocations(locs);
+          m_SpawnEditor->SaveToFile("assets/saves/siege_spawn_config.txt");
+          
+          float pX = 12.0f, pY = 0.0f, pRot = -M_PI/2;
+          bool pSet = false;
+          for (const auto& loc : locs) {
+              if (loc.type == SpawnType::Player && !pSet) {
+                  pX = loc.x; pY = loc.y; pRot = loc.rotation;
+                  pSet = true;
+              } else if (loc.type == SpawnType::Enemy) {
+                  std::string mesh = loc.subtype;
+                  if (mesh.empty()) mesh = "Skeleton_Warrior";
+                  SpawnEnemy(mesh, loc.x, loc.y, (mesh == "Skeleton_Warrior") ? CharacterComponent::SkeletonWarrior : CharacterComponent::SkeletonMinion);
+              }
+          }
+          playerEntity = CharacterFactory::CreatePlayer(m_Registry, m_Renderer, pX, pY, 0.0f);
+          auto* pt = m_Registry->GetComponent<Transform3DComponent>(playerEntity);
+          if (pt) pt->rot = pRot;
+          
+          // Re-attach camera and movement
+          m_CameraController->SetTarget(playerEntity);
+          m_MovementController->SetTarget(playerEntity);
+          m_PlayerEntity = playerEntity;
+      }
+  });
+  
+  m_Console->RegisterCommand("/save", [this](const std::vector<std::string>& args) {
+      if (m_VisualSpawnEditor->IsActive()) {
+          auto locs = m_VisualSpawnEditor->GetSpawnLocations();
+          m_SpawnEditor->SetSpawnLocations(locs);
+      }
+      m_SpawnEditor->SaveToFile("assets/saves/siege_spawn_config.txt");
+      m_Console->AddLog("Saved siege config.");
+  });
+  
+  m_Console->RegisterCommand("/load", [this](const std::vector<std::string>& args) {
+      m_SpawnEditor->LoadFromFile("assets/saves/siege_spawn_config.txt");
+      m_VisualSpawnEditor->SetSpawnLocations(m_SpawnEditor->GetSpawnLocations());
+      m_Console->AddLog("Loaded siege config (restart to apply).");
+  });
+  
+  m_Console->RegisterCommand("/help", [this](const std::vector<std::string>& args) {
+      m_Console->AddLog("Available commands:");
+      m_Console->AddLog("  /edit - Toggle Visual Spawn Editor");
+      m_Console->AddLog("  /save - Save spawn config");
+      m_Console->AddLog("  /load - Load spawn config");
+      m_Console->AddLog("  /creative - Edit current level map");
+      m_Console->AddLog("  /help - Show this help");
+  });
+
+  m_Console->RegisterCommand("/creative", [this](const std::vector<std::string>& args) {
+      m_RequestedCreative = true;
+      m_RequestedMapPath = m_CurrentMapPath;
+      m_Console->AddLog("Switching to Creative Mode with: " + m_CurrentMapPath);
+  });
 }
 
 void SiegeMode::SpawnEnemy(const std::string &mesh, float x, float y,
@@ -113,9 +238,9 @@ void SiegeMode::SpawnEnemy(const std::string &mesh, float x, float y,
     attach.rotY = 18.148f;
     attach.rotZ = 1.702f;
     
-    if (mesh == "skel_warrior") {
+    if (mesh == "Skeleton_Warrior") {
       attach.meshName = "Sword";
-    } else if (mesh == "skel_minion") {
+    } else if (mesh == "Skeleton_Minion") {
       attach.meshName = "Dagger";
     }
     
@@ -125,6 +250,34 @@ void SiegeMode::SpawnEnemy(const std::string &mesh, float x, float y,
 
 void SiegeMode::Update(float dt, Entity playerEntity, float tunerDist,
                        float tunerShoulder, float tunerHeight) {
+  // Update Console
+  if (m_Console) {
+      if (Input::IsKeyPressed(SDL_SCANCODE_GRAVE)) {
+          m_Console->Toggle();
+          bool open = m_Console->IsOpen();
+          m_Console->SetInputEnabled(open);
+          if (open) {
+              Input::StartTextInput();
+              SDL_SetRelativeMouseMode(SDL_FALSE);
+          } else {
+              Input::StopTextInput();
+              SDL_SetRelativeMouseMode(SDL_TRUE);
+          }
+      }
+      
+      if (m_Console->IsOpen()) {
+          m_Console->ProcessInput();
+          return;
+      }
+  }
+  
+  if (m_VisualSpawnEditor) {
+      int w = 1280, h = 720;
+      SDL_GetWindowSize(SDL_GL_GetCurrentWindow(), &w, &h);
+      m_VisualSpawnEditor->Update(dt, m_Camera, w, h);
+      if (m_VisualSpawnEditor->IsActive()) return;
+  }
+
   auto *t = m_Registry->GetComponent<Transform3DComponent>(playerEntity);
   auto *phys = m_Registry->GetComponent<PhysicsComponent>(playerEntity);
   auto *unit = m_Registry->GetComponent<BattleUnitComponent>(playerEntity);
@@ -599,6 +752,11 @@ void SiegeMode::RenderUI(PixelsEngine::GLRenderer *ren, PixelsEngine::TextRender
 
   tr->RenderText(ren, "SIEGE MODE: 1 - SWORD, 2 - CROSSBOW | WASD - MOVE | SPACE - JUMP", 20, 20,
                  {255, 255, 255, 255});
+
+  // Render Editor UI
+  if (m_Console) m_Console->Render(ren, tr, w, h);
+  if (m_SpawnEditor) m_SpawnEditor->Render(ren, tr, w, h);
+  if (m_VisualSpawnEditor) m_VisualSpawnEditor->Render(ren, tr, m_Camera, w, h);
 }
 
 float SiegeMode::GetCameraYaw() const {

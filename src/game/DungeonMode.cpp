@@ -117,6 +117,20 @@ void DungeonMode::Init(Camera* camera, Entity& playerEntity) {
     
     m_CurrentLevelIdx = 0;
     LoadLevel(m_LevelList[m_CurrentLevelIdx]);
+
+    // Initialize Console
+    m_Console = std::make_unique<Console>();
+    m_Console->RegisterCommand("/creative", [this](const std::vector<std::string>& args) {
+        m_RequestedCreative = true;
+        m_RequestedMapPath = m_CurrentMapPath;
+        m_Console->AddLog("Switching to Creative Mode with: " + m_CurrentMapPath);
+    });
+
+    m_Console->RegisterCommand("/help", [this](const std::vector<std::string>& args) {
+        m_Console->AddLog("Available commands:");
+        m_Console->AddLog("  /creative - Edit current level map");
+        m_Console->AddLog("  /help - Show this help");
+    });
     
     // Start ambient music on loop
     if (m_AmbienceMusic) {
@@ -164,6 +178,7 @@ void DungeonMode::LoadLevel(const std::string& levelName) {
     
     // Load map
     std::string path = "assets/saves/" + levelName + ".map";
+    m_CurrentMapPath = path;
     MapLoader::LoadFromFile(path, m_Registry, m_Renderer);
     
     // Find spawn point: Priority 1: player_spawn, Priority 2: stairs
@@ -317,6 +332,27 @@ void DungeonMode::LoadLevel(const std::string& levelName) {
 
 void DungeonMode::Update(float dt, Entity& playerEntity) {
     if (!m_Active) return;
+
+    // Update Console
+    if (m_Console) {
+        if (Input::IsKeyPressed(SDL_SCANCODE_GRAVE)) {
+            m_Console->Toggle();
+            bool open = m_Console->IsOpen();
+            m_Console->SetInputEnabled(open);
+            if (open) {
+                Input::StartTextInput();
+                SDL_SetRelativeMouseMode(SDL_FALSE);
+            } else {
+                Input::StopTextInput();
+                SDL_SetRelativeMouseMode(SDL_TRUE);
+            }
+        }
+        
+        if (m_Console->IsOpen()) {
+            m_Console->ProcessInput();
+            return; // Block gameplay input when console is open
+        }
+    }
 
     // Sync input parameter with current internal state (crucial for transitions)
     playerEntity = m_PlayerEntity;
@@ -721,10 +757,12 @@ void DungeonMode::NextLevel() {
 
 void DungeonMode::RenderUI(GLRenderer* ren, TextRenderer* tr, int w, int h) {
     if (m_MessageTimer > 0) {
-        tr->RenderText(ren, m_StatusMessage, w/2 - 100, 100, {255, 255, 100, 255});
+        tr->RenderTextCentered(ren, m_StatusMessage, w / 2, h - 100, {255, 255, 255, 255});
     }
-    
-    tr->RenderText(ren, "Floor: " + std::to_string(m_CurrentLevelIdx + 1), 20, h - 30, {255, 255, 255, 255});
+
+    if (m_Console) {
+        m_Console->Render(ren, tr, w, h);
+    }
 }
 
 } // namespace PixelsEngine

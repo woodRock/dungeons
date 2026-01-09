@@ -57,6 +57,11 @@ public:
     bool IsActive() const { return m_Active; }
     void SetActive(bool active) { m_Active = active; }
     Entity GetPlayerEntity() const { return m_PlayerEntity; }
+    
+    // Creative transition getters
+    bool RequestedCreative() const { return m_RequestedCreative; }
+    std::string GetRequestedMapPath() const { return m_RequestedMapPath; }
+    void ClearCreativeRequest() { m_RequestedCreative = false; }
 
 private:
     void LoadLevel(const std::string& mapFile);
@@ -93,6 +98,11 @@ private:
     
     // Console state tracking
     bool m_ConsoleWasOpen = false;
+    
+    // Creative transition
+    bool m_RequestedCreative = false;
+    std::string m_RequestedMapPath;
+    std::string m_CurrentMapPath;
     
     // Stealth mode data
     std::vector<Entity> m_Guards;

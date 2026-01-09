@@ -38,6 +38,24 @@ void DungeonsGame::OnUpdate(float deltaTime) {
   case GameState::Creative: {
     HandleInputCreative(deltaTime);
     m_CreativeMode.Update(deltaTime, m_PlayerEntity);
+    if (m_CreativeMode.RequestedExit()) {
+        m_CreativeMode.ClearExitRequest();
+        m_State = m_PreCreativeState;
+        SDL_SetRelativeMouseMode(SDL_TRUE);
+        
+        // Reload the current level for the state we are returning to
+        if (m_State == GameState::Siege && m_SiegeMode) {
+            m_SiegeMode->Init(m_Camera.get(), m_PlayerEntity);
+        } else if (m_State == GameState::Battle && m_BattleMode) {
+            m_BattleMode->Init(m_Camera.get(), m_PlayerEntity);
+        } else if (m_State == GameState::Stealth && m_StealthMode) {
+            m_StealthMode->Init(m_Camera.get(), m_PlayerEntity);
+        } else if (m_State == GameState::Sidescroller && m_SidescrollerMode) {
+            m_SidescrollerMode->Init(m_Camera.get(), m_PlayerEntity);
+        } else if (m_State == GameState::Dungeon && m_DungeonMode) {
+            m_DungeonMode->Init(m_Camera.get(), m_PlayerEntity);
+        }
+    }
     if (Input::IsKeyPressed(SDL_SCANCODE_ESCAPE)) {
       m_PreviousState = m_State;
       m_State = GameState::Paused;
@@ -47,9 +65,19 @@ void DungeonsGame::OnUpdate(float deltaTime) {
     break;
   }
   case GameState::Siege: {
-    if (m_SiegeMode)
+    if (m_SiegeMode) {
       m_SiegeMode->Update(deltaTime, m_PlayerEntity, m_TunerDist,
                           m_TunerShoulder, m_TunerHeight);
+      if (m_SiegeMode->RequestedCreative()) {
+          std::string mapPath = m_SiegeMode->GetRequestedMapPath();
+          m_SiegeMode->ClearCreativeRequest();
+          m_PreCreativeState = m_State;
+          m_CreativeMode.Init(&m_Registry, &m_GLRenderer, m_Camera.get());
+          m_CreativeMode.LoadDungeon(mapPath);
+          m_CreativeMode.ToggleEditorMode();
+          m_State = GameState::Creative;
+      }
+    }
     UpdatePhysics(deltaTime);
     UpdateDoors(deltaTime);
     UpdateProjectiles(deltaTime);
@@ -65,6 +93,15 @@ void DungeonsGame::OnUpdate(float deltaTime) {
   case GameState::Dungeon: {
     if (m_DungeonMode) {
       m_DungeonMode->Update(deltaTime, m_PlayerEntity);
+      if (m_DungeonMode->RequestedCreative()) {
+          std::string mapPath = m_DungeonMode->GetRequestedMapPath();
+          m_DungeonMode->ClearCreativeRequest();
+          m_PreCreativeState = m_State;
+          m_CreativeMode.Init(&m_Registry, &m_GLRenderer, m_Camera.get());
+          m_CreativeMode.LoadDungeon(mapPath);
+          m_CreativeMode.ToggleEditorMode();
+          m_State = GameState::Creative;
+      }
       // Update dungeon stats
       m_LastDungeonStats.currentLevel = m_DungeonMode->GetCurrentLevelIdx() + 1;
       m_LastDungeonStats.totalLevels = m_DungeonMode->GetTotalLevels();
@@ -92,6 +129,15 @@ void DungeonsGame::OnUpdate(float deltaTime) {
   case GameState::Sidescroller: {
     if (m_SidescrollerMode) {
       m_SidescrollerMode->Update(deltaTime, m_PlayerEntity);
+      if (m_SidescrollerMode->RequestedCreative()) {
+          std::string mapPath = m_SidescrollerMode->GetRequestedMapPath();
+          m_SidescrollerMode->ClearCreativeRequest();
+          m_PreCreativeState = m_State;
+          m_CreativeMode.Init(&m_Registry, &m_GLRenderer, m_Camera.get());
+          m_CreativeMode.LoadDungeon(mapPath);
+          m_CreativeMode.ToggleEditorMode();
+          m_State = GameState::Creative;
+      }
       // Sync player entity back from sidescroller mode
       m_PlayerEntity = m_SidescrollerMode->GetPlayerEntity();
       UpdatePhysics(deltaTime);
@@ -110,6 +156,15 @@ void DungeonsGame::OnUpdate(float deltaTime) {
   case GameState::Stealth: {
     if (m_StealthMode) {
       m_StealthMode->Update(deltaTime, m_PlayerEntity);
+      if (m_StealthMode->RequestedCreative()) {
+          std::string mapPath = m_StealthMode->GetRequestedMapPath();
+          m_StealthMode->ClearCreativeRequest();
+          m_PreCreativeState = m_State;
+          m_CreativeMode.Init(&m_Registry, &m_GLRenderer, m_Camera.get());
+          m_CreativeMode.LoadDungeon(mapPath);
+          m_CreativeMode.ToggleEditorMode();
+          m_State = GameState::Creative;
+      }
       // Sync player entity back from stealth mode
       m_PlayerEntity = m_StealthMode->GetPlayerEntity();
       UpdatePhysics(deltaTime);
@@ -134,7 +189,18 @@ void DungeonsGame::OnUpdate(float deltaTime) {
       break;
   }
   case GameState::Battle: {
-    UpdateBattle(deltaTime);
+    if (m_BattleMode) {
+      m_BattleMode->Update(deltaTime, m_PlayerEntity);
+      if (m_BattleMode->RequestedCreative()) {
+          std::string mapPath = m_BattleMode->GetRequestedMapPath();
+          m_BattleMode->ClearCreativeRequest();
+          m_PreCreativeState = m_State;
+          m_CreativeMode.Init(&m_Registry, &m_GLRenderer, m_Camera.get());
+          m_CreativeMode.LoadDungeon(mapPath);
+          m_CreativeMode.ToggleEditorMode();
+          m_State = GameState::Creative;
+      }
+    }
     UpdatePhysics(deltaTime);
     UpdateAnimations(deltaTime);
     if (Input::IsKeyPressed(SDL_SCANCODE_ESCAPE)) {

@@ -39,6 +39,20 @@ void SidescrollerMode::Init(Camera* camera, Entity& playerEntity) {
     } else {
         std::cerr << "ERROR: Failed to create player entity" << std::endl;
     }
+
+    // Initialize Console
+    m_Console = std::make_unique<Console>();
+    m_Console->RegisterCommand("/creative", [this](const std::vector<std::string>& args) {
+        m_RequestedCreative = true;
+        m_RequestedMapPath = m_CurrentMapPath;
+        m_Console->AddLog("Switching to Creative Mode with: " + m_CurrentMapPath);
+    });
+
+    m_Console->RegisterCommand("/help", [this](const std::vector<std::string>& args) {
+        m_Console->AddLog("Available commands:");
+        m_Console->AddLog("  /creative - Edit current level map");
+        m_Console->AddLog("  /help - Show this help");
+    });
     
     playerEntity = m_PlayerEntity;
 }
@@ -55,6 +69,7 @@ static int FindAnimationIndex(RenderMesh* rm, const std::string& pattern) {
 }
 
 void SidescrollerMode::LoadLevel(const std::string& mapFile) {
+    m_CurrentMapPath = mapFile;
     // Load the map first
     int entitiesLoaded = MapLoader::LoadFromFileWithPath(
         mapFile, m_Registry, m_Renderer, "assets/dungeons/Assets/obj/");
@@ -119,6 +134,27 @@ void SidescrollerMode::LoadLevel(const std::string& mapFile) {
 void SidescrollerMode::Update(float dt, Entity& playerEntity) {
     if (!m_Active || !m_Camera)
         return;
+
+    // Update Console
+    if (m_Console) {
+        if (Input::IsKeyPressed(SDL_SCANCODE_GRAVE)) {
+            m_Console->Toggle();
+            bool open = m_Console->IsOpen();
+            m_Console->SetInputEnabled(open);
+            if (open) {
+                Input::StartTextInput();
+            } else {
+                Input::StopTextInput();
+            }
+        }
+        
+        if (m_Console->IsOpen()) {
+            m_Console->ProcessInput();
+            return; // Block gameplay input when console is open
+        }
+    }
+
+    // Toggle 2D camera rotation for debugging
 
     // Handle custom WASD input for sidescroller (rotated 90 degrees)
     // W: Left (negative X), A: Back (negative Y), S: Right (positive X), D: Forward (positive Y)
@@ -291,7 +327,11 @@ void SidescrollerMode::RenderUI(GLRenderer* renderer, TextRenderer* textRenderer
 
     // Render basic HUD for sidescroller
     textRenderer->RenderText(renderer, "Sidescroller Mode", 20, 20, {255, 255, 255, 255});
-    textRenderer->RenderText(renderer, "WASD: Move | Space: Jump | ESC: Back", 20, 50, {255, 255, 255, 255});
+    textRenderer->RenderText(renderer, "A/D: Move, SPACE: Jump, ESC: Pause", 20, 50, {200, 200, 200, 255});
+
+    if (m_Console) {
+        m_Console->Render(renderer, textRenderer, width, height);
+    }
 }
 
 } // namespace PixelsEngine

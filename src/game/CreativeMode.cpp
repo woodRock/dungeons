@@ -32,6 +32,42 @@ void CreativeMode::Init(Registry *registry, GLRenderer *renderer,
   m_MovementController = std::make_unique<FirstPersonMovementController>(
       m_Camera, nullptr);  // Physics is nullptr for camera-based movement
   
+  m_Console = std::make_unique<Console>();
+  m_Console->RegisterCommand("/save", [this](const std::vector<std::string>& args) {
+      if (args.empty()) {
+          m_Console->AddLog("Usage: /save <filename>");
+          return;
+      }
+      std::string path = "assets/saves/" + args[0];
+      if (path.find(".map") == std::string::npos) path += ".map";
+      SaveDungeon(path);
+      m_Console->AddLog("Saved map to: " + path);
+  });
+
+  m_Console->RegisterCommand("/load", [this](const std::vector<std::string>& args) {
+      if (args.empty()) {
+          m_Console->AddLog("Usage: /load <filename>");
+          return;
+      }
+      std::string path = "assets/saves/" + args[0];
+      if (path.find(".map") == std::string::npos) path += ".map";
+      LoadDungeon(path);
+      m_Console->AddLog("Loaded map from: " + path);
+  });
+
+  m_Console->RegisterCommand("/help", [this](const std::vector<std::string>& args) {
+      m_Console->AddLog("Available commands:");
+      m_Console->AddLog("  /save <name> - Save current map");
+      m_Console->AddLog("  /load <name> - Load map");
+      m_Console->AddLog("  /exit - Return to game mode");
+      m_Console->AddLog("  /help - Show this help");
+  });
+
+  m_Console->RegisterCommand("/exit", [this](const std::vector<std::string>& args) {
+      m_RequestedExit = true;
+      m_Console->AddLog("Exiting Creative Mode...");
+  });
+
   ScanAssets();
 
   // Only fill hotbar with defaults if it's empty (first init)
@@ -189,11 +225,32 @@ void CreativeMode::ToggleEditorMode() {
   }
 }
 
-ActionResult CreativeMode::Update(float dt, Entity /*playerEntity*/) {
-  if (!m_IsActive || !m_Camera)
+ActionResult CreativeMode::Update(float dt, Entity playerEntity) {
+  if (!m_IsActive)
     return ActionResult::None;
 
-  if (m_ShowInventory) {
+  // Update Console
+  if (m_Console) {
+      if (Input::IsKeyPressed(SDL_SCANCODE_GRAVE)) {
+          m_Console->Toggle();
+          bool open = m_Console->IsOpen();
+          m_Console->SetInputEnabled(open);
+          if (open) {
+              Input::StartTextInput();
+              SDL_SetRelativeMouseMode(SDL_FALSE);
+          } else {
+              Input::StopTextInput();
+              SDL_SetRelativeMouseMode(SDL_TRUE);
+          }
+      }
+      
+      if (m_Console->IsOpen()) {
+          m_Console->ProcessInput();
+          return ActionResult::None; // Block gameplay input when console is open
+      }
+  }
+
+  if (m_ShowInventory || m_ShowSaveMenu || m_ShowMapSelection) {
     // ... search logic ...
     if (Input::IsKeyPressed(SDL_SCANCODE_BACKSPACE) &&
         m_SearchQuery.length() > 0) {
@@ -828,6 +885,10 @@ void CreativeMode::RenderUI(GLRenderer *ren, TextRenderer *tr, int w, int h) {
   }
 
   DrawHotbar(ren, tr, w, h);
+
+  if (m_Console) {
+      m_Console->Render(ren, tr, w, h);
+  }
 
   if (!m_ShowInventory && !m_ShowSaveMenu && !m_ShowMapSelection) {
     // Instruction

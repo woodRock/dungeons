@@ -4,6 +4,7 @@
 #include "../engine/GLRenderer.h"
 #include "../engine/InputController.h"
 #include "../engine/Input.h"
+#include "../engine/Console.h"
 #include <SDL2/SDL.h>
 #include <memory>
 #include <string>
@@ -56,6 +57,10 @@ public:
   bool IsActive() { return m_IsActive; }
   bool IsInventoryOpen() { return m_ShowInventory || m_ShowSaveMenu || m_ShowMapSelection; }
 
+  // Exit request
+  bool RequestedExit() const { return m_RequestedExit; }
+  void ClearExitRequest() { m_RequestedExit = false; }
+
   void SaveDungeon(const std::string &filename);
   void LoadDungeon(const std::string &filename);
   void CreateInitialFloorTile();
@@ -91,11 +96,13 @@ private:
   bool m_ShowInventory = false;
   bool m_ShowSaveMenu = false;
   bool m_ShowMapSelection = false;
+  bool m_RequestedExit = false;
 
   Registry *m_Registry = nullptr;
   GLRenderer *m_Renderer = nullptr;
   Camera *m_Camera = nullptr;
   std::unique_ptr<FirstPersonMovementController> m_MovementController;
+  std::unique_ptr<Console> m_Console;
 
   std::vector<EditorAsset> m_Assets;
   std::vector<EditorAsset> m_Hotbar;

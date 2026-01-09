@@ -9,6 +9,7 @@
 #include "../engine/AssetManager.h"
 #include "../engine/CharacterFactory.h"
 #include "../engine/Skybox.h"
+#include "../engine/Console.h"
 #include <SDL2/SDL.h>
 #include <memory>
 #include <string>
@@ -32,6 +33,11 @@ public:
     void NextLevel();
     void SetMap(Map* map) { m_Map = map; }
     
+    // Creative transition getters
+    bool RequestedCreative() const { return m_RequestedCreative; }
+    std::string GetRequestedMapPath() const { return m_RequestedMapPath; }
+    void ClearCreativeRequest() { m_RequestedCreative = false; }
+
     bool IsActive() const { return m_Active; }
     void SetActive(bool active) { m_Active = active; }
     Entity GetPlayerEntity() const { return m_PlayerEntity; }
@@ -53,6 +59,7 @@ private:
     std::unique_ptr<TopDownMovementController> m_MovementController;
     std::unique_ptr<AudioManager> m_AudioManager;
     std::unique_ptr<Skybox> m_Skybox;
+    std::unique_ptr<Console> m_Console;
     
     bool m_Active = false;
     bool m_LevelComplete = false;
@@ -61,6 +68,11 @@ private:
     int m_CurrentLevelIdx = 0;
     std::vector<std::string> m_LevelList;
     
+    // Creative transition
+    bool m_RequestedCreative = false;
+    std::string m_RequestedMapPath;
+    std::string m_CurrentMapPath;
+
     std::string m_StatusMessage;
     float m_MessageTimer = 0.0f;
     
