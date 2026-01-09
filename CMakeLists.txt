@@ -24,18 +24,9 @@ else()
     find_package(SDL2 REQUIRED)
 
     # Find SDL2 modules
-    # Try find_package first (standard, works well with vcpkg)
-    find_package(SDL2_image QUIET)
-    find_package(SDL2_ttf QUIET)
-    find_package(SDL2_mixer QUIET)
-
-    if(NOT SDL2_image_FOUND OR NOT SDL2_ttf_FOUND OR NOT SDL2_mixer_FOUND)
-        # Fallback to PkgConfig (works well on Linux/macOS)
-        find_package(PkgConfig REQUIRED)
-        pkg_check_modules(SDL2_IMAGE REQUIRED SDL2_image)
-        pkg_check_modules(SDL2_TTF REQUIRED SDL2_ttf)
-        pkg_check_modules(SDL2_MIXER REQUIRED SDL2_mixer)
-    endif()
+    find_package(SDL2_image REQUIRED)
+    find_package(SDL2_ttf REQUIRED)
+    find_package(SDL2_mixer REQUIRED)
 
     # Find OpenGL
     find_package(OpenGL REQUIRED)
@@ -46,42 +37,32 @@ else()
     endif()
 
     # Include directories
-    include_directories(src ${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS} ${SDL2_TTF_INCLUDE_DIRS} ${SDL2_MIXER_INCLUDE_DIRS} ${OPENGL_INCLUDE_DIRS})
+    include_directories(src)
 
     add_executable(Dungeons ${SOURCES})
 
-    target_include_directories(Dungeons PRIVATE ${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS} ${SDL2_TTF_INCLUDE_DIRS} ${SDL2_MIXER_INCLUDE_DIRS} ${OPENGL_INCLUDE_DIRS})
+    target_include_directories(Dungeons PRIVATE ${SDL2_INCLUDE_DIRS})
     
-    # Handle SDL2 link libraries (targets vs variables)
-    if(TARGET SDL2::SDL2)
-        target_link_libraries(Dungeons PRIVATE SDL2::SDL2)
-    else()
-        target_link_libraries(Dungeons PRIVATE ${SDL2_LIBRARIES})
-    endif()
-
-    if(TARGET SDL2_image::SDL2_image)
-        target_link_libraries(Dungeons PRIVATE SDL2_image::SDL2_image)
-    else()
-        target_link_libraries(Dungeons PRIVATE ${SDL2_IMAGE_LIBRARIES})
-    endif()
-
-    if(TARGET SDL2_ttf::SDL2_ttf)
-        target_link_libraries(Dungeons PRIVATE SDL2_ttf::SDL2_ttf)
-    else()
-        target_link_libraries(Dungeons PRIVATE ${SDL2_TTF_LIBRARIES})
-    endif()
-
-    if(TARGET SDL2_mixer::SDL2_mixer)
-        target_link_libraries(Dungeons PRIVATE SDL2_mixer::SDL2_mixer)
-    else()
-        target_link_libraries(Dungeons PRIVATE ${SDL2_MIXER_LIBRARIES})
-    endif()
+    # Link SDL2 and components
+    target_link_libraries(Dungeons PRIVATE 
+        SDL2::SDL2
+        SDL2_image::SDL2_image
+        SDL2_ttf::SDL2_ttf
+        SDL2_mixer::SDL2_mixer
+    )
 
     if(WIN32)
         target_link_libraries(Dungeons PRIVATE GLEW::GLEW)
     endif()
 
     target_link_libraries(Dungeons PRIVATE ${OPENGL_LIBRARIES})
+
+    # Set Windows subsystem for GUI application
+    if(WIN32)
+        set_target_properties(Dungeons PROPERTIES
+            WIN32_EXECUTABLE ON
+        )
+    endif()
 
     # Create a custom target to sync assets every time we build
     add_custom_target(sync_assets ALL
