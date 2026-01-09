@@ -133,7 +133,8 @@ else()
     endif()
 
     if(WIN32)
-        target_link_libraries(Dungeons PRIVATE GLEW::GLEW)
+        target_include_directories(Dungeons PRIVATE ${GLEW_INCLUDE_DIRS})
+        target_link_libraries(Dungeons PRIVATE ${GLEW_LIBRARIES})
         # Link Windows system libraries
         target_link_libraries(Dungeons PRIVATE opengl32 user32 gdi32)
         # Fix CRT library conflicts - use dynamic CRT matching vcpkg static triplet
