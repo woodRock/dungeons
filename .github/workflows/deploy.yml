@@ -39,7 +39,7 @@ jobs:
       - name: Install Dependencies (macOS)
         if: matrix.os == 'macos-latest'
         run: |
-          brew install sdl2 sdl2_mixer sdl2_ttf sdl2_image pkg-config
+          brew install sdl2 sdl2_mixer sdl2_ttf sdl2_image pkg-config glew
 
       - name: Install Dependencies (Windows)
         if: matrix.os == 'windows-latest'
