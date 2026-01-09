@@ -24,12 +24,41 @@ VisualSpawnEditor::~VisualSpawnEditor() {
     m_SpawnEntities.clear();
 }
 
+void VisualSpawnEditor::Activate(bool active) {
+    m_IsActive = active;
+    if (m_IsActive) {
+        CreateSpawnEntities();
+    } else {
+        // Destroy visual entities when closing editor
+        for (Entity e : m_SpawnEntities) {
+            if (e != INVALID_ENTITY) {
+                m_Registry->DestroyEntity(e);
+            }
+        }
+        m_SpawnEntities.clear();
+        
+        // Also cleanup preview
+        if (m_PreviewSkeleton != INVALID_ENTITY) {
+            m_Registry->DestroyEntity(m_PreviewSkeleton);
+            m_PreviewSkeleton = INVALID_ENTITY;
+            m_PreviewIsTransparent = false;
+        }
+    }
+}
+
 void VisualSpawnEditor::SetSpawnLocations(const std::vector<SpawnLocation>& locations) {
     m_SpawnLocations = locations;
-    CreateSpawnEntities();
+    if (m_IsActive) {
+        CreateSpawnEntities();
+    }
 }
 
 std::vector<SpawnLocation> VisualSpawnEditor::GetSpawnLocations() const {
+    // If active, update from entities. If not, return internal state.
+    if (!m_IsActive) {
+        return m_SpawnLocations;
+    }
+    
     // Update from current entity positions
     std::vector<SpawnLocation> result;
     for (size_t i = 0; i < m_SpawnEntities.size(); ++i) {
@@ -71,6 +100,8 @@ void VisualSpawnEditor::ClearAllSpawns() {
 }
 
 void VisualSpawnEditor::CreateSpawnEntities() {
+    if (!m_IsActive) return;
+
     // Clean up old entities
     for (Entity e : m_SpawnEntities) {
         if (e != INVALID_ENTITY) {
@@ -88,6 +119,8 @@ void VisualSpawnEditor::CreateSpawnEntities() {
             if (transform) {
                 transform->rot = loc.rotation;
             }
+            // Add a tag or component to identify as Editor Entity? 
+            // For now, relies on VisualSpawnEditor managing them.
             m_SpawnEntities.push_back(e);
         }
     }
@@ -96,6 +129,8 @@ void VisualSpawnEditor::CreateSpawnEntities() {
 }
 
 void VisualSpawnEditor::UpdateSpawnEntities() {
+    if (!m_IsActive) return;
+    
     for (size_t i = 0; i < m_SpawnEntities.size(); ++i) {
         auto* transform = m_Registry->GetComponent<Transform3DComponent>(m_SpawnEntities[i]);
         if (transform) {

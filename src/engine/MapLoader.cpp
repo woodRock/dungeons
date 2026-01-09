@@ -14,8 +14,8 @@ using namespace PixelsEngine;
 void SetHitboxFromMeshName(const std::string& meshName, HitboxComponent& hitbox) {
   // Actual doors (the moving part) - only for wall_doorway_door, not wall_doorway
   if (meshName == "wall_doorway_door") {
-    hitbox.width = 1.0f;
-    hitbox.depth = 0.2f;
+    hitbox.width = 1.2f;  // Increased to prevent gap leaks
+    hitbox.depth = 0.4f;  // Thicker to ensure raycast hits
     hitbox.height = 2.2f;
     hitbox.offsetZ = 1.1f;
     hitbox.isSolid = true;

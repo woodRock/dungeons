@@ -18,7 +18,7 @@ public:
     void Render(GLRenderer* renderer, TextRenderer* textRenderer, Camera* camera, int screenWidth, int screenHeight);
     
     bool IsActive() const { return m_IsActive; }
-    void Activate(bool active = true) { m_IsActive = active; }
+    void Activate(bool active = true);
     
     // Get the spawn locations
     std::vector<SpawnLocation> GetSpawnLocations() const;

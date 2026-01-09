@@ -10,6 +10,7 @@
 #include "../engine/StealthSpawnEditor.h"
 #include "../engine/VisualSpawnEditor.h"
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_mixer.h>
 #include <memory>
 #include <string>
 #include <vector>
@@ -25,6 +26,16 @@ enum class GuardState {
     ALERT,
     ATTACKING,
     DEAD
+};
+
+struct StealthBalanceSettings {
+    float maxDetectionDistance = 15.0f;
+    float viewAngle = 90.0f;
+    float alertDecayRate = 0.5f;
+    float sneakVisibilityMultiplier = 0.2f;
+    float noiseSpeedThreshold = 4.0f;
+    float hearingDistance = 10.0f;
+    float gracePeriod = 2.0f;
 };
 
 // Hide spot component
@@ -59,6 +70,12 @@ private:
     void SpawnEnemies();
     void RenderGuardLineOfSight();
     void RenderMinimap(GLRenderer* renderer, TextRenderer* textRenderer, int screenWidth, int screenHeight);
+    
+    // Balance Menu
+    void RenderBalanceMenu(GLRenderer* renderer, TextRenderer* textRenderer, int width, int height);
+    void HandleBalanceMenuInput();
+    void SaveBalanceConfig();
+    void LoadBalanceConfig();
     
     // Collision detection helper
     bool RayHitsCollider(float startX, float startY, float endX, float endY, float& outDistance);
@@ -98,13 +115,24 @@ private:
     float m_AlertDecayRate = 0.5f;  // per second
     float m_SneakVisibilityMultiplier = 0.3f;  // Player is 70% less visible when sneaking
     
+    // Balance Settings
+    StealthBalanceSettings m_BalanceSettings;
+    bool m_BalanceMenuOpen = false;
+    
     // Mission State
     Entity m_ObjectiveEntity = PixelsEngine::INVALID_ENTITY;
     bool m_MissionComplete = false;
     
+    // Game State
+    float m_GameTime = 0.0f;
+    
+    // Audio
+    Mix_Chunk* m_SfxSwordHit = nullptr;
+    
     // Helper methods
     void SpawnObjective();
     void CheckObjectives();
+    void ResetLevel();
     void RenderObjectiveMarker(GLRenderer* renderer, TextRenderer* textRenderer, int screenWidth, int screenHeight);
 
     // Screen dimensions (cached for spawn editor)

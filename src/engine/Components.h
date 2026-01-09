@@ -20,7 +20,7 @@ struct PatrolComponent {
     std::vector<std::pair<float, float>> waypoints;
     int currentWaypointIndex = 0;
     float waitTimer = 0.0f;
-    float waitDuration = 2.0f; // Time to wait at each waypoint
+    float waitDuration = 5.0f; // Time to wait at each waypoint
     bool movingForward = true; // For ping-pong patrol (optional)
 };
 
