@@ -3,6 +3,7 @@
 #include "../engine/GLTFLoader.h"
 #include "../engine/Input.h"
 #include "../engine/TextRenderer.h"
+#include "../engine/GameOverScreen.h"
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -1025,12 +1026,30 @@ void BattleMode::ExecuteAction(Entity actor, ActionType action, Entity target,
 }
 
 void BattleMode::RenderUI(GLRenderer *ren, TextRenderer *tr, int w, int h) {
-  if (m_State == Victory) {
-    ren->DrawRect2D(0, 0, w, h, {0, 0, 0, 150});
-    tr->RenderTextCentered(ren, "VICTORY!", w / 2, h / 2 - 20,
-                           {255, 255, 255, 255});
-    tr->RenderTextCentered(ren, "All enemies defeated.", w / 2, h / 2 + 20,
-                           {200, 200, 200, 255});
+  if (m_State == Victory || m_State == Defeat) {
+    // Use unified game over screen
+    GameOverStats stats;
+    stats.title = (m_State == Victory) ? "VICTORY!" : "DEFEAT";
+    stats.titleColor = (m_State == Victory) ? SDL_Color{0, 255, 100, 255} : SDL_Color{255, 50, 50, 255};
+    stats.isVictory = (m_State == Victory);
+    
+    // Collect battle stats
+    int alliesAlive = 0;
+    int enemiesDefeated = 0;
+    auto& units = m_Registry->View<BattleUnitComponent>();
+    for (Entity unit : units) {
+      auto* battleUnit = m_Registry->GetComponent<BattleUnitComponent>(unit);
+      if (battleUnit && battleUnit->health > 0) {
+        if (battleUnit->isPlayerSide) alliesAlive++;
+        else enemiesDefeated++;
+      }
+    }
+    
+    stats.stats.push_back({"Allies Remaining", std::to_string(alliesAlive)});
+    stats.stats.push_back({"Enemies Defeated", std::to_string(enemiesDefeated)});
+    stats.stats.push_back({"Turns Taken", std::to_string(m_CurrentTurnIndex)});
+    
+    GameOverScreen::Render(ren, tr, w, h, stats);
     return;
   }
 

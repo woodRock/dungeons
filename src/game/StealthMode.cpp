@@ -5,6 +5,7 @@
 #include "../engine/CharacterFactory.h"
 #include "../engine/AssetManager.h"
 #include "../engine/UIHelper.h"
+#include "../engine/GameOverScreen.h"
 #include <cmath>
 #include <iostream>
 #include <limits>
@@ -626,35 +627,18 @@ void StealthMode::RenderUI(GLRenderer* renderer, TextRenderer* textRenderer, int
     RenderGuardLineOfSight();
     
     if (m_GameOver || m_MissionComplete) {
-        // Overlay background
-        renderer->DrawRect2D(0, 0, width, height, {0, 0, 0, 180});
+        // Use unified game over screen
+        GameOverStats stats;
+        stats.title = m_MissionComplete ? "MISSION SUCCESS" : "MISSION FAILED";
+        stats.titleColor = m_MissionComplete ? SDL_Color{0, 255, 100, 255} : SDL_Color{255, 50, 50, 255};
+        stats.isVictory = m_MissionComplete;
         
-        int centerX = width / 2;
-        int centerY = height / 2;
+        stats.stats.push_back({"Time Elapsed", std::to_string((int)m_GameTime) + "s"});
+        stats.stats.push_back({"Guards Neutralized", std::to_string(m_GuardsNeutralized)});
+        stats.stats.push_back({"Takedowns", std::to_string(m_TakedownsPerformed)});
+        stats.stats.push_back({"Status", std::string(m_MissionComplete ? "Ghost" : "Compromised")});
         
-        std::string title = m_MissionComplete ? "MISSION SUCCESS" : "MISSION FAILED";
-        SDL_Color titleColor = m_MissionComplete ? SDL_Color{0, 255, 100, 255} : SDL_Color{255, 50, 50, 255};
-        
-        textRenderer->RenderTextCentered(renderer, title, centerX, centerY - 100, titleColor);
-        
-        // Stats Panel
-        int panelW = 400;
-        int panelH = 200;
-        UIHelper::DrawPanel(renderer, centerX - panelW/2, centerY - 60, panelW, panelH, {30, 30, 40, 220});
-        
-        int statsY = centerY - 40;
-        textRenderer->RenderText(renderer, "Time Elapsed: " + std::to_string((int)m_GameTime) + "s", centerX - 180, statsY, {200, 200, 200, 255});
-        statsY += 25;
-        textRenderer->RenderText(renderer, "Guards Neutralized: " + std::to_string(m_GuardsNeutralized), centerX - 180, statsY, {200, 200, 200, 255});
-        statsY += 25;
-        textRenderer->RenderText(renderer, "Takedowns: " + std::to_string(m_TakedownsPerformed), centerX - 180, statsY, {200, 200, 200, 255});
-        statsY += 25;
-        textRenderer->RenderText(renderer, "Status: " + std::string(m_MissionComplete ? "Ghost" : "Compromised"), centerX - 180, statsY, {200, 200, 200, 255});
-        
-        // Buttons
-        int btnY = centerY + 80;
-        textRenderer->RenderTextCentered(renderer, "Press [R] to Retry", centerX, btnY, {255, 255, 255, 255});
-        textRenderer->RenderTextCentered(renderer, "Press [ESC] to Exit", centerX, btnY + 30, {200, 200, 200, 255});
+        GameOverScreen::Render(renderer, textRenderer, width, height, stats);
         
         return; // Don't render other UI elements on top
     } else {

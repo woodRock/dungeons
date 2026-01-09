@@ -30,31 +30,41 @@ else()
 
     # On Windows with vcpkg, manually add libraries if targets not found
     if(WIN32 AND NOT TARGET SDL2_mixer::SDL2_mixer)
-        # Determine lib directory based on build type
-        set(VCPKG_LIB_DIR_RELEASE "${CMAKE_FIND_ROOT_PATH}/lib")
-        set(VCPKG_LIB_DIR_DEBUG "${CMAKE_FIND_ROOT_PATH}/debug/lib")
+        # Use CMAKE_BUILD_TYPE or generator expression to pick correct lib directory
+        # For MSVC (multi-config), use the optimized/debug keyword approach
+        set(VCPKG_LIB_DIR_OPT "${CMAKE_FIND_ROOT_PATH}/lib")
+        set(VCPKG_LIB_DIR_DBG "${CMAKE_FIND_ROOT_PATH}/debug/lib")
         
-        # Use generator expressions to select the correct library path
         if(NOT SDL2_MIXER_LIBRARIES)
             set(SDL2_MIXER_LIBRARIES 
-                $<$<CONFIG:Debug>:${VCPKG_LIB_DIR_DEBUG}/SDL2_mixer.lib>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_LIB_DIR_RELEASE}/SDL2_mixer.lib>
-                $<$<CONFIG:Debug>:${VCPKG_LIB_DIR_DEBUG}/flac.lib>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_LIB_DIR_RELEASE}/flac.lib>
-                $<$<CONFIG:Debug>:${VCPKG_LIB_DIR_DEBUG}/ogg.lib>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_LIB_DIR_RELEASE}/ogg.lib>
-                $<$<CONFIG:Debug>:${VCPKG_LIB_DIR_DEBUG}/vorbis.lib>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_LIB_DIR_RELEASE}/vorbis.lib>
-                $<$<CONFIG:Debug>:${VCPKG_LIB_DIR_DEBUG}/vorbisfile.lib>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_LIB_DIR_RELEASE}/vorbisfile.lib>
+                optimized ${VCPKG_LIB_DIR_OPT}/SDL2_mixer.lib
+                debug ${VCPKG_LIB_DIR_DBG}/SDL2_mixer.lib
+                optimized ${VCPKG_LIB_DIR_OPT}/flac.lib
+                debug ${VCPKG_LIB_DIR_DBG}/flac.lib
+                optimized ${VCPKG_LIB_DIR_OPT}/ogg.lib
+                debug ${VCPKG_LIB_DIR_DBG}/ogg.lib
+                optimized ${VCPKG_LIB_DIR_OPT}/vorbis.lib
+                debug ${VCPKG_LIB_DIR_DBG}/vorbis.lib
+                optimized ${VCPKG_LIB_DIR_OPT}/vorbisfile.lib
+                debug ${VCPKG_LIB_DIR_DBG}/vorbisfile.lib
             )
         endif()
         if(NOT SDL2_IMAGE_LIBRARIES)
             set(SDL2_IMAGE_LIBRARIES 
-                $<$<CONFIG:Debug>:${VCPKG_LIB_DIR_DEBUG}/SDL2_image.lib>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_LIB_DIR_RELEASE}/SDL2_image.lib>
-                $<$<CONFIG:Debug>:${VCPKG_LIB_DIR_DEBUG}/libpng16.lib>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_LIB_DIR_RELEASE}/libpng16.lib>
-                $<$<CONFIG:Debug>:${VCPKG_LIB_DIR_DEBUG}/zlib.lib>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_LIB_DIR_RELEASE}/zlib.lib>
+                optimized ${VCPKG_LIB_DIR_OPT}/SDL2_image.lib
+                debug ${VCPKG_LIB_DIR_DBG}/SDL2_image.lib
+                optimized ${VCPKG_LIB_DIR_OPT}/libpng16.lib
+                debug ${VCPKG_LIB_DIR_DBG}/libpng16.lib
+                optimized ${VCPKG_LIB_DIR_OPT}/zlib.lib
+                debug ${VCPKG_LIB_DIR_DBG}/zlib.lib
             )
         endif()
         if(NOT SDL2_TTF_LIBRARIES)
             set(SDL2_TTF_LIBRARIES 
-                $<$<CONFIG:Debug>:${VCPKG_LIB_DIR_DEBUG}/SDL2_ttf.lib>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_LIB_DIR_RELEASE}/SDL2_ttf.lib>
-                $<$<CONFIG:Debug>:${VCPKG_LIB_DIR_DEBUG}/freetype.lib>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_LIB_DIR_RELEASE}/freetype.lib>
+                optimized ${VCPKG_LIB_DIR_OPT}/SDL2_ttf.lib
+                debug ${VCPKG_LIB_DIR_DBG}/SDL2_ttf.lib
+                optimized ${VCPKG_LIB_DIR_OPT}/freetype.lib
+                debug ${VCPKG_LIB_DIR_DBG}/freetype.lib
             )
         endif()
     elseif(NOT WIN32 AND (NOT TARGET SDL2_mixer::SDL2_mixer OR NOT TARGET SDL2_image::SDL2_image OR NOT TARGET SDL2_ttf::SDL2_ttf))

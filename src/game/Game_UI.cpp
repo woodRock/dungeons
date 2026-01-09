@@ -1,4 +1,5 @@
 #include "../engine/Components.h"
+#include "../engine/GameOverScreen.h"
 #include "DungeonsGame.h"
 #include <SDL2/SDL.h>
 
@@ -326,43 +327,19 @@ void DungeonsGame::RenderGameOver() {
   int w = m_Width;
   int h = m_Height;
 
-  // Background
-  m_GLRenderer.DrawRect2D(0, 0, w, h, {30, 30, 50, 255});
-
-  // Title
-  m_TextRenderer->RenderTextCentered(&m_GLRenderer, "GAME OVER", w / 2, 60,
-                                     {255, 100, 100, 255});
-
-  // Stats
-  int startY = 180;
-  int gap = 50;
+  // Use unified game over screen
+  GameOverStats stats;
+  stats.title = "GAME OVER";
+  stats.titleColor = {255, 100, 100, 255};
+  stats.isVictory = false;  // Dungeon mode typically doesn't have victory
   
   // Cap display at total levels
   int displayLevel = std::min(m_LastDungeonStats.currentLevel, m_LastDungeonStats.totalLevels);
-  std::string statsText = "Level: " + std::to_string(displayLevel) + 
-                          "/" + std::to_string(m_LastDungeonStats.totalLevels);
-  m_TextRenderer->RenderTextCentered(&m_GLRenderer, statsText, w / 2, startY,
-                                     {200, 200, 200, 255});
-
-  statsText = "Enemies Defeated: " + std::to_string(m_LastDungeonStats.enemiesKilled);
-  m_TextRenderer->RenderTextCentered(&m_GLRenderer, statsText, w / 2, startY + gap,
-                                     {200, 200, 200, 255});
-
-  statsText = "Time Survived: " + std::to_string((int)m_LastDungeonStats.timeElapsed) + "s";
-  m_TextRenderer->RenderTextCentered(&m_GLRenderer, statsText, w / 2, startY + gap * 2,
-                                     {200, 200, 200, 255});
-
-  // Buttons
-  int btnW = 200;
-  int btnH = 50;
-  int btnGap = 80;
-  int btnStartX = w / 2 - btnW / 2;
-  int btnStartY = startY + gap * 4;
-
-  DrawButton(btnStartX - btnW - 20, btnStartY, btnW, btnH, "RETRY",
-             m_MenuSelection == 0);
-  DrawButton(btnStartX + btnW + 20, btnStartY, btnW, btnH, "MAIN MENU",
-             m_MenuSelection == 1);
+  stats.stats.push_back({"Level", std::to_string(displayLevel) + "/" + std::to_string(m_LastDungeonStats.totalLevels)});
+  stats.stats.push_back({"Enemies Defeated", std::to_string(m_LastDungeonStats.enemiesKilled)});
+  stats.stats.push_back({"Time Survived", std::to_string((int)m_LastDungeonStats.timeElapsed) + "s"});
+  
+  GameOverScreen::Render(&m_GLRenderer, m_TextRenderer.get(), w, h, stats);
 }
 
 void DungeonsGame::RenderCharacterSelect() {
