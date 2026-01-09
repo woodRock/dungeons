@@ -101,11 +101,11 @@ else()
     endif()
 
     # Include directories
-    include_directories(src ${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS} ${SDL2_TTF_INCLUDE_DIRS} ${SDL2_MIXER_INCLUDE_DIRS} ${OPENGL_INCLUDE_DIRS})
+    include_directories(src ${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS} ${SDL2_TTF_INCLUDE_DIRS} ${SDL2_MIXER_INCLUDE_DIRS} ${OPENGL_INCLUDE_DIRS} ${GLEW_INCLUDE_DIRS})
 
     add_executable(Dungeons ${SOURCES})
 
-    target_include_directories(Dungeons PRIVATE ${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS} ${SDL2_TTF_INCLUDE_DIRS} ${SDL2_MIXER_INCLUDE_DIRS} ${OPENGL_INCLUDE_DIRS})
+    target_include_directories(Dungeons PRIVATE ${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS} ${SDL2_TTF_INCLUDE_DIRS} ${SDL2_MIXER_INCLUDE_DIRS} ${OPENGL_INCLUDE_DIRS} ${GLEW_INCLUDE_DIRS})
     
     # Handle SDL2 link libraries - prefer targets, fallback to variables
     if(TARGET SDL2::SDL2)
@@ -133,7 +133,6 @@ else()
     endif()
 
     if(WIN32)
-        target_include_directories(Dungeons PRIVATE ${GLEW_INCLUDE_DIRS})
         target_link_libraries(Dungeons PRIVATE ${GLEW_LIBRARIES})
         # Link Windows system libraries
         target_link_libraries(Dungeons PRIVATE opengl32 user32 gdi32)
