@@ -82,7 +82,21 @@ else()
         set(GLEW_INCLUDE_DIRS "${CMAKE_FIND_ROOT_PATH}/include")
         set(GLEW_LIBRARIES "${CMAKE_FIND_ROOT_PATH}/lib/glew32s.lib")
     else()
-        find_package(GLEW REQUIRED)
+        # Unix: Try find_package first, fallback to PkgConfig
+        find_package(GLEW QUIET)
+        if(NOT GLEW_FOUND)
+            find_package(PkgConfig QUIET)
+            if(PkgConfig_FOUND)
+                pkg_check_modules(GLEW QUIET glew)
+            endif()
+        endif()
+        
+        if(NOT GLEW_FOUND)
+            # If still not found, assume macOS Homebrew installation
+            set(GLEW_INCLUDE_DIRS "/opt/homebrew/include")
+            set(GLEW_LIBRARIES "/opt/homebrew/lib/libGLEW.dylib")
+        endif()
+        
         include_directories(${GLEW_INCLUDE_DIRS})
     endif()
 
