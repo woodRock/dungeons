@@ -647,7 +647,37 @@ void DungeonMode::Update(float dt, Entity& playerEntity) {
         }
     }
 
+    // 8. Clean up enemies that fell off the map
+    std::vector<PixelsEngine::Entity> enemiesToKill;
+    auto& allEnemies = m_Registry->View<EnemyComponent>();
+    for (auto& pair : allEnemies) {
+        auto* et = m_Registry->GetComponent<Transform3DComponent>(pair.first);
+        auto* eu = m_Registry->GetComponent<BattleUnitComponent>(pair.first);
+        if (et && eu && et->z < FALL_DEATH_THRESHOLD) {
+            std::cout << "DEBUG: Enemy fell off map at Z=" << et->z << ", marking for destruction!" << std::endl;
+            eu->hp = 0;  // Mark as dead immediately
+            enemiesToKill.push_back(pair.first);  // Queue for destruction
+        }
+    }
+    
+    // Mark enemies to be destroyed but DON'T destroy them yet - defer to end of function
+    for (auto enemy : enemiesToKill) {
+        // Remove physics so they stop falling
+        if (m_Registry->GetComponent<PhysicsComponent>(enemy)) {
+            m_Registry->RemoveComponent<PhysicsComponent>(enemy);
+        }
+        // Remove from any AI/combat processing by setting a flag or removing components
+        if (m_Registry->GetComponent<EnemyComponent>(enemy)) {
+            m_Registry->RemoveComponent<EnemyComponent>(enemy);
+        }
+    }
+
     CheckLevelCompletion();
+    
+    // Now actually destroy them after all processing
+    for (auto enemy : enemiesToKill) {
+        m_Registry->DestroyEntity(enemy);
+    }
 
     // Check for exit interaction
     if (m_DoorUnlocked && t) {
