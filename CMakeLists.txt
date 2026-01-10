@@ -60,8 +60,8 @@ else()
         set(GLEW_LIBRARIES "/opt/homebrew/lib/libGLEW.dylib")
     endif()
     
-    if(NOT GLEW_FOUND AND WIN32)
-        # Windows vcpkg fallback - search in vcpkg paths
+    if(NOT GLEW_FOUND AND WIN32 AND CMAKE_FIND_ROOT_PATH)
+        # Windows vcpkg fallback - only if CMAKE_FIND_ROOT_PATH is set (vcpkg toolchain)
         find_library(GLEW_LIB NAMES glew PATHS ${CMAKE_FIND_ROOT_PATH}/lib NO_DEFAULT_PATH)
         if(GLEW_LIB)
             set(GLEW_LIBRARIES ${GLEW_LIB})
