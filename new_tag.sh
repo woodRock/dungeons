@@ -1,6 +1,7 @@
 #!/bin/bash
 
-TAG="v0.0.2"
+# Version
+TAG="v0.0.5"
 
 git add -A
 git commit -m "Fix (${1})"

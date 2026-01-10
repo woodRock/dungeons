@@ -60,6 +60,12 @@ else()
         set(GLEW_LIBRARIES "/opt/homebrew/lib/libGLEW.dylib")
     endif()
     
+    if(NOT GLEW_FOUND AND WIN32)
+        # Windows vcpkg fallback
+        set(GLEW_INCLUDE_DIRS "${CMAKE_FIND_ROOT_PATH}/include")
+        set(GLEW_LIBRARIES "${CMAKE_FIND_ROOT_PATH}/lib/glew.lib")
+    endif()
+    
     if(GLEW_FOUND OR GLEW_INCLUDE_DIRS)
         include_directories(${GLEW_INCLUDE_DIRS})
     endif()
@@ -116,7 +122,7 @@ else()
     endif()
 
     if(WIN32)
-        target_link_libraries(Dungeons PRIVATE opengl32 user32 gdi32)
+        target_link_libraries(Dungeons PRIVATE opengl32 user32 gdi32 glew32)
         # Add vcpkg lib directory as hint for SDL2 extensions
         link_directories(${CMAKE_FIND_ROOT_PATH}/lib)
         # Fix CRT library conflicts - use dynamic CRT matching vcpkg static triplet
@@ -128,6 +134,9 @@ else()
         target_link_libraries(Dungeons PRIVATE GLEW::GLEW)
     elseif(GLEW_LIBRARIES)
         target_link_libraries(Dungeons PRIVATE ${GLEW_LIBRARIES})
+        if(GLEW_INCLUDE_DIRS)
+            target_include_directories(Dungeons PRIVATE ${GLEW_INCLUDE_DIRS})
+        endif()
     endif()
 
     target_link_libraries(Dungeons PRIVATE ${OPENGL_LIBRARIES})
