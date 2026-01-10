@@ -61,9 +61,9 @@ else()
     endif()
     
     if(NOT GLEW_FOUND AND WIN32)
-        # Windows vcpkg fallback
+        # Windows vcpkg fallback - vcpkg uses "glew" not "glew32"
         set(GLEW_INCLUDE_DIRS "${CMAKE_FIND_ROOT_PATH}/include")
-        set(GLEW_LIBRARIES "${CMAKE_FIND_ROOT_PATH}/lib/glew.lib")
+        set(GLEW_LIBRARIES "glew")
     endif()
     
     if(GLEW_FOUND OR GLEW_INCLUDE_DIRS)
@@ -122,9 +122,10 @@ else()
     endif()
 
     if(WIN32)
-        target_link_libraries(Dungeons PRIVATE opengl32 user32 gdi32 glew32)
-        # Add vcpkg lib directory as hint for SDL2 extensions
+        target_link_libraries(Dungeons PRIVATE opengl32 user32 gdi32)
+        # Add vcpkg lib directory as hint for all libraries
         link_directories(${CMAKE_FIND_ROOT_PATH}/lib)
+        link_directories(${CMAKE_FIND_ROOT_PATH}/lib/manual-link)
         # Fix CRT library conflicts - use dynamic CRT matching vcpkg static triplet
         target_link_options(Dungeons PRIVATE /NODEFAULTLIB:LIBCMT)
         set_target_properties(Dungeons PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
@@ -137,6 +138,10 @@ else()
         if(GLEW_INCLUDE_DIRS)
             target_include_directories(Dungeons PRIVATE ${GLEW_INCLUDE_DIRS})
         endif()
+    elseif(WIN32)
+        # Final Windows fallback: try vcpkg's glew library directly
+        target_link_libraries(Dungeons PRIVATE glew)
+        target_include_directories(Dungeons PRIVATE ${CMAKE_FIND_ROOT_PATH}/include)
     endif()
 
     target_link_libraries(Dungeons PRIVATE ${OPENGL_LIBRARIES})
