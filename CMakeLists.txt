@@ -51,6 +51,15 @@ else()
         find_package(PkgConfig QUIET)
         if(PkgConfig_FOUND)
             pkg_check_modules(GLEW QUIET glew)
+            if(GLEW_FOUND)
+                # pkg_check_modules uses different variable names
+                if(NOT GLEW_INCLUDE_DIRS AND GLEW_INCLUDEDIR)
+                    set(GLEW_INCLUDE_DIRS ${GLEW_INCLUDEDIR})
+                endif()
+                if(NOT GLEW_LIBRARIES AND GLEW_LIBDIR)
+                    set(GLEW_LIBRARIES ${GLEW_LIBDIR})
+                endif()
+            endif()
         endif()
     endif()
     
@@ -58,11 +67,13 @@ else()
         # If still not found on macOS, assume Homebrew installation
         set(GLEW_INCLUDE_DIRS "/opt/homebrew/include")
         set(GLEW_LIBRARIES "/opt/homebrew/lib/libGLEW.dylib")
+        set(GLEW_FOUND TRUE)
     elseif(NOT GLEW_FOUND AND WIN32)
         # Windows vcpkg fallback - only if we're on Windows AND CMAKE_FIND_ROOT_PATH is set
         if(CMAKE_FIND_ROOT_PATH)
             set(GLEW_INCLUDE_DIRS "${CMAKE_FIND_ROOT_PATH}/include")
             set(GLEW_LIBRARIES "${CMAKE_FIND_ROOT_PATH}/lib/glew.lib")
+            set(GLEW_FOUND TRUE)
         endif()
     endif()
     
@@ -77,7 +88,14 @@ else()
 
     target_include_directories(Dungeons PRIVATE ${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS} ${SDL2_TTF_INCLUDE_DIRS} ${SDL2_MIXER_INCLUDE_DIRS} ${OPENGL_INCLUDE_DIRS})
     
-    if(GLEW_FOUND OR GLEW_INCLUDE_DIRS)
+    # Add GLEW includes if found or set up
+    if(GLEW_FOUND)
+        if(TARGET GLEW::GLEW)
+            target_link_libraries(Dungeons PRIVATE GLEW::GLEW)
+        elseif(GLEW_INCLUDE_DIRS)
+            target_include_directories(Dungeons PRIVATE ${GLEW_INCLUDE_DIRS})
+        endif()
+    elseif(GLEW_INCLUDE_DIRS AND NOT GLEW_INCLUDE_DIRS STREQUAL "")
         target_include_directories(Dungeons PRIVATE ${GLEW_INCLUDE_DIRS})
     endif()
     
@@ -136,13 +154,9 @@ else()
     elseif(GLEW_LIBRARIES AND NOT GLEW_LIBRARIES MATCHES "^$")
         # Only link GLEW_LIBRARIES if it was actually set to something valid
         target_link_libraries(Dungeons PRIVATE ${GLEW_LIBRARIES})
-        if(GLEW_INCLUDE_DIRS)
-            target_include_directories(Dungeons PRIVATE ${GLEW_INCLUDE_DIRS})
-        endif()
-    elseif(WIN32 AND CMAKE_FIND_ROOT_PATH)
-        # Windows vcpkg fallback - only on Windows
+    elseif(WIN32 AND CMAKE_FIND_ROOT_PATH AND NOT CMAKE_FIND_ROOT_PATH STREQUAL "")
+        # Windows vcpkg fallback - only on Windows with valid toolchain
         target_link_libraries(Dungeons PRIVATE ${CMAKE_FIND_ROOT_PATH}/lib/glew.lib)
-        target_include_directories(Dungeons PRIVATE ${CMAKE_FIND_ROOT_PATH}/include)
     endif()
 
     target_link_libraries(Dungeons PRIVATE ${OPENGL_LIBRARIES})
