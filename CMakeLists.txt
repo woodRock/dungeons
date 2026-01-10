@@ -61,9 +61,16 @@ else()
     endif()
     
     if(NOT GLEW_FOUND AND WIN32)
-        # Windows vcpkg fallback - vcpkg uses "glew" not "glew32"
-        set(GLEW_INCLUDE_DIRS "${CMAKE_FIND_ROOT_PATH}/include")
-        set(GLEW_LIBRARIES "glew")
+        # Windows vcpkg fallback - search in vcpkg paths
+        find_library(GLEW_LIB NAMES glew PATHS ${CMAKE_FIND_ROOT_PATH}/lib NO_DEFAULT_PATH)
+        if(GLEW_LIB)
+            set(GLEW_LIBRARIES ${GLEW_LIB})
+            set(GLEW_INCLUDE_DIRS "${CMAKE_FIND_ROOT_PATH}/include")
+        else()
+            # Still not found, set explicit vcpkg paths
+            set(GLEW_INCLUDE_DIRS "${CMAKE_FIND_ROOT_PATH}/include")
+            set(GLEW_LIBRARIES "${CMAKE_FIND_ROOT_PATH}/lib/glew.lib")
+        endif()
     endif()
     
     if(GLEW_FOUND OR GLEW_INCLUDE_DIRS)
@@ -138,9 +145,9 @@ else()
         if(GLEW_INCLUDE_DIRS)
             target_include_directories(Dungeons PRIVATE ${GLEW_INCLUDE_DIRS})
         endif()
-    elseif(WIN32)
-        # Final Windows fallback: try vcpkg's glew library directly
-        target_link_libraries(Dungeons PRIVATE glew)
+    else()
+        # Last resort: manually add GLEW for Windows with vcpkg
+        target_link_libraries(Dungeons PRIVATE ${CMAKE_FIND_ROOT_PATH}/lib/glew.lib)
         target_include_directories(Dungeons PRIVATE ${CMAKE_FIND_ROOT_PATH}/include)
     endif()
 
