@@ -59,13 +59,8 @@ else()
         set(GLEW_INCLUDE_DIRS "/opt/homebrew/include")
         set(GLEW_LIBRARIES "/opt/homebrew/lib/libGLEW.dylib")
     elseif(NOT GLEW_FOUND AND WIN32)
-        # Windows vcpkg fallback - only if we're on Windows
-        find_library(GLEW_LIB NAMES glew PATHS ${CMAKE_FIND_ROOT_PATH}/lib NO_DEFAULT_PATH)
-        if(GLEW_LIB)
-            set(GLEW_LIBRARIES ${GLEW_LIB})
-            set(GLEW_INCLUDE_DIRS "${CMAKE_FIND_ROOT_PATH}/include")
-        else()
-            # Still not found, set explicit vcpkg paths
+        # Windows vcpkg fallback - only if we're on Windows AND CMAKE_FIND_ROOT_PATH is set
+        if(CMAKE_FIND_ROOT_PATH)
             set(GLEW_INCLUDE_DIRS "${CMAKE_FIND_ROOT_PATH}/include")
             set(GLEW_LIBRARIES "${CMAKE_FIND_ROOT_PATH}/lib/glew.lib")
         endif()
