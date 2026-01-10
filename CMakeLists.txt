@@ -133,13 +133,14 @@ else()
 
     if(GLEW_FOUND)
         target_link_libraries(Dungeons PRIVATE GLEW::GLEW)
-    elseif(GLEW_LIBRARIES)
+    elseif(GLEW_LIBRARIES AND NOT GLEW_LIBRARIES MATCHES "^$")
+        # Only link GLEW_LIBRARIES if it was actually set to something valid
         target_link_libraries(Dungeons PRIVATE ${GLEW_LIBRARIES})
         if(GLEW_INCLUDE_DIRS)
             target_include_directories(Dungeons PRIVATE ${GLEW_INCLUDE_DIRS})
         endif()
-    else()
-        # Last resort: manually add GLEW for Windows with vcpkg
+    elseif(WIN32 AND CMAKE_FIND_ROOT_PATH)
+        # Windows vcpkg fallback - only on Windows
         target_link_libraries(Dungeons PRIVATE ${CMAKE_FIND_ROOT_PATH}/lib/glew.lib)
         target_include_directories(Dungeons PRIVATE ${CMAKE_FIND_ROOT_PATH}/include)
     endif()
